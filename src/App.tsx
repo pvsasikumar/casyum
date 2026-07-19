@@ -109,7 +109,7 @@ export default function App() {
               fill="white"
             />
             
-            <div className="flex flex-col md:flex-row h-full min-h-[500px]">
+            <div className="flex flex-col-reverse md:flex-row h-full min-h-[500px]">
               {/* Left content - Form */}
               <div className="flex-1 p-8 sm:p-12 relative z-10 flex flex-col justify-center gap-6">
                 <span className="text-xs font-bold tracking-[0.3em] text-violet-400 uppercase text-left">Secure Your Spot</span>
