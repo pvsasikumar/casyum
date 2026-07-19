@@ -5,6 +5,9 @@ import { Navbar } from './components/Navbar';
 import { Hero } from './components/Hero';
 import { About } from './components/About';
 import { Events } from './components/Events';
+import { Card } from '@/components/ui/card';
+import { Spotlight } from '@/components/ui/spotlight';
+import { SplineScene } from '@/components/ui/splite';
 
 export default function App() {
   // Check session storage, URL params, and reduced motion settings on mount
@@ -99,39 +102,58 @@ export default function App() {
         {/* Registration Section */}
         <section id="register" className="relative py-24 px-6 select-none bg-black overflow-hidden flex items-center justify-center">
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-violet-600/5 rounded-full blur-3xl" />
-          <div className="max-w-xl w-full mx-auto relative z-10 glass-panel p-8 sm:p-12 rounded-3xl border border-white/5 text-center flex flex-col gap-6">
-            <span className="text-xs font-bold tracking-[0.3em] text-violet-400 uppercase">Secure Your Spot</span>
-            <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight font-display text-gradient">Join the Symposium</h2>
-            <p className="text-white/50 text-sm leading-relaxed">
-              Enter your details below to register for CASYUM 2K26. Registration grants access to all technical and non-technical tracks.
-            </p>
-            <form onSubmit={(e) => e.preventDefault()} className="flex flex-col gap-4 mt-4">
-              <input
-                type="text"
-                placeholder="Full Name"
-                className="w-full bg-white/5 border border-white/10 rounded-xl px-5 py-3 text-sm focus:outline-none focus:border-violet-500/50 transition-all font-sans"
-                required
-              />
-              <input
-                type="email"
-                placeholder="Email Address"
-                className="w-full bg-white/5 border border-white/10 rounded-xl px-5 py-3 text-sm focus:outline-none focus:border-violet-500/50 transition-all font-sans"
-                required
-              />
-              <input
-                type="text"
-                placeholder="Institution / University"
-                className="w-full bg-white/5 border border-white/10 rounded-xl px-5 py-3 text-sm focus:outline-none focus:border-violet-500/50 transition-all font-sans"
-                required
-              />
-              <button
-                type="submit"
-                className="w-full py-3.5 mt-2 bg-gradient-to-r from-violet-500 to-indigo-600 hover:from-violet-600 hover:to-indigo-700 text-white rounded-xl font-bold uppercase tracking-widest text-xs transition-all duration-300 shadow-lg shadow-violet-500/20 active:scale-98 cursor-pointer"
-              >
-                Complete Registration
-              </button>
-            </form>
-          </div>
+          
+          <Card className="max-w-5xl w-full mx-auto relative z-10 bg-black/40 backdrop-blur-md border border-white/10 rounded-3xl overflow-hidden shadow-2xl">
+            <Spotlight
+              className="-top-40 left-0 md:left-60 md:-top-20"
+              fill="white"
+            />
+            
+            <div className="flex flex-col md:flex-row h-full min-h-[500px]">
+              {/* Left content - Form */}
+              <div className="flex-1 p-8 sm:p-12 relative z-10 flex flex-col justify-center gap-6">
+                <span className="text-xs font-bold tracking-[0.3em] text-violet-400 uppercase text-left">Secure Your Spot</span>
+                <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight font-display text-gradient text-left">Join the Symposium</h2>
+                <p className="text-white/50 text-sm leading-relaxed text-left">
+                  Enter your details below to register for CASYUM 2K26. The AI robot on the right is watching and assisting you live!
+                </p>
+                <form onSubmit={(e) => e.preventDefault()} className="flex flex-col gap-4 mt-4">
+                  <input
+                    type="text"
+                    placeholder="Full Name"
+                    className="w-full bg-white/5 border border-white/10 rounded-xl px-5 py-3 text-sm focus:outline-none focus:border-violet-500/50 transition-all font-sans text-white placeholder-white/30"
+                    required
+                  />
+                  <input
+                    type="email"
+                    placeholder="Email Address"
+                    className="w-full bg-white/5 border border-white/10 rounded-xl px-5 py-3 text-sm focus:outline-none focus:border-violet-500/50 transition-all font-sans text-white placeholder-white/30"
+                    required
+                  />
+                  <input
+                    type="text"
+                    placeholder="Institution / University"
+                    className="w-full bg-white/5 border border-white/10 rounded-xl px-5 py-3 text-sm focus:outline-none focus:border-violet-500/50 transition-all font-sans text-white placeholder-white/30"
+                    required
+                  />
+                  <button
+                    type="submit"
+                    className="w-full py-3.5 mt-2 bg-gradient-to-r from-violet-500 to-indigo-600 hover:from-violet-600 hover:to-indigo-700 text-white rounded-xl font-bold uppercase tracking-widest text-xs transition-all duration-300 shadow-lg shadow-violet-500/20 active:scale-98 cursor-pointer"
+                  >
+                    Complete Registration
+                  </button>
+                </form>
+              </div>
+
+              {/* Right content - 3D Robot Scene */}
+              <div className="flex-1 min-h-[300px] md:min-h-full relative border-t md:border-t-0 md:border-l border-white/10 bg-zinc-950/50">
+                <SplineScene 
+                  scene="https://prod.spline.design/kZDDjO5HuC9GJUM2/scene.splinecode"
+                  className="w-full h-full min-h-[350px] md:min-h-[500px]"
+                />
+              </div>
+            </div>
+          </Card>
         </section>
 
         {/* Footer with Replay Button */}
