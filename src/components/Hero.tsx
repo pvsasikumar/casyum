@@ -27,9 +27,10 @@ const itemVariants = {
 
 interface HeroProps {
   startAnimation: boolean;
+  onOpenLogin?: () => void;
 }
 
-export const Hero: React.FC<HeroProps> = ({ startAnimation }) => {
+export const Hero: React.FC<HeroProps> = ({ startAnimation, onOpenLogin }) => {
   return (
     <section id="home" className="relative w-full h-screen flex flex-col items-center justify-center text-center px-6 overflow-hidden bg-black select-none">
       {/* Permanent Hero Background - identical positioning, scaling, and aspect ratio to the video overlay */}
@@ -104,12 +105,12 @@ export const Hero: React.FC<HeroProps> = ({ startAnimation }) => {
             Register Now
           </a>
 
-          <a
-            href="#login"
-            className="glass-panel px-8 py-3.5 text-[10px] sm:text-xs font-bold uppercase tracking-[0.2em] text-white rounded-full hover:bg-white/10 transition-all duration-300 border border-white/10 hover:border-white/20 hover:scale-105 active:scale-98"
+          <button
+            onClick={onOpenLogin}
+            className="glass-panel px-8 py-3.5 text-[10px] sm:text-xs font-bold uppercase tracking-[0.2em] text-white rounded-full hover:bg-white/10 transition-all duration-300 border border-white/10 hover:border-white/20 hover:scale-105 active:scale-98 cursor-pointer"
           >
             Login
-          </a>
+          </button>
         </motion.div>
       </motion.div>
 

@@ -8,10 +8,22 @@ import { Events } from './components/Events';
 import { Card } from '@/components/ui/card';
 import { Spotlight } from '@/components/ui/spotlight';
 import { SplineScene } from '@/components/ui/splite';
+import { AdminDashboard } from './admin/AdminDashboard';
+import { LoginModal } from './components/LoginModal';
+import { ShieldCheck } from 'lucide-react';
 
 export default function App() {
+  const [isLoginOpen, setIsLoginOpen] = useState(false);
+
+  // Admin mode toggle (URL param ?admin or session toggle)
+  const [isAdminMode, setIsAdminMode] = useState(() => {
+    return new URLSearchParams(window.location.search).has('admin');
+  });
+
   // Check session storage, URL params, and reduced motion settings on mount
   const [showIntro, setShowIntro] = useState(() => {
+    if (isAdminMode) return false;
+
     // 1. Respect prefers-reduced-motion
     const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     if (prefersReducedMotion) return false;
@@ -60,6 +72,12 @@ export default function App() {
   // Content begins animating if the intro was skipped, or if the video has ended
   const startAnimation = !showIntro || isVideoEnded;
 
+  // ─── ADMIN MODE ─────────────────────────────────────────
+  if (isAdminMode) {
+    return <AdminDashboard onExitAdmin={() => setIsAdminMode(false)} />;
+  }
+
+  // ─── PUBLIC SITE ────────────────────────────────────────
   return (
     <div className="relative min-h-screen bg-black text-white selection:bg-violet-500/30 selection:text-violet-200">
       {/* Navbar - Fades and slides down together with the hero content */}
@@ -95,7 +113,7 @@ export default function App() {
 
       {/* Main Page Layout (fades in underneath, scrollable after intro completes) */}
       <div className="relative z-10">
-        <Hero startAnimation={startAnimation} />
+        <Hero startAnimation={startAnimation} onOpenLogin={() => setIsLoginOpen(true)} />
         <About />
         <Events />
 
@@ -156,20 +174,38 @@ export default function App() {
           </Card>
         </section>
 
-        {/* Footer with Replay Button */}
+        {/* Footer with Replay Button & Admin Access */}
         <footer className="border-t border-white/5 bg-black/50 py-12 px-6 text-center text-[10px] tracking-[0.25em] text-white/30 uppercase font-semibold font-display">
           <div className="max-w-4xl mx-auto flex flex-col gap-6 items-center">
-            <button
-              onClick={handleReplayIntro}
-              className="px-6 py-2.5 rounded-full border border-white/10 text-white/50 hover:text-white hover:border-white/20 bg-white/5 hover:bg-white/10 transition-all duration-300 text-[10px] uppercase font-bold tracking-widest cursor-pointer active:scale-95"
-            >
-              Replay Intro Video
-            </button>
+            <div className="flex flex-wrap items-center justify-center gap-4">
+              <button
+                onClick={handleReplayIntro}
+                className="px-6 py-2.5 rounded-full border border-white/10 text-white/50 hover:text-white hover:border-white/20 bg-white/5 hover:bg-white/10 transition-all duration-300 text-[10px] uppercase font-bold tracking-widest cursor-pointer active:scale-95"
+              >
+                Replay Intro Video
+              </button>
+
+              <button
+                onClick={() => setIsAdminMode(true)}
+                className="px-6 py-2.5 rounded-full border border-violet-500/30 text-violet-400 hover:text-violet-300 hover:border-violet-500/50 bg-violet-500/10 hover:bg-violet-500/20 transition-all duration-300 text-[10px] uppercase font-bold tracking-widest cursor-pointer active:scale-95 flex items-center gap-2"
+              >
+                <ShieldCheck className="w-3.5 h-3.5" />
+                <span>Admin Dashboard</span>
+              </button>
+            </div>
+
             <span>© 2026 CASYUM SYMPOSIUM. ALL RIGHTS RESERVED.</span>
             <span className="text-[9px] text-violet-400/40">SRM INSTITUTE OF SCIENCE AND TECHNOLOGY · DEPT OF COMPUTER APPLICATIONS</span>
           </div>
         </footer>
       </div>
+
+      {/* Login Portal Modal */}
+      <LoginModal
+        isOpen={isLoginOpen}
+        onClose={() => setIsLoginOpen(false)}
+        onLoginAdmin={() => setIsAdminMode(true)}
+      />
     </div>
   );
 }
