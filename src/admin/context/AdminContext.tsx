@@ -107,9 +107,9 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return saved ? JSON.parse(saved) : INITIAL_ANNOUNCEMENTS;
   });
 
-  const [certificates, setCertificates] = useState<Certificate[]>(INITIAL_CERTIFICATES);
+  const [certificates] = useState<Certificate[]>(INITIAL_CERTIFICATES);
   const [gallery, setGallery] = useState<GalleryMedia[]>(INITIAL_GALLERY);
-  const [coordinators, setCoordinators] = useState<Coordinator[]>(INITIAL_COORDINATORS);
+  const [coordinators] = useState<Coordinator[]>(INITIAL_COORDINATORS);
 
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>(() => {
     const saved = localStorage.getItem('casyum_audit_logs');

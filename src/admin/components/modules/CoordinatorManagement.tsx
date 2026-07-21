@@ -1,12 +1,10 @@
 import React from 'react';
 import {
   UserCheck,
-  Shield,
   Eye,
   CheckSquare,
   Upload,
   Megaphone,
-  X,
   Mail,
   Phone,
   GraduationCap,
@@ -15,7 +13,7 @@ import {
 import { useAdmin } from '../../context/AdminContext';
 
 export const CoordinatorManagement: React.FC = () => {
-  const { coordinators, events } = useAdmin();
+  const { coordinators } = useAdmin();
 
   const facultyCoords = coordinators.filter((c) => c.type === 'Faculty');
   const studentCoords = coordinators.filter((c) => c.type === 'Student');

@@ -1,21 +1,14 @@
 import React, { useState } from 'react';
 import {
-  CheckSquare,
   Search,
-  UserCheck,
-  UserX,
-  Clock,
-  Download,
-  Calendar,
   FileSpreadsheet,
   FileText,
 } from 'lucide-react';
 import { useAdmin } from '../../context/AdminContext';
-import type { AttendanceStatus } from '../../types';
 import { exportToCSV, exportToPrintableReport } from '../../utils/exportUtils';
 
 export const AttendanceModule: React.FC = () => {
-  const { events, participants, attendance, markAttendance, role } = useAdmin();
+  const { events, participants, attendance, markAttendance } = useAdmin();
   const [selectedEventId, setSelectedEventId] = useState<string>(events[0]?.id || '');
   const [search, setSearch] = useState('');
 

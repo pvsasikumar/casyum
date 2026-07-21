@@ -1,5 +1,5 @@
 import React from 'react';
-import { BarChart3, TrendingUp, DollarSign, PieChart, Users, Award } from 'lucide-react';
+import { DollarSign, PieChart } from 'lucide-react';
 import { useAdmin } from '../../context/AdminContext';
 
 export const AnalyticsModule: React.FC = () => {

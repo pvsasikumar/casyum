@@ -1,13 +1,11 @@
 import React, { useState } from 'react';
 import {
-  Settings,
   Save,
   Globe,
   DollarSign,
   Clock,
   Image as ImageIcon,
   Mail,
-  Phone,
   Shield,
   Lock,
   Unlock,

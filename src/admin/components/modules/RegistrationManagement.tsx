@@ -14,7 +14,7 @@ import {
   ShieldAlert,
 } from 'lucide-react';
 import { useAdmin } from '../../context/AdminContext';
-import type { Participant, PaymentStatus } from '../../types';
+import type { PaymentStatus } from '../../types';
 import { ParticipantDrawer } from './ParticipantDrawer';
 import { exportToCSV } from '../../utils/exportUtils';
 
@@ -35,7 +35,7 @@ export const RegistrationManagement: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<string>('All');
   const [collegeFilter, setCollegeFilter] = useState<string>('All');
   const [sortField, setSortField] = useState<'name' | 'registrationDate' | 'paymentAmount'>('registrationDate');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [sortOrder] = useState<'asc' | 'desc'>('desc');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -329,7 +329,9 @@ export const RegistrationManagement: React.FC = () => {
                             <span className="font-bold text-white flex items-center gap-1.5">
                               {p.name}
                               {p.isDuplicateTransaction && (
-                                <ShieldAlert className="w-3.5 h-3.5 text-rose-400" title="Duplicate Txn" />
+                                <span title="Duplicate Txn">
+                                  <ShieldAlert className="w-3.5 h-3.5 text-rose-400" />
+                                </span>
                               )}
                             </span>
                             <span className="text-[10px] text-white/40">{p.id} · {p.registerNumber}</span>

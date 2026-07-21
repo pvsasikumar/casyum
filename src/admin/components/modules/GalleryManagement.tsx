@@ -7,7 +7,6 @@ import {
   Upload,
   Plus,
   X,
-  Filter,
 } from 'lucide-react';
 import { useAdmin } from '../../context/AdminContext';
 import type { GalleryMedia } from '../../types';

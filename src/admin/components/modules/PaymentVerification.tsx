@@ -1,17 +1,12 @@
 import React, { useState } from 'react';
 import {
-  CreditCard,
   CheckCircle2,
   XCircle,
   ShieldAlert,
   ZoomIn,
-  Download,
   X,
-  Clock,
-  Filter,
 } from 'lucide-react';
 import { useAdmin } from '../../context/AdminContext';
-import type { Participant } from '../../types';
 
 export const PaymentVerification: React.FC = () => {
   const { participants, approvePayment, rejectPayment, setSelectedParticipant, setActiveTab } = useAdmin();

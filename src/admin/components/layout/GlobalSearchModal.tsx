@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Search, X, User, Calendar, CreditCard, Megaphone, ArrowRight } from 'lucide-react';
+import { Search, X, Calendar, Megaphone, ArrowRight } from 'lucide-react';
 import { useAdmin } from '../../context/AdminContext';
-import type { ActiveTabModule } from '../../types';
 
 export const GlobalSearchModal: React.FC = () => {
   const {

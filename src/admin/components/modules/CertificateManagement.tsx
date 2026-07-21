@@ -2,9 +2,6 @@ import React, { useState } from 'react';
 import {
   Award,
   Download,
-  FileText,
-  Plus,
-  X,
   Trophy,
   Users,
   GraduationCap,
@@ -16,7 +13,7 @@ import type { CertificateType, Certificate } from '../../types';
 import { exportToPrintableReport } from '../../utils/exportUtils';
 
 export const CertificateManagement: React.FC = () => {
-  const { certificates, participants, events } = useAdmin();
+  const { certificates } = useAdmin();
   const [filter, setFilter] = useState<string>('All');
   const [showPreview, setShowPreview] = useState<Certificate | null>(null);
 

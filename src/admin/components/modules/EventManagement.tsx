@@ -1,13 +1,9 @@
 import React, { useState } from 'react';
 import {
-  Calendar,
   Users,
   MapPin,
   Clock,
-  DollarSign,
-  Download,
   Megaphone,
-  CheckCircle2,
   Lock,
   Unlock,
   X,
