@@ -31,7 +31,7 @@ interface HeroProps {
 
 export const Hero: React.FC<HeroProps> = ({ startAnimation }) => {
   return (
-    <section className="relative w-full h-screen flex flex-col items-center justify-center text-center px-6 overflow-hidden bg-black select-none">
+    <section id="home" className="relative w-full h-screen flex flex-col items-center justify-center text-center px-6 overflow-hidden bg-black select-none">
       {/* Permanent Hero Background - identical positioning, scaling, and aspect ratio to the video overlay */}
       <div className={`absolute inset-0 z-0 select-none pointer-events-none ${startAnimation ? 'animate-logo-float' : ''}`}>
         <img

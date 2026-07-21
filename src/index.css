@@ -8,6 +8,10 @@
   --font-mono: 'JetBrains Mono', monospace;
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
 :root {
   color-scheme: dark;
   background-color: #000000;

@@ -3,7 +3,7 @@ import { Home, CalendarDays, Trophy, UserPlus } from 'lucide-react';
 import { AnimeNavBar } from './ui/anime-navbar';
 
 const NAV_ITEMS = [
-  { name: 'Home', url: '#', icon: Home },
+  { name: 'Home', url: '#home', icon: Home },
   { name: 'About', url: '#about', icon: CalendarDays },
   { name: 'Events', url: '#events', icon: Trophy },
   { name: 'Register', url: '#register', icon: UserPlus },

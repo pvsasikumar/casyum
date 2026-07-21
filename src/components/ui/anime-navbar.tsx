@@ -25,6 +25,42 @@ export function AnimeNavBar({ items, className, defaultActive = "Home", onTabCha
     setMounted(true)
   }, [])
 
+  // Update active tab automatically when user scrolls to different sections
+  useEffect(() => {
+    if (!mounted) return
+
+    const handleScroll = () => {
+      const scrollPosition = window.scrollY + 250
+
+      if (window.scrollY < 100) {
+        if (items.length > 0) setActiveTab(items[0].name)
+        return
+      }
+
+      for (let i = items.length - 1; i >= 0; i--) {
+        const item = items[i]
+        const sectionId = item.url.replace(/^#/, "")
+        if (!sectionId) continue
+
+        const element = document.getElementById(sectionId)
+        if (element) {
+          const top = element.offsetTop
+          if (scrollPosition >= top) {
+            setActiveTab(item.name)
+            break
+          }
+        }
+      }
+    }
+
+    window.addEventListener("scroll", handleScroll, { passive: true })
+    handleScroll()
+
+    return () => {
+      window.removeEventListener("scroll", handleScroll)
+    }
+  }, [items, mounted])
+
   if (!mounted) return null
 
   return (
