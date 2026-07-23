@@ -31,7 +31,6 @@ export const About: React.FC = () => {
           </p>
         </motion.div>
 
-        {/* Right Column: Visual highlights (glassmorphic grid) */}
         <motion.div
           initial={{ opacity: 0, x: 50 }}
           whileInView={{ opacity: 1, x: 0 }}
@@ -43,7 +42,7 @@ export const About: React.FC = () => {
             <span className="text-3xl font-extrabold text-white font-display">10+</span>
             <span className="text-xs font-semibold text-white/40 uppercase tracking-widest">National Events</span>
           </div>
-          <div className="glass-panel px-6 py-8 rounded-2xl flex flex-col gap-2 mt-4">
+          <div className="glass-panel px-6 py-8 rounded-2xl flex flex-col gap-2">
             <span className="text-3xl font-extrabold text-white font-display">₹1.5L+</span>
             <span className="text-xs font-semibold text-white/40 uppercase tracking-widest">Cash Prizes</span>
           </div>
@@ -51,7 +50,7 @@ export const About: React.FC = () => {
             <span className="text-3xl font-extrabold text-white font-display">500+</span>
             <span className="text-xs font-semibold text-white/40 uppercase tracking-widest">Delegates</span>
           </div>
-          <div className="glass-panel px-6 py-8 rounded-2xl flex flex-col gap-2 mt-4">
+          <div className="glass-panel px-6 py-8 rounded-2xl flex flex-col gap-2">
             <span className="text-3xl font-extrabold text-white font-display">24Hr</span>
             <span className="text-xs font-semibold text-white/40 uppercase tracking-widest">Hackathon</span>
           </div>
