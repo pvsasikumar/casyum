@@ -46,13 +46,7 @@ export function LocationMap({
   }
 
   const handleClick = () => {
-    if (isExpanded) {
-      if (mapLink) {
-        window.open(mapLink, "_blank")
-      }
-    } else {
-      setIsExpanded(true)
-    }
+    setIsExpanded(!isExpanded)
   }
 
   return (
@@ -360,8 +354,11 @@ export function LocationMap({
                 >
                   {coordinates}
                   {mapLink && (
-                    <span className="block mt-2 text-violet-400 font-bold hover:underline">
-                      Click anywhere to open Google Maps ↗
+                    <span
+                      className="block mt-2 text-violet-400 font-bold hover:underline cursor-pointer"
+                      onClick={(e) => { e.stopPropagation(); window.open(mapLink, "_blank"); }}
+                    >
+                      Open in Google Maps ↗
                     </span>
                   )}
                 </motion.p>
