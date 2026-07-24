@@ -45,7 +45,7 @@ export function LocationMap({
     setIsHovered(false)
   }
 
-  const handleClick = (e: React.MouseEvent) => {
+  const handleClick = () => {
     if (isExpanded) {
       if (mapLink) {
         window.open(mapLink, "_blank")
@@ -53,11 +53,6 @@ export function LocationMap({
     } else {
       setIsExpanded(true)
     }
-  }
-
-  const handleClose = (e: React.MouseEvent) => {
-    e.stopPropagation()
-    setIsExpanded(false)
   }
 
   return (
