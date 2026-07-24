@@ -1,5 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
+import { LocationMap } from './ui/expand-map';
 
 export const About: React.FC = () => {
   return (
@@ -29,6 +30,14 @@ export const About: React.FC = () => {
           <p className="text-white/60 text-sm sm:text-base leading-relaxed">
             CASYUM 2K26 is themed around cosmic crystallization and futurism, embodying the assembly of ideas into functional brilliance. Step into the arena and claim your spot among the pioneers.
           </p>
+
+          <div className="mt-4 flex justify-start">
+            <LocationMap
+              location="TRP Auditorium, SRM Ramapuram"
+              coordinates="Bharathi Salai, Ramapuram, Chennai, Tamil Nadu 600089"
+              mapLink="https://maps.app.goo.gl/CcoQbdFwNVGqn4JA9"
+            />
+          </div>
         </motion.div>
 
         <motion.div

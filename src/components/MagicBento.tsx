@@ -13,50 +13,89 @@ interface CardDataItem {
   description: string;
   label: string;
   prize: string;
+  image: string;
 }
 
 const cardData: CardDataItem[] = [
   {
     color: '#0e0b16',
-    title: 'Nova Hack',
-    description: 'A grueling 24-hour test of grit, creativity, and coding. Build innovative solutions using bleeding-edge technologies.',
-    label: '24H Hackathon',
-    prize: '₹45,000'
+    title: 'Debugging',
+    description: 'Find bugs, fix syntax, and resolve logic errors under intense time limits.',
+    label: 'Technical',
+    prize: 'Registration Open',
+    image: '/images/events/debugging.png'
   },
   {
     color: '#0e0b16',
-    title: 'Cosmic Coders',
-    description: 'Race against time and other programmers to solve complex algorithmic puzzles. Optimize your code for speed.',
-    label: 'Competitive coding',
-    prize: '₹25,000'
+    title: 'Tech Quiz',
+    description: 'Test your core computer science, algorithms, and general tech trivia knowledge.',
+    label: 'Technical',
+    prize: 'Registration Open',
+    image: '/images/events/tech_quiz.png'
   },
   {
     color: '#0e0b16',
-    title: 'Web Weaver',
-    description: 'Craft stunning, highly-interactive web experiences. Design interfaces that are responsive and animate beautifully.',
-    label: 'Web Development',
-    prize: '₹20,000'
+    title: 'Paper Presentation',
+    description: 'Present innovative research on advanced technologies to industry judges.',
+    label: 'Technical',
+    prize: 'Registration Open',
+    image: '/images/events/paper_presentation.png'
   },
   {
     color: '#0e0b16',
-    title: 'Quantum Quiz',
-    description: 'A multi-staged quiz competition testing your speed, depth, and accuracy in advanced technology and sci-fi lore.',
-    label: 'Technical Trivia',
-    prize: '₹15,000'
+    title: 'Hackathon',
+    description: 'Prototype solutions for real-world problems in this intense coding sprint.',
+    label: 'Technical',
+    prize: 'Registration Open',
+    image: '/images/events/hackathon.png'
   },
   {
     color: '#0e0b16',
-    title: 'Cyber Citadel',
-    description: 'Infiltrate servers, crack cryptographic puzzles, reverse-engineer binaries, and patch vulnerabilities in a CTF arena.',
-    label: 'Capture The Flag',
-    prize: '₹25,000'
+    title: 'Poster Designing',
+    description: 'Design visually striking cyberpunk/futuristic posters illustrating tech concepts.',
+    label: 'Technical',
+    prize: 'Registration Open',
+    image: '/images/events/poster_designing.png'
   },
   {
     color: '#0e0b16',
-    title: 'Pixel Perfect',
-    description: 'Formulate user flows, wireframes, and high-fidelity screen designs that address accessibility and interface problems.',
-    label: 'UI/UX & Brand Design',
-    prize: '₹20,000'
+    title: 'Connexion',
+    description: 'Decipher logical associations and technical terms from visual clues.',
+    label: 'Technical',
+    prize: 'Registration Open',
+    image: '/images/events/connexion.png'
+  },
+  {
+    color: '#0e0b16',
+    title: 'LAN Party',
+    description: 'Dominate the esports arena in high-octane gaming tournaments.',
+    label: 'Non-Technical',
+    prize: 'Registration Open',
+    image: '/images/events/lan_party.png'
+  },
+  {
+    color: '#0e0b16',
+    title: 'ADZAP',
+    description: 'Pitch futuristic products with high creativity, humor, and marketing flair.',
+    label: 'Non-Technical',
+    prize: 'Registration Open',
+    image: '/images/events/adzap.png'
+  },
+  {
+    color: '#0e0b16',
+    title: 'Short Film',
+    description: 'Showcase your cinematic vision, storytelling, and editing skills.',
+    label: 'Non-Technical',
+    prize: 'Registration Open',
+    image: '/images/events/short_film.png'
+  },
+  {
+    color: '#0e0b16',
+    title: 'IPL Auction',
+    description: 'Strategize, bid, and assemble the ultimate cricket squad under budget caps.',
+    label: 'Non-Technical',
+    prize: 'Registration Open',
+    image: '/images/events/ipl_auction.png'
   }
 ];
 
@@ -559,7 +598,10 @@ const MagicBento: React.FC<MagicBentoProps> = ({
           // Use CSS Properties for custom CSS variables in React style props
           const cardStyle = {
             backgroundColor: card.color,
-            '--glow-color': glowColor
+            '--glow-color': glowColor,
+            backgroundImage: `linear-gradient(to bottom, rgba(14, 11, 22, 0.4), rgba(14, 11, 22, 0.85)), url(${card.image})`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
           } as React.CSSProperties;
 
           const cardProps = {

@@ -206,7 +206,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, onLogin
                     </div>
                     <div className="flex justify-between">
                       <span className="text-white/50">Registered Events:</span>
-                      <span className="text-violet-300 font-medium">Hackathon 24Hr, AI Challenge</span>
+                      <span className="text-violet-300 font-medium">Debugging, Tech Quiz</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-white/50">QR Pass:</span>

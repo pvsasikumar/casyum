@@ -1,37 +1,21 @@
-'use client'
+import { LocationMap } from "@/components/ui/expand-map"
 
-import { SplineScene } from "@/components/ui/splite";
-import { Card } from "@/components/ui/card"
-import { Spotlight } from "@/components/ui/spotlight"
- 
-export function SplineSceneBasic() {
+export default function Home() {
   return (
-    <Card className="w-full h-[500px] bg-black/[0.96] relative overflow-hidden">
-      <Spotlight
-        className="-top-40 left-0 md:left-60 md:-top-20"
-        fill="white"
-      />
-      
-      <div className="flex h-full">
-        {/* Left content */}
-        <div className="flex-1 p-8 relative z-10 flex flex-col justify-center">
-          <h1 className="text-4xl md:text-5xl font-bold bg-clip-text text-transparent bg-gradient-to-b from-neutral-50 to-neutral-400">
-            Interactive 3D
-          </h1>
-          <p className="mt-4 text-neutral-300 max-w-lg">
-            Bring your UI to life with beautiful 3D scenes. Create immersive experiences 
-            that capture attention and enhance your design.
-          </p>
-        </div>
+    <main className="min-h-screen flex items-center justify-center w-full">
+      {/* Subtle background gradient */}
+      <div className="fixed inset-0 bg-[radial-gradient(ellipse_at_center,_rgba(139,92,246,0.03)_0%,_transparent_70%)]" />
 
-        {/* Right content */}
-        <div className="flex-1 relative">
-          <SplineScene 
-            scene="https://prod.spline.design/kZDDjO5HuC9GJUM2/scene.splinecode"
-            className="w-full h-full"
-          />
-        </div>
+      <div className="relative z-10 flex flex-col items-center gap-8">
+        {/* Optional subtle label */}
+        <p className="text-neutral-500 text-xs font-medium tracking-[0.2em] uppercase">Symposium Venue</p>
+
+        <LocationMap 
+          location="TRP Auditorium, SRM University" 
+          coordinates="Bharathi Salai, Ramapuram, Chennai, Tamil Nadu 600089 (13.0324° N, 80.1804° E)" 
+          mapLink="https://maps.app.goo.gl/CcoQbdFwNVGqn4JA9"
+        />
       </div>
-    </Card>
+    </main>
   )
 }
