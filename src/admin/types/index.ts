@@ -1,4 +1,4 @@
-export type UserRole = 'Super Admin' | 'Faculty Coordinator' | 'Student Coordinator' | 'Event Coordinator';
+export type UserRole = 'Super Admin' | 'Admin' | 'Event Coordinator' | 'Registration Manager' | 'Certificate Manager' | 'Finance Manager' | 'Participant' | 'Faculty Coordinator' | 'Student Coordinator';
 
 export type PaymentStatus = 'Approved' | 'Pending' | 'Rejected';
 export type AttendanceStatus = 'Present' | 'Absent' | 'Late';
@@ -94,21 +94,37 @@ export interface GalleryMedia {
   uploadedDate: string;
 }
 
-export interface Coordinator {
-  id: string;
+export interface CoordinatorAssignedEvent {
+  id: number;
+  event_id: string;
   name: string;
+  category: string;
+  description?: string;
+  venue: string;
+  event_date: string;
+  time: string;
+  fee?: number;
+  max_participants?: number;
+  registered_count?: number;
+  status?: string;
+}
+
+export interface Coordinator {
+  id: number;
+  coordinator_id: string;
+  full_name: string;
   email: string;
   phone: string;
-  type: 'Faculty' | 'Student' | 'Event';
   department: string;
-  assignedEventId?: string;
-  assignedEventName?: string;
-  permissions: {
-    viewParticipants: boolean;
-    manageAttendance: boolean;
-    uploadResults: boolean;
-    announcements: boolean;
-  };
+  designation?: string;
+  coordinator_type: string;
+  username: string;
+  role?: string;
+  status: 'Active' | 'Inactive';
+  notes: string;
+  created_at: string;
+  updated_at: string;
+  assigned_events?: CoordinatorAssignedEvent[];
 }
 
 export interface AuditLog {
@@ -132,7 +148,24 @@ export interface SystemSettings {
   homepageBanner: string;
   contactEmail: string;
   contactPhone: string;
+  socialLinks: {
+    instagram?: string;
+    twitter?: string;
+    linkedin?: string;
+    youtube?: string;
+  };
   sponsors: Array<{ name: string; logo: string; tier: 'Title' | 'Platinum' | 'Gold' }>;
+  admin_profile?: Record<string, unknown>;
+}
+
+export interface CoordinatorAccount {
+  id: string;
+  email: string;
+  password: string;
+  coordinatorId: string;
+  name: string;
+  department: string;
+  phone: string;
 }
 
 export type ActiveTabModule =
@@ -143,9 +176,29 @@ export type ActiveTabModule =
   | 'Attendance'
   | 'Analytics'
   | 'Export Center'
+  | 'Event Export'
   | 'Announcements'
   | 'Gallery'
   | 'Certificates'
   | 'Coordinators'
+  | 'Participants'
   | 'Settings'
-  | 'Audit Logs';
+  | 'Audit Logs'
+  | 'Employees'
+  | 'Email Logs';
+
+export interface EmailLog {
+  id: string;
+  log_id: string;
+  recipient: string;
+  recipient_name: string;
+  subject: string;
+  email_type: string;
+  status: 'Pending' | 'Sent' | 'Failed';
+  sent_at: string | null;
+  error_message: string | null;
+  attempts: number;
+  meta: any;
+  created_at: string;
+  updated_at: string;
+}

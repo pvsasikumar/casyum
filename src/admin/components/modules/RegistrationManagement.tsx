@@ -137,10 +137,14 @@ export const RegistrationManagement: React.FC = () => {
     exportToCSV(`CASYUM_Registrations_${Date.now()}`, exportData);
   };
 
-  const handleAddSubmit = (e: React.FormEvent) => {
+  const handleAddSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    addRegistration(newParticipant);
-    setShowAddModal(false);
+    try {
+      await addRegistration(newParticipant);
+      setShowAddModal(false);
+    } catch {
+      setShowAddModal(false);
+    }
   };
 
   return (

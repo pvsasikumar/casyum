@@ -1,6 +1,12 @@
 import React from 'react';
+import { Routes, Route, useNavigate } from 'react-router-dom';
 import { AdminProvider, useAdmin } from './context/AdminContext';
 import { AdminLayout } from './components/layout/AdminLayout';
+import { ToastContainer } from './components/common/Toast';
+import { ErrorBoundary } from './components/common/ErrorBoundary';
+import { Profile } from '../pages/admin/Profile';
+import { ChangePassword } from '../pages/admin/ChangePassword';
+import { Settings } from '../pages/admin/Settings';
 
 import { DashboardHome } from './components/modules/DashboardHome';
 import { RegistrationManagement } from './components/modules/RegistrationManagement';
@@ -9,12 +15,16 @@ import { PaymentVerification } from './components/modules/PaymentVerification';
 import { AttendanceModule } from './components/modules/AttendanceModule';
 import { AnalyticsModule } from './components/modules/AnalyticsModule';
 import { ExportCenter } from './components/modules/ExportCenter';
+import { EventParticipantExport } from './components/modules/EventParticipantExport';
 import { AnnouncementCenter } from './components/modules/AnnouncementCenter';
 import { GalleryManagement } from './components/modules/GalleryManagement';
 import { CertificateManagement } from './components/modules/CertificateManagement';
 import { CoordinatorManagement } from './components/modules/CoordinatorManagement';
+import { ParticipantsModule } from './components/modules/ParticipantsModule';
 import { SettingsModule } from './components/modules/SettingsModule';
 import { AuditLogs } from './components/modules/AuditLogs';
+import { EmployeeManagement } from './components/modules/EmployeeManagement';
+import { EmailLogs } from './components/modules/EmailLogs';
 
 const ModuleRouter: React.FC = () => {
   const { activeTab } = useAdmin();
@@ -34,6 +44,8 @@ const ModuleRouter: React.FC = () => {
       return <AnalyticsModule />;
     case 'Export Center':
       return <ExportCenter />;
+    case 'Event Export':
+      return <EventParticipantExport />;
     case 'Announcements':
       return <AnnouncementCenter />;
     case 'Gallery':
@@ -42,10 +54,16 @@ const ModuleRouter: React.FC = () => {
       return <CertificateManagement />;
     case 'Coordinators':
       return <CoordinatorManagement />;
+    case 'Participants':
+      return <ParticipantsModule />;
     case 'Settings':
       return <SettingsModule />;
     case 'Audit Logs':
       return <AuditLogs />;
+    case 'Employees':
+      return <EmployeeManagement />;
+    case 'Email Logs':
+      return <EmailLogs />;
     default:
       return <DashboardHome />;
   }
@@ -55,11 +73,27 @@ interface AdminDashboardProps {
   onExitAdmin: () => void;
 }
 
+const AdminContent: React.FC = () => {
+  const { toasts, dismissToast } = useAdmin();
+  const navigate = useNavigate();
+  return (
+    <>
+      <Routes>
+        <Route path="/admin/profile" element={<ErrorBoundary onBack={() => navigate('/admin')}><Profile /></ErrorBoundary>} />
+        <Route path="/admin/change-password" element={<ErrorBoundary onBack={() => navigate('/admin')}><ChangePassword /></ErrorBoundary>} />
+        <Route path="/admin/settings" element={<ErrorBoundary onBack={() => navigate('/admin')}><Settings /></ErrorBoundary>} />
+        <Route path="*" element={<ModuleRouter />} />
+      </Routes>
+      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
+    </>
+  );
+};
+
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExitAdmin }) => {
   return (
     <AdminProvider>
       <AdminLayout onExitAdmin={onExitAdmin}>
-        <ModuleRouter />
+        <AdminContent />
       </AdminLayout>
     </AdminProvider>
   );

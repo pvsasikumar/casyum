@@ -12,7 +12,9 @@ const NAV_ITEMS = [
 export const Navbar: React.FC = () => {
   return (
     <div className="fixed top-0 left-0 right-0 z-[9999] overflow-visible">
-      <AnimeNavBar items={NAV_ITEMS} defaultActive="Home" />
+      <div className="relative max-w-7xl mx-auto px-4">
+        <AnimeNavBar items={NAV_ITEMS} defaultActive="Home" />
+      </div>
     </div>
   );
 };

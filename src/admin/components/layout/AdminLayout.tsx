@@ -41,7 +41,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ children, onExitAdmin 
       {/* Main Content Area */}
       <div className="flex-1 h-full flex flex-col min-w-0 overflow-hidden bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-purple-950/20 via-black to-black">
         {/* Top Navbar */}
-        <TopNav onOpenMobileSidebar={() => setMobileSidebarOpen(true)} />
+        <TopNav onOpenMobileSidebar={() => setMobileSidebarOpen(true)} onExitAdmin={onExitAdmin} />
 
         {/* Dynamic Module Page View */}
         <main className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 custom-scrollbar relative">

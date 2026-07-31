@@ -10,12 +10,14 @@ import {
 } from 'lucide-react';
 import { useAdmin } from '../../context/AdminContext';
 import type { GalleryMedia } from '../../types';
+import { uploadImageToStorage } from '../../../firebase/storage';
 
 export const GalleryManagement: React.FC = () => {
   const { gallery, uploadGalleryMedia, deleteGalleryMedia } = useAdmin();
   const [showUploadForm, setShowUploadForm] = useState(false);
   const [filter, setFilter] = useState<string>('All');
   const [zoomImage, setZoomImage] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
 
   const [newMedia, setNewMedia] = useState({
     title: '',
@@ -26,6 +28,18 @@ export const GalleryManagement: React.FC = () => {
   });
 
   const filteredGallery = filter === 'All' ? gallery : gallery.filter((g) => g.category === filter);
+
+  const handleFileUpload = async (file: File) => {
+    setUploading(true);
+    try {
+      const url = await uploadImageToStorage('gallery', file);
+      setNewMedia((prev) => ({ ...prev, url, type: 'image' }));
+    } catch {
+      // Ignore upload errors; the URL field remains editable.
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const handleUpload = (e: React.FormEvent) => {
     e.preventDefault();
@@ -95,14 +109,29 @@ export const GalleryManagement: React.FC = () => {
               className="p-3 rounded-xl bg-white/5 border border-white/10 text-white text-xs placeholder-white/30 focus:outline-none"
             />
             <input
+              id="gallery-file-input"
+              type="file"
+              accept="image/*"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) void handleFileUpload(file);
+              }}
+              className="p-3 rounded-xl bg-white/5 border border-white/10 text-white text-xs focus:outline-none"
+              title="Upload image to Firebase Storage"
+            />
+            <input
               type="url"
               value={newMedia.url}
               onChange={(e) => setNewMedia({ ...newMedia, url: e.target.value })}
               placeholder="Image / Video URL..."
               required
-              className="p-3 rounded-xl bg-white/5 border border-white/10 text-white text-xs placeholder-white/30 focus:outline-none"
+              className="p-3 rounded-xl bg-white/5 border border-white/10 text-white text-xs placeholder-white/30 focus:outline-none sm:col-span-2"
             />
           </div>
+
+          {uploading && (
+            <p className="text-[11px] text-violet-400 font-semibold">Uploading to Firebase Storage...</p>
+          )}
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <select
@@ -145,8 +174,12 @@ export const GalleryManagement: React.FC = () => {
       )}
 
       {/* Drag & Drop Zone */}
-      <div className="p-8 rounded-3xl border-2 border-dashed border-white/10 hover:border-violet-500/30 transition-all flex flex-col items-center justify-center gap-2 text-center cursor-pointer group"
-        onClick={() => setShowUploadForm(true)}
+      <div
+        className="p-8 rounded-3xl border-2 border-dashed border-white/10 hover:border-violet-500/30 transition-all flex flex-col items-center justify-center gap-2 text-center cursor-pointer group"
+        onClick={() => {
+          setShowUploadForm(true);
+          setTimeout(() => document.getElementById('gallery-file-input')?.click(), 50);
+        }}
       >
         <Upload className="w-8 h-8 text-white/20 group-hover:text-violet-400 transition-colors" />
         <span className="text-xs text-white/40 group-hover:text-white/70">

@@ -1,60 +1,66 @@
 import React, { useState } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Search,
   Bell,
   Menu,
-  Shield,
   CheckCircle2,
   AlertTriangle,
   Info,
   X,
   User,
-  Sliders,
+  Moon,
+  Sun,
+  Lock,
+  Settings,
+  LogOut,
 } from 'lucide-react';
 import { useAdmin } from '../../context/AdminContext';
-import type { UserRole } from '../../types';
+import { useRBAC } from '../../../rbac/context/RBACContext';
+import { ConfirmationDialog } from '../../components/common/ConfirmationDialog';
 
 interface TopNavProps {
   onOpenMobileSidebar: () => void;
+  onExitAdmin: () => void;
 }
 
-export const TopNav: React.FC<TopNavProps> = ({ onOpenMobileSidebar }) => {
+export const TopNav: React.FC<TopNavProps> = ({ onOpenMobileSidebar, onExitAdmin }) => {
+  const navigate = useNavigate();
+  const location = useLocation();
   const {
     activeTab,
-    role,
-    setRole,
+    isDarkMode,
+    toggleDarkMode,
     notifications,
     markNotificationRead,
     clearNotifications,
     setGlobalSearchOpen,
+    adminProfile,
   } = useAdmin();
+  const { role } = useRBAC();
 
   const [notificationsOpen, setNotificationsOpen] = useState(false);
-  const [roleMenuOpen, setRoleMenuOpen] = useState(false);
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const [logoutDialogOpen, setLogoutDialogOpen] = useState(false);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 
-  const rolesList: UserRole[] = [
-    'Super Admin',
-    'Faculty Coordinator',
-    'Student Coordinator',
-    'Event Coordinator',
-  ];
+  const displayTabName = activeTab === 'Coordinators' ? 'Event Coordinators' : activeTab;
 
   return (
     <header className="w-full h-16 bg-black/60 backdrop-blur-md border-b border-white/10 px-4 sm:px-6 flex items-center justify-between relative z-20 select-none">
-      {/* Left Title & Mobile Menu Trigger */}
+      {/* Left Title & Mobile Menu */}
       <div className="flex items-center gap-3">
         <button
           onClick={onOpenMobileSidebar}
-          className="lg:hidden p-2 rounded-lg text-white/70 hover:text-white bg-white/5 hover:bg-white/10 border border-white/10"
+          className="lg:hidden p-2 rounded-lg text-white/70 hover:text-white bg-white/5 hover:bg-white/10 border border-white/10 cursor-pointer"
         >
           <Menu className="w-5 h-5" />
         </button>
 
         <div className="flex flex-col">
           <h1 className="text-base sm:text-lg font-bold font-display text-white tracking-tight flex items-center gap-2">
-            <span>{activeTab}</span>
+            <span>{displayTabName}</span>
             <span className="hidden sm:inline-block text-[10px] font-mono font-semibold px-2 py-0.5 rounded-md bg-violet-500/20 text-violet-300 border border-violet-500/30">
               v2.6 ERP
             </span>
@@ -67,56 +73,26 @@ export const TopNav: React.FC<TopNavProps> = ({ onOpenMobileSidebar }) => {
 
       {/* Right Actions */}
       <div className="flex items-center gap-2 sm:gap-4">
-        {/* Global Search Button */}
+        {/* Global Search */}
         <button
           onClick={() => setGlobalSearchOpen(true)}
           className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white/50 hover:text-white text-xs transition-all cursor-pointer"
         >
           <Search className="w-3.5 h-3.5 text-violet-400" />
-          <span className="hidden md:inline">Search ERP...</span>
+          <span className="hidden md:inline">Search...</span>
           <kbd className="hidden md:inline-block px-1.5 py-0.5 text-[9px] font-mono bg-white/10 rounded border border-white/20 text-white/70">
             ⌘K
           </kbd>
         </button>
 
-        {/* Role Switcher */}
-        <div className="relative">
-          <button
-            onClick={() => setRoleMenuOpen(!roleMenuOpen)}
-            className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-violet-500/10 hover:bg-violet-500/20 border border-violet-500/30 text-violet-300 text-xs font-semibold transition-all cursor-pointer"
-          >
-            <Shield className="w-3.5 h-3.5 text-violet-400" />
-            <span className="hidden sm:inline">{role}</span>
-            <Sliders className="w-3 h-3 text-violet-400/70" />
-          </button>
-
-          {roleMenuOpen && (
-            <div className="absolute right-0 top-full mt-2 w-52 bg-zinc-950 border border-white/15 rounded-2xl shadow-2xl p-2 z-50 backdrop-blur-2xl">
-              <div className="text-[10px] font-bold text-white/40 uppercase tracking-widest px-2 py-1.5 border-b border-white/10">
-                Switch User Role
-              </div>
-              <div className="flex flex-col gap-1 mt-1">
-                {rolesList.map((r) => (
-                  <button
-                    key={r}
-                    onClick={() => {
-                      setRole(r);
-                      setRoleMenuOpen(false);
-                    }}
-                    className={`flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-medium transition-all ${
-                      role === r
-                        ? 'bg-violet-600/30 text-white border border-violet-500/40'
-                        : 'text-white/60 hover:text-white hover:bg-white/5'
-                    }`}
-                  >
-                    <span>{r}</span>
-                    {role === r && <CheckCircle2 className="w-3.5 h-3.5 text-violet-400" />}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
+        {/* Dark/Light Mode Toggle */}
+        <button
+          onClick={toggleDarkMode}
+          className="p-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white/70 hover:text-white transition-all cursor-pointer"
+          title={isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+        >
+          {isDarkMode ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
+        </button>
 
         {/* Notification Bell */}
         <div className="relative">
@@ -139,10 +115,7 @@ export const TopNav: React.FC<TopNavProps> = ({ onOpenMobileSidebar }) => {
                   Notifications ({notifications.length})
                 </span>
                 {notifications.length > 0 && (
-                  <button
-                    onClick={clearNotifications}
-                    className="text-[10px] text-violet-400 hover:text-violet-300 cursor-pointer"
-                  >
+                  <button onClick={clearNotifications} className="text-[10px] text-violet-400 hover:text-violet-300 cursor-pointer">
                     Clear All
                   </button>
                 )}
@@ -179,14 +152,71 @@ export const TopNav: React.FC<TopNavProps> = ({ onOpenMobileSidebar }) => {
           )}
         </div>
 
-        {/* User Profile Avatar */}
-        <div className="flex items-center gap-2.5 pl-2 border-l border-white/10">
-          <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-violet-500 to-cyan-400 p-[1px]">
-            <div className="w-full h-full bg-zinc-900 rounded-full flex items-center justify-center text-white">
-              <User className="w-4 h-4 text-violet-300" />
+        {/* Admin Profile Dropdown */}
+        <div className="relative">
+          <button
+            onClick={() => setProfileMenuOpen(!profileMenuOpen)}
+            className="flex items-center gap-2.5 pl-2 border-l border-white/10 cursor-pointer"
+          >
+            <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-violet-500 to-cyan-400 p-[1px]">
+              <div className="w-full h-full bg-zinc-900 rounded-full flex items-center justify-center text-white overflow-hidden">
+                {adminProfile.photo ? (
+                  <img src={adminProfile.photo} alt="" className="w-full h-full object-cover" />
+                ) : (
+                  <User className="w-4 h-4 text-violet-300" />
+                )}
+              </div>
             </div>
-          </div>
+          </button>
+
+          {profileMenuOpen && (
+            <div className="absolute right-0 top-full mt-2 w-52 bg-zinc-950 border border-white/15 rounded-2xl shadow-2xl p-2 z-50 backdrop-blur-2xl">
+              <div className="flex flex-col gap-1">
+                <div className="px-2.5 py-2 border-b border-white/10 mb-1">
+                  <span className="text-xs font-bold text-white">{adminProfile.name}</span>
+                  <span className="text-[10px] text-white/40 block">{adminProfile.email}</span>
+                  {role && (
+                    <span className="mt-1 inline-block px-2 py-0.5 rounded bg-violet-500/20 text-violet-400 border border-violet-500/30 text-[9px] font-semibold">
+                      {role}
+                    </span>
+                  )}
+                </div>
+                <button onClick={() => { setProfileMenuOpen(false); navigate('/admin/profile'); }} className={`flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-xs font-medium transition-all cursor-pointer w-full text-left ${location.pathname === '/admin/profile' ? 'text-violet-400 bg-violet-500/10' : 'text-white/60 hover:text-white hover:bg-white/5'}`}>
+                  <User className="w-3.5 h-3.5" />
+                  <span>My Profile</span>
+                </button>
+                <button onClick={() => { setProfileMenuOpen(false); navigate('/admin/change-password'); }} className={`flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-xs font-medium transition-all cursor-pointer w-full text-left ${location.pathname === '/admin/change-password' ? 'text-violet-400 bg-violet-500/10' : 'text-white/60 hover:text-white hover:bg-white/5'}`}>
+                  <Lock className="w-3.5 h-3.5" />
+                  <span>Change Password</span>
+                </button>
+                <button onClick={() => { setProfileMenuOpen(false); navigate('/admin/settings'); }} className={`flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-xs font-medium transition-all cursor-pointer w-full text-left ${location.pathname === '/admin/settings' ? 'text-violet-400 bg-violet-500/10' : 'text-white/60 hover:text-white hover:bg-white/5'}`}>
+                  <Settings className="w-3.5 h-3.5" />
+                  <span>Settings</span>
+                </button>
+                <div className="border-t border-white/10 mt-1 pt-1">
+                  <button onClick={() => { setProfileMenuOpen(false); setLogoutDialogOpen(true); }} className="flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-xs font-medium text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 transition-all cursor-pointer w-full text-left">
+                    <LogOut className="w-3.5 h-3.5" />
+                    <span>Logout</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
+
+        <ConfirmationDialog
+          open={logoutDialogOpen}
+          title="Logout"
+          message="Are you sure you want to logout?"
+          confirmLabel="Logout"
+          cancelLabel="Cancel"
+          variant="danger"
+          onConfirm={() => {
+            setLogoutDialogOpen(false);
+            onExitAdmin();
+          }}
+          onCancel={() => setLogoutDialogOpen(false)}
+        />
       </div>
     </header>
   );

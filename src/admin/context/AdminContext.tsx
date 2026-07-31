@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import type {
   Participant,
   EventItem,
@@ -13,18 +13,21 @@ import type {
   ActiveTabModule,
   PaymentStatus,
   AttendanceStatus,
+  EmailLog,
 } from '../types';
+import type { ToastData } from '../components/common/Toast';
+import { useRBAC } from '../../rbac/context/RBACContext';
+import { api } from '../../services/api';
+import { listGallery, addGalleryMedia, deleteGalleryMedia as deleteGalleryRow } from '../../services/galleryService';
+import { listCertificates } from '../../services/certificateService';
 import {
-  INITIAL_EVENTS,
-  INITIAL_PARTICIPANTS,
-  INITIAL_ATTENDANCE,
-  INITIAL_ANNOUNCEMENTS,
-  INITIAL_CERTIFICATES,
-  INITIAL_GALLERY,
-  INITIAL_COORDINATORS,
-  INITIAL_AUDIT_LOGS,
-  INITIAL_SETTINGS,
-} from '../data/mockData';
+  listAnnouncements,
+  createAnnouncement as createAnnouncementRow,
+  deleteAnnouncement as deleteAnnouncementRow,
+} from '../../services/announcementService';
+import { listAuditLogs, addAuditLog } from '../../services/auditLogService';
+import { readSettings, saveSettings } from '../../services/settingsService';
+import { listAllAttendance, upsertAttendance } from '../../services/attendanceService';
 
 interface NotificationItem {
   id: string;
@@ -33,6 +36,17 @@ interface NotificationItem {
   time: string;
   read: boolean;
   type: 'info' | 'success' | 'warning' | 'error';
+}
+
+export interface AdminProfile {
+  name: string;
+  email: string;
+  role: string;
+  phone: string;
+  department: string;
+  photo: string;
+  lastLogin: string;
+  accountStatus: string;
 }
 
 interface AdminContextType {
@@ -60,6 +74,51 @@ interface AdminContextType {
   globalSearchOpen: boolean;
   setGlobalSearchOpen: (open: boolean) => void;
 
+  // Dark Mode
+  isDarkMode: boolean;
+  toggleDarkMode: () => void;
+
+  // Admin Profile
+  adminProfile: AdminProfile;
+  updateAdminProfile: (profile: Partial<AdminProfile>) => void;
+
+  // Toast
+  toasts: ToastData[];
+  addToast: (title: string, message: string, type: ToastData['type'], duration?: number) => void;
+  dismissToast: (id: string) => void;
+
+  // Email Logs
+  emailLogs: EmailLog[];
+  emailLogsLoading: boolean;
+  emailStats: any;
+  refreshEmailLogs: () => Promise<void>;
+  resendEmail: (logId: string) => Promise<any>;
+  sendTestEmail: (to: string) => Promise<any>;
+
+  // Coordinator CRUD
+  addCoordinator: (c: {
+    full_name: string;
+    email: string;
+    phone: string;
+    department?: string;
+    designation?: string;
+    coordinator_type?: string;
+    username?: string;
+    password?: string;
+    role?: string;
+    status?: string;
+    notes?: string;
+    event_ids?: number[];
+  }) => Promise<any>;
+  updateCoordinator: (id: number, data: Partial<Coordinator> & { password?: string; event_ids?: number[] }) => Promise<void>;
+  deleteCoordinator: (id: number) => Promise<void>;
+  refreshCoordinators: () => Promise<void>;
+
+  // Event CRUD
+  addEvent: (e: Omit<EventItem, 'id' | 'revenue'>) => void;
+  updateEvent: (e: EventItem) => void;
+  deleteEvent: (id: string) => void;
+
   // Actions
   approvePayment: (id: string, remarks?: string) => void;
   rejectPayment: (id: string, remarks: string) => void;
@@ -81,83 +140,464 @@ interface AdminContextType {
   clearNotifications: () => void;
 }
 
+const EVENT_BANNERS: Record<string, string> = {
+  Debugging: '/images/events/debugging.png',
+  'Tech Quiz': '/images/events/tech_quiz.png',
+  'Paper Presentation': '/images/events/paper_presentation.png',
+  Hackathon: '/images/events/hackathon.png',
+  'Poster Designing': '/images/events/poster_designing.png',
+  Connexion: '/images/events/connexion.png',
+  'LAN Party': '/images/events/lan_party.png',
+  ADZAP: '/images/events/adzap.png',
+  'Short Film': '/images/events/short_film.png',
+  'IPL Auction': '/images/events/ipl_auction.png',
+};
+
+const DEFAULT_SETTINGS: SystemSettings = {
+  symposiumName: 'CASYUM 2K26',
+  tagline: 'Annual National Level Technical Symposium',
+  registrationStatus: 'Open',
+  registrationFee: 250,
+  upiId: 'casyum.srm@okicici',
+  upiQrUrl: 'https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?auto=format&fit=crop&w=400&q=80',
+  countdownTarget: '2026-08-29T08:00:00',
+  homepageBanner: '🚀 Registration for CASYUM 2K26 is LIVE! Cash prizes worth ₹1.5L+ awaiting.',
+  contactEmail: 'casyum2k26@srmist.edu.in',
+  contactPhone: '+91 44 2741 7000',
+  socialLinks: {
+    instagram: 'https://instagram.com/casyum',
+    twitter: 'https://twitter.com/casyum',
+    linkedin: 'https://linkedin.com/in/casyum',
+    youtube: 'https://youtube.com/@casyum',
+  },
+  sponsors: [
+    { name: 'NVIDIA', logo: 'https://upload.wikimedia.org/wikipedia/commons/2/21/Nvidia_logo.svg', tier: 'Title' },
+    { name: 'Google Cloud', logo: 'https://upload.wikimedia.org/wikipedia/commons/5/51/Google_Cloud_logo.svg', tier: 'Platinum' },
+    { name: 'GitHub', logo: 'https://upload.wikimedia.org/wikipedia/commons/9/91/Octicons-mark-github.svg', tier: 'Gold' },
+  ],
+};
+
 const AdminContext = createContext<AdminContextType | undefined>(undefined);
 
 export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [role, setRole] = useState<UserRole>('Super Admin');
+  const rbac = useRBAC();
+  const [role, setRole] = useState<UserRole>(() => (rbac.role as UserRole) || 'Super Admin');
   const [activeTab, setActiveTab] = useState<ActiveTabModule>('Dashboard');
 
-  const [participants, setParticipants] = useState<Participant[]>(() => {
-    const saved = localStorage.getItem('casyum_participants');
-    return saved ? JSON.parse(saved) : INITIAL_PARTICIPANTS;
+  useEffect(() => {
+    if (rbac.role) {
+      setRole(rbac.role as UserRole);
+    }
+  }, [rbac.role]);
+
+  const [participants, setParticipants] = useState<Participant[]>([]);
+
+  const [events, setEvents] = useState<EventItem[]>([]);
+
+  const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
+
+  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+
+  const [certificates, setCertificates] = useState<Certificate[]>([]);
+  const [gallery, setGallery] = useState<GalleryMedia[]>([]);
+  const [coordinators, setCoordinators] = useState<Coordinator[]>([]);
+
+  const refreshCoordinators = useCallback(async () => {
+    try {
+      const res = await api.coordinator.list();
+      setCoordinators(res.coordinators);
+    } catch {
+      setCoordinators([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshCoordinators();
+  }, [refreshCoordinators]);
+
+  const mapDbEventToItem = useCallback((row: any): EventItem => {
+    const name = row?.name || '';
+    return {
+      id: String(row?.id),
+      name,
+      category: row?.category || 'Technical',
+      tagline: row?.tagline || '',
+      description: row?.description || '',
+      iconName: row?.iconName || 'Calendar',
+      bannerImage: EVENT_BANNERS[name] || '/images/final.jpeg',
+      venue: row?.venue || '',
+      time: row?.time || '',
+      date: row?.event_date || '',
+      fee: Number(row?.fee) || 0,
+      maxParticipants: Number(row?.max_participants) || 0,
+      registeredCount: Number(row?.registered_count) || 0,
+      facultyCoordinator: row?.faculty_coordinator || '',
+      studentCoordinator: row?.student_coordinator || '',
+      status: row?.status || 'Open',
+      revenue: 0,
+      rules: [],
+    };
+  }, []);
+
+  const refreshEvents = useCallback(async () => {
+    try {
+      const res = await api.event.list();
+      setEvents((res.events || []).map(mapDbEventToItem));
+    } catch {
+      setEvents([]);
+    }
+  }, [mapDbEventToItem]);
+
+  useEffect(() => {
+    refreshEvents();
+  }, [refreshEvents]);
+
+  const DEFAULT_PARTICIPANT_PHOTO = 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80';
+
+  const mapDbParticipantToItem = useCallback((row: any): Participant => {
+    const regs: any[] = row.registered_events || [];
+    return {
+      id: String(row.participant_id),
+      name: row.full_name || '',
+      photo: row.photo || DEFAULT_PARTICIPANT_PHOTO,
+      college: row.college || '',
+      department: row.department || '',
+      year: row.year_of_study || '',
+      registerNumber: row.register_number || '',
+      mobile: row.phone || '',
+      email: row.email || '',
+      gender: (row.gender === 'Male' || row.gender === 'Female' ? row.gender : 'Other') as Participant['gender'],
+      studentId: row.student_id || '',
+      registeredEvents: regs.map((r: any) => String(r.event_id)),
+      paymentStatus: (row.payment_status || 'Pending') as PaymentStatus,
+      paymentScreenshotUrl: row.payment_screenshot_url || '',
+      transactionId: row.transaction_id || '',
+      paymentAmount: Number(row.payment_amount) || 0,
+      paymentUploadedTime: row.payment_uploaded_time || '',
+      paymentRemarks: row.payment_remarks || '',
+      registrationDate: row.created_at || '',
+      isDuplicateTransaction: false,
+    };
+  }, []);
+
+  const refreshParticipants = useCallback(async () => {
+    try {
+      const res = await api.participant.list();
+      setParticipants((res.participants || []).map(mapDbParticipantToItem));
+    } catch {
+      setParticipants([]);
+    }
+  }, [mapDbParticipantToItem]);
+
+  useEffect(() => {
+    refreshParticipants();
+  }, [refreshParticipants]);
+
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+
+  const [emailLogs, setEmailLogs] = useState<EmailLog[]>([]);
+  const [emailLogsLoading, setEmailLogsLoading] = useState(false);
+  const [emailStats, setEmailStats] = useState<any>(null);
+
+  const mapDbAnnouncement = (row: any): Announcement => ({
+    id: String(row.id),
+    title: row.title || '',
+    description: row.description || '',
+    target: (row.target || 'Entire Symposium') as Announcement['target'],
+    targetEventId: row.targetEventId,
+    priority: (row.priority || 'Medium') as Announcement['priority'],
+    publishDate: row.publish_date || row.created_at || '',
+    author: row.author || '',
+    status: (row.status || 'Published') as Announcement['status'],
   });
 
-  const [events, setEvents] = useState<EventItem[]>(() => {
-    const saved = localStorage.getItem('casyum_events');
-    return saved ? JSON.parse(saved) : INITIAL_EVENTS;
+  const mapDbGallery = (row: any): GalleryMedia => ({
+    id: String(row.id),
+    title: row.title || '',
+    type: (row.type || 'image') as GalleryMedia['type'],
+    url: row.url || '',
+    category: (row.category || 'Highlights') as GalleryMedia['category'],
+    isFeatured: row.is_featured === true,
+    uploadedDate: String(row.uploaded_date || row.created_at || '').slice(0, 10),
   });
 
-  const [attendance, setAttendance] = useState<AttendanceRecord[]>(() => {
-    const saved = localStorage.getItem('casyum_attendance');
-    return saved ? JSON.parse(saved) : INITIAL_ATTENDANCE;
+  const mapDbCertificate = (row: any): Certificate => ({
+    id: String(row.id),
+    participantId: row.participant_id || '',
+    participantName: row.participant_name || '',
+    college: row.college || '',
+    type: (row.type || 'Participation') as Certificate['type'],
+    eventName: row.event_name,
+    issueDate: row.issue_date || '',
+    certificateCode: row.certificate_code || '',
+    downloadUrl: row.download_url,
   });
 
-  const [announcements, setAnnouncements] = useState<Announcement[]>(() => {
-    const saved = localStorage.getItem('casyum_announcements');
-    return saved ? JSON.parse(saved) : INITIAL_ANNOUNCEMENTS;
+  const mapDbAuditLog = (row: any): AuditLog => ({
+    id: String(row.id),
+    user: row.user || '',
+    role: (row.role || 'Admin') as UserRole,
+    action: row.action || '',
+    details: row.details || '',
+    timestamp: row.timestamp || row.created_at || '',
+    ipAddress: row.ip_address || '',
   });
 
-  const [certificates] = useState<Certificate[]>(INITIAL_CERTIFICATES);
-  const [gallery, setGallery] = useState<GalleryMedia[]>(INITIAL_GALLERY);
-  const [coordinators] = useState<Coordinator[]>(INITIAL_COORDINATORS);
-
-  const [auditLogs, setAuditLogs] = useState<AuditLog[]>(() => {
-    const saved = localStorage.getItem('casyum_audit_logs');
-    return saved ? JSON.parse(saved) : INITIAL_AUDIT_LOGS;
+  const mapDbAttendance = (row: any): AttendanceRecord => ({
+    id: String(row.id || row.attendance_id),
+    participantId: row.participant_id || '',
+    participantName: row.participant_name || 'Participant',
+    eventId: row.event_id || '',
+    eventName: '',
+    status: (row.status || 'Absent') as AttendanceStatus,
+    timestamp: row.updated_at || row.check_in_time || '',
+    checkedBy: row.coordinator_id || 'Coordinator',
   });
 
-  const [settings, setSettings] = useState<SystemSettings>(INITIAL_SETTINGS);
+  useEffect(() => {
+    listGallery()
+      .then((res) => setGallery(res.gallery.map(mapDbGallery)))
+      .catch(() => setGallery([]));
+    listCertificates()
+      .then((res) => setCertificates(res.certificates.map(mapDbCertificate)))
+      .catch(() => setCertificates([]));
+    listAnnouncements()
+      .then((rows) => setAnnouncements(rows.map(mapDbAnnouncement)))
+      .catch(() => setAnnouncements([]));
+    listAuditLogs()
+      .then((rows) => setAuditLogs(rows.map(mapDbAuditLog)))
+      .catch(() => setAuditLogs([]));
+    listAllAttendance()
+      .then((rows) => setAttendance(rows.map(mapDbAttendance)))
+      .catch(() => setAttendance([]));
+  }, []);
+
+  const refreshEmailLogs = useCallback(async () => {
+    setEmailLogsLoading(true);
+    try {
+      const [logsRes, statsRes] = await Promise.all([
+        api.email.list({ limit: 100 }),
+        api.email.stats(),
+      ]);
+      setEmailLogs(logsRes.emails);
+      setEmailStats(statsRes);
+    } catch {
+      setEmailLogs([]);
+    } finally {
+      setEmailLogsLoading(false);
+    }
+  }, []);
+
+  const resendEmail = useCallback(async (logId: string) => {
+    const res = await api.email.resend(logId);
+    await refreshEmailLogs();
+    return res;
+  }, [refreshEmailLogs]);
+
+  const sendTestEmail = useCallback(async (to: string) => {
+    const res = await api.email.test(to);
+    await refreshEmailLogs();
+    return res;
+  }, [refreshEmailLogs]);
+
+  const [settings, setSettings] = useState<SystemSettings>(DEFAULT_SETTINGS);
+
+  useEffect(() => {
+    readSettings<SystemSettings>(DEFAULT_SETTINGS).then((stored) => {
+      setSettings(stored);
+      if (stored.admin_profile) {
+        setAdminProfile((prev) => ({ ...prev, ...(stored.admin_profile as Partial<AdminProfile>) }));
+      }
+    }).catch(() => {});
+  }, []);
+
+  const [adminProfile, setAdminProfile] = useState<AdminProfile>(() => {
+    try {
+      const saved = localStorage.getItem('casyum_admin_profile');
+      if (saved) return JSON.parse(saved) as AdminProfile;
+    } catch { /* ignore */ }
+    return {
+      name: rbac.user?.name || 'Admin User',
+      email: rbac.user?.email || 'admin@casyum.edu',
+      role: rbac.user?.role || 'Super Admin',
+      phone: rbac.user?.phone || '+91 98765 43210',
+      department: rbac.user?.department || 'Computer Applications',
+      photo: '',
+      lastLogin: new Date().toLocaleString(),
+      accountStatus: 'Active',
+    };
+  });
+
+  const [toasts, setToasts] = useState<ToastData[]>([]);
+
+  const addToast = useCallback((title: string, message: string, type: ToastData['type'], duration?: number) => {
+    const id = `toast-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    setToasts((prev) => [...prev, { id, title, message, type, duration }]);
+  }, []);
+
+  const dismissToast = useCallback((id: string) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  }, []);
+
+  const updateAdminProfile = useCallback((partial: Partial<AdminProfile>) => {
+    setAdminProfile((prev) => {
+      const next = { ...prev, ...partial };
+      localStorage.setItem('casyum_admin_profile', JSON.stringify(next));
+      saveSettings({ admin_profile: next }).catch(() => {});
+      return next;
+    });
+  }, []);
+
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    const saved = localStorage.getItem('casyum_dark_mode');
+    return saved ? JSON.parse(saved) : true;
+  });
+
+  const toggleDarkMode = () => {
+    setIsDarkMode((prev: boolean) => {
+      const next = !prev;
+      localStorage.setItem('casyum_dark_mode', JSON.stringify(next));
+      return next;
+    });
+  };
 
   const [selectedParticipant, setSelectedParticipant] = useState<Participant | null>(null);
   const [globalSearchOpen, setGlobalSearchOpen] = useState(false);
 
-  const [notifications, setNotifications] = useState<NotificationItem[]>([
-    { id: 'notif-1', title: 'New Registration', message: 'Rohan Deshmukh registered for AI Challenge', time: '10 mins ago', read: false, type: 'info' },
-    { id: 'notif-2', title: 'Duplicate Payment Txn', message: 'UPI/402910492011 uploaded twice by participant', time: '25 mins ago', read: false, type: 'warning' },
-    { id: 'notif-3', title: 'Registration Full', message: 'Paper Presentation event reached maximum quota (40)', time: '1 hour ago', read: false, type: 'error' },
-  ]);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
 
-  // Sync to local storage
-  useEffect(() => {
-    localStorage.setItem('casyum_participants', JSON.stringify(participants));
-  }, [participants]);
+  const addCoordinator = async (data: {
+    full_name: string;
+    email: string;
+    phone: string;
+    department?: string;
+    designation?: string;
+    coordinator_type?: string;
+    username?: string;
+    password?: string;
+    role?: string;
+    status?: string;
+    notes?: string;
+    event_ids?: number[];
+  }) => {
+    try {
+      const res = await api.coordinator.create(data);
+      setCoordinators((prev) => [res.coordinator, ...prev]);
+      logAction('Coordinator Created', `Added coordinator ${res.coordinator.full_name}`);
+      pushNotification('Coordinator Added', `${res.coordinator.full_name} has been added. Credentials were sent.`, 'success');
+      return res;
+    } catch (err: any) {
+      pushNotification('Error', err.message || 'Failed to add coordinator', 'error');
+      throw err;
+    }
+  };
 
-  useEffect(() => {
-    localStorage.setItem('casyum_events', JSON.stringify(events));
-  }, [events]);
+  const updateCoordinator = async (id: number, data: Partial<Coordinator> & { password?: string }) => {
+    try {
+      const res = await api.coordinator.update(id, data);
+      setCoordinators((prev) => prev.map((c) => (c.id === id ? res.coordinator : c)));
+      logAction('Coordinator Updated', `Updated coordinator ${res.coordinator.full_name}`);
+      pushNotification('Coordinator Updated', `${res.coordinator.full_name}'s information has been updated.`, 'info');
+    } catch (err: any) {
+      pushNotification('Error', err.message || 'Failed to update coordinator', 'error');
+      throw err;
+    }
+  };
 
-  useEffect(() => {
-    localStorage.setItem('casyum_attendance', JSON.stringify(attendance));
-  }, [attendance]);
+  const deleteCoordinator = async (id: number) => {
+    try {
+      const c = coordinators.find((x) => x.id === id);
+      await api.coordinator.delete(id);
+      setCoordinators((prev) => prev.filter((x) => x.id !== id));
+      logAction('Coordinator Deleted', `Deleted coordinator ${c?.full_name || id}`);
+      pushNotification('Coordinator Removed', `${c?.full_name || 'Coordinator'} has been removed.`, 'warning');
+    } catch (err: any) {
+      pushNotification('Error', err.message || 'Failed to delete coordinator', 'error');
+    }
+  };
 
-  useEffect(() => {
-    localStorage.setItem('casyum_audit_logs', JSON.stringify(auditLogs));
-  }, [auditLogs]);
+  const addEvent = async (data: Omit<EventItem, 'id' | 'revenue'>) => {
+    try {
+      await api.event.create({
+        name: data.name,
+        category: data.category,
+        description: data.description,
+        venue: data.venue,
+        event_date: data.date,
+        time: data.time,
+        fee: data.fee,
+        max_participants: data.maxParticipants,
+        status: data.status,
+        faculty_coordinator: data.facultyCoordinator,
+        student_coordinator: data.studentCoordinator,
+      });
+      await refreshEvents();
+      logAction('Event Created', `Created new event: ${data.name}`);
+      pushNotification('Event Added', `${data.name} has been created successfully.`, 'success');
+    } catch (err: any) {
+      pushNotification('Error', err.message || 'Failed to create event', 'error');
+    }
+  };
+
+  const updateEvent = async (updated: EventItem) => {
+    try {
+      await api.event.update(updated.id, {
+        name: updated.name,
+        category: updated.category,
+        description: updated.description,
+        venue: updated.venue,
+        event_date: updated.date,
+        time: updated.time,
+        fee: updated.fee,
+        max_participants: updated.maxParticipants,
+        status: updated.status,
+        faculty_coordinator: updated.facultyCoordinator,
+        student_coordinator: updated.studentCoordinator,
+      });
+      await refreshEvents();
+      logAction('Event Updated', `Updated event: ${updated.name}`);
+      pushNotification('Event Updated', `${updated.name} has been updated.`, 'info');
+    } catch (err: any) {
+      pushNotification('Error', err.message || 'Failed to update event', 'error');
+    }
+  };
+
+  const deleteEvent = async (id: string) => {
+    try {
+      const e = events.find((x) => x.id === id);
+      await api.event.delete(id);
+      setEvents((prev) => prev.filter((x) => x.id !== id));
+      logAction('Event Deleted', `Deleted event ${e?.name || id}`);
+      pushNotification('Event Removed', `${e?.name || 'Event'} has been deleted.`, 'warning');
+    } catch (err: any) {
+      pushNotification('Error', err.message || 'Failed to delete event', 'error');
+    }
+  };
 
   const logAction = (action: string, details: string) => {
-    const newLog: AuditLog = {
-      id: `log-${Date.now()}`,
-      user: role,
+    addAuditLog({
+      user: rbac.user?.name || role,
       role: role,
       action,
       details,
       timestamp: new Date().toLocaleString(),
-      ipAddress: '192.168.1.100',
-    };
-    setAuditLogs((prev) => [newLog, ...prev]);
+      ip_address: 'N/A',
+    }).then(() => {
+      listAuditLogs().then((rows) => setAuditLogs(rows.map(mapDbAuditLog))).catch(() => {});
+    }).catch(() => {});
+    rbac.addActivity(action, details);
   };
 
-  const approvePayment = (id: string, remarks?: string) => {
+  const approvePayment = async (id: string, remarks?: string) => {
+    try {
+      await api.participant.update(id, {
+        payment_status: 'Approved',
+        payment_remarks: remarks || 'Approved by admin',
+      });
+    } catch (err: any) {
+      pushNotification('Error', err.message || 'Failed to approve payment', 'error');
+      return;
+    }
     setParticipants((prev) =>
       prev.map((p) => {
         if (p.id === id) {
@@ -173,7 +613,16 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     pushNotification('Payment Approved', `Payment for ${p?.name} has been verified and approved.`, 'success');
   };
 
-  const rejectPayment = (id: string, remarks: string) => {
+  const rejectPayment = async (id: string, remarks: string) => {
+    try {
+      await api.participant.update(id, {
+        payment_status: 'Rejected',
+        payment_remarks: remarks,
+      });
+    } catch (err: any) {
+      pushNotification('Error', err.message || 'Failed to reject payment', 'error');
+      return;
+    }
     setParticipants((prev) =>
       prev.map((p) => {
         if (p.id === id) {
@@ -189,15 +638,31 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     pushNotification('Payment Rejected', `Payment for ${p?.name} was rejected: ${remarks}`, 'error');
   };
 
-  const addRegistration = (data: Omit<Participant, 'id' | 'registrationDate'>) => {
-    const newP: Participant = {
-      ...data,
-      id: `PART-${1000 + participants.length + 1}`,
-      registrationDate: new Date().toISOString().split('T')[0],
-    };
-    setParticipants((prev) => [newP, ...prev]);
-    logAction('Registration Created', `Created manual registration for ${newP.name}`);
-    pushNotification('New Registration', `${newP.name} registered for CASYUM 2K26`, 'info');
+  const addRegistration = async (data: Omit<Participant, 'id' | 'registrationDate'>) => {
+    const eventIds = (data.registeredEvents || [])
+      .map((e) => {
+        const str = String(e);
+        const match = str.match(/^evt-(\d+)$/);
+        if (match) return parseInt(match[1], 10);
+        const num = parseInt(str, 10);
+        return Number.isNaN(num) ? 0 : num;
+      })
+      .filter((n) => n > 0);
+
+    const res = await api.participant.register({
+      full_name: data.name,
+      email: data.email,
+      phone: data.mobile,
+      college: data.college,
+      department: data.department,
+      year_of_study: data.year,
+      gender: data.gender,
+      event_ids: eventIds,
+    });
+    await refreshParticipants();
+    logAction('Registration Created', `Created manual registration for ${data.name}`);
+    pushNotification('New Registration', `${data.name} registered for CASYUM 2K26`, 'info');
+    return res;
   };
 
   const updateRegistration = (updated: Participant) => {
@@ -206,43 +671,53 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     logAction('Registration Updated', `Updated profile data for ${updated.name}`);
   };
 
-  const deleteParticipant = (id: string) => {
+  const deleteParticipant = async (id: string) => {
     const p = participants.find((x) => x.id === id);
+    try {
+      await api.participant.delete(id);
+    } catch (err: any) {
+      pushNotification('Error', err.message || 'Failed to delete participant', 'error');
+    }
     setParticipants((prev) => prev.filter((x) => x.id !== id));
     if (selectedParticipant?.id === id) setSelectedParticipant(null);
     logAction('Participant Deleted', `Deleted participant ${p?.name || id}`);
   };
 
-  const bulkDeleteParticipants = (ids: string[]) => {
+  const bulkDeleteParticipants = async (ids: string[]) => {
+    await Promise.all(ids.map((id) => api.participant.delete(id).catch(() => null)));
     setParticipants((prev) => prev.filter((p) => !ids.includes(p.id)));
     if (selectedParticipant && ids.includes(selectedParticipant.id)) setSelectedParticipant(null);
     logAction('Bulk Delete', `Deleted ${ids.length} participants`);
   };
 
-  const bulkApprovePayments = (ids: string[]) => {
+  const bulkApprovePayments = async (ids: string[]) => {
+    await Promise.all(ids.map((id) => api.participant.update(id, { payment_status: 'Approved' }).catch(() => null)));
     setParticipants((prev) =>
       prev.map((p) => (ids.includes(p.id) ? { ...p, paymentStatus: 'Approved' as PaymentStatus } : p))
     );
     logAction('Bulk Payment Approve', `Approved payments for ${ids.length} participants`);
   };
 
-  const toggleEventStatus = (eventId: string) => {
-    setEvents((prev) =>
-      prev.map((e) => {
-        if (e.id === eventId) {
-          const nextStatus = e.status === 'Open' ? 'Closed' : 'Open';
-          logAction('Event Status Updated', `Changed status of ${e.name} to ${nextStatus}`);
-          return { ...e, status: nextStatus };
-        }
-        return e;
-      })
-    );
+  const toggleEventStatus = async (eventId: string) => {
+    const e = events.find((x) => x.id === eventId);
+    if (!e) return;
+    const nextStatus = e.status === 'Open' ? 'Closed' : 'Open';
+    try {
+      await api.event.update(eventId, { status: nextStatus });
+      await refreshEvents();
+      logAction('Event Status Updated', `Changed status of ${e.name} to ${nextStatus}`);
+    } catch (err: any) {
+      pushNotification('Error', err.message || 'Failed to update event status', 'error');
+    }
   };
 
   const markAttendance = (participantId: string, eventId: string, status: AttendanceStatus) => {
     const p = participants.find((x) => x.id === participantId);
     const e = events.find((x) => x.id === eventId);
     const existing = attendance.find((a) => a.participantId === participantId && a.eventId === eventId);
+
+    const dbStatus = status === 'Late' ? 'Absent' : status;
+    const remarks = status === 'Late' ? 'Late' : '';
 
     if (existing) {
       setAttendance((prev) =>
@@ -265,42 +740,69 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       };
       setAttendance((prev) => [newAtt, ...prev]);
     }
+
+    upsertAttendance({
+      event_id: eventId,
+      participant_id: participantId,
+      coordinator_id: role,
+      status: dbStatus,
+      remarks,
+    }).catch(() => {});
     logAction('Attendance Marked', `Marked ${p?.name} as ${status} for ${e?.name}`);
   };
 
   const createAnnouncement = (data: Omit<Announcement, 'id' | 'publishDate'>) => {
-    const newAnc: Announcement = {
-      ...data,
-      id: `anc-${Date.now()}`,
-      publishDate: new Date().toLocaleString(),
-    };
-    setAnnouncements((prev) => [newAnc, ...prev]);
-    logAction('Announcement Published', `Title: ${newAnc.title} (Target: ${newAnc.target})`);
-    pushNotification('New Announcement', newAnc.title, 'info');
+    createAnnouncementRow({
+      title: data.title,
+      description: data.description,
+      target: data.target,
+      targetEventId: data.targetEventId,
+      priority: data.priority,
+      author: rbac.user?.name || role,
+      status: data.status,
+    })
+      .then((row) => {
+        setAnnouncements((prev) => [mapDbAnnouncement(row), ...prev]);
+        logAction('Announcement Published', `Title: ${data.title} (Target: ${data.target})`);
+        pushNotification('New Announcement', data.title, 'info');
+      })
+      .catch(() => {
+        pushNotification('Error', 'Failed to publish announcement', 'error');
+      });
   };
 
   const deleteAnnouncement = (id: string) => {
     setAnnouncements((prev) => prev.filter((a) => a.id !== id));
+    deleteAnnouncementRow(id).catch(() => {});
     logAction('Announcement Deleted', `Deleted announcement ID ${id}`);
   };
 
   const uploadGalleryMedia = (item: Omit<GalleryMedia, 'id' | 'uploadedDate'>) => {
-    const newMedia: GalleryMedia = {
-      ...item,
-      id: `gal-${Date.now()}`,
-      uploadedDate: new Date().toISOString().split('T')[0],
-    };
-    setGallery((prev) => [newMedia, ...prev]);
-    logAction('Gallery Media Uploaded', `Uploaded ${newMedia.type}: ${newMedia.title}`);
+    addGalleryMedia({
+      title: item.title,
+      type: item.type,
+      url: item.url,
+      category: item.category,
+      is_featured: item.isFeatured,
+    })
+      .then((row) => {
+        setGallery((prev) => [mapDbGallery(row), ...prev]);
+        logAction('Gallery Media Uploaded', `Uploaded ${item.type}: ${item.title}`);
+      })
+      .catch(() => {
+        pushNotification('Error', 'Failed to upload media', 'error');
+      });
   };
 
   const deleteGalleryMedia = (id: string) => {
     setGallery((prev) => prev.filter((g) => g.id !== id));
+    deleteGalleryRow(id).catch(() => {});
     logAction('Gallery Media Deleted', `Deleted media ${id}`);
   };
 
   const updateSettings = (newSettings: Partial<SystemSettings>) => {
     setSettings((prev) => ({ ...prev, ...newSettings }));
+    saveSettings<SystemSettings>(newSettings).catch(() => {});
     logAction('Settings Updated', 'Updated system ERP settings configuration');
     pushNotification('Settings Saved', 'System settings were successfully updated.', 'success');
   };
@@ -346,6 +848,26 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         setSelectedParticipant,
         globalSearchOpen,
         setGlobalSearchOpen,
+        isDarkMode,
+        toggleDarkMode,
+        adminProfile,
+        updateAdminProfile,
+        toasts,
+        addToast,
+        dismissToast,
+        addCoordinator,
+        updateCoordinator,
+        deleteCoordinator,
+        refreshCoordinators,
+        emailLogs,
+        emailLogsLoading,
+        emailStats,
+        refreshEmailLogs,
+        resendEmail,
+        sendTestEmail,
+        addEvent,
+        updateEvent,
+        deleteEvent,
         approvePayment,
         rejectPayment,
         addRegistration,

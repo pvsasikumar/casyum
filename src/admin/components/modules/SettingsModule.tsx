@@ -11,6 +11,7 @@ import {
   Unlock,
   AlertTriangle,
   CheckCircle2,
+  Link,
 } from 'lucide-react';
 import { useAdmin } from '../../context/AdminContext';
 
@@ -212,6 +213,23 @@ export const SettingsModule: React.FC = () => {
               className="p-3 rounded-xl bg-white/5 border border-white/10 text-white text-sm focus:outline-none focus:border-violet-500/50"
             />
           </div>
+        </div>
+
+        {/* Social Links */}
+        <div className="p-6 rounded-3xl bg-zinc-950/60 border border-white/10 backdrop-blur-md flex flex-col gap-5">
+          <h3 className="text-sm font-bold text-white flex items-center gap-2">
+            <Globe className="w-4 h-4 text-violet-400" />
+            <span>Social Media Links</span>
+          </h3>
+          {(['instagram', 'twitter', 'linkedin', 'youtube'] as const).map((platform) => (
+            <div key={platform} className="flex flex-col gap-2">
+              <label className="text-xs font-bold text-white/50 flex items-center gap-2 capitalize">
+                <Link className="w-3.5 h-3.5 text-violet-400" />
+                <span>{platform === 'twitter' ? 'Twitter / X' : platform}</span>
+              </label>
+              <input type="url" value={(localSettings.socialLinks as any)?.[platform] || ''} onChange={(e) => update({ socialLinks: { ...localSettings.socialLinks, [platform]: e.target.value } })} className="p-3 rounded-xl bg-white/5 border border-white/10 text-white text-sm focus:outline-none focus:border-violet-500/50" placeholder={`https://${platform}.com/...`} />
+            </div>
+          ))}
         </div>
       </div>
     </div>
