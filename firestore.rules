@@ -1,0 +1,111 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function getUserRole() {
+      return isSignedIn() ? getUserData().role : null;
+    }
+
+    function isAdmin() {
+      return getUserRole() in ['Super Admin', 'Admin'];
+    }
+
+    function isCoordinator() {
+      return getUserRole() in [
+        'Event Coordinator',
+        'Coordinator',
+        'Event Coordinator (Student)',
+        'Event Coordinator (Faculty)'
+      ];
+    }
+
+    function isAssignedEvent(eventId) {
+      return isSignedIn() && eventId in getUserData().assigned_event_ids;
+    }
+
+    // Only the fields below may change when a participant registers for an
+    // event (public counter updates). All other writes must come from an
+    // admin or an assigned coordinator.
+    function onlyChanges(fields) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(fields);
+    }
+
+    match /users/{userId} {
+      allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow write: if isAdmin();
+    }
+
+    match /events/{eventId} {
+      // Public event pages and the public bento grid read the published
+      // summary fields stored on the event document. Drafts live in the
+      // separate event_drafts collection and are never exposed here.
+      allow read: if true;
+      allow create: if isAdmin();
+      allow update: if isAdmin()
+        || (isCoordinator() && isAssignedEvent(eventId))
+        || (isSignedIn() && onlyChanges(['registered_count', 'updated_at']));
+      allow delete: if isAdmin();
+    }
+
+    // Published event content: readable by anyone, writable only by admins or
+    // the coordinator assigned to that event.
+    match /event_cms/{eventId} {
+      allow read: if true;
+      allow write: if isAdmin() || (isCoordinator() && isAssignedEvent(eventId));
+    }
+
+    // Draft event content: never public. Only admins and the assigned
+    // coordinator may read or edit the draft.
+    match /event_drafts/{eventId} {
+      allow read: if isAdmin() || (isCoordinator() && isAssignedEvent(eventId));
+      allow write: if isAdmin() || (isCoordinator() && isAssignedEvent(eventId));
+    }
+
+    // Participants must be able to read and update their own profile, and
+    // create their own record on first Google sign-in.
+    match /participants/{participantId} {
+      allow read: if isSignedIn() && (isAdmin() || isCoordinator() || request.auth.uid == participantId);
+      allow create: if isSignedIn() && request.auth.uid == participantId;
+      allow update: if isSignedIn() && (isAdmin() || request.auth.uid == participantId);
+      allow delete: if isAdmin();
+    }
+
+    // Registrations: participants may read and create their own; coordinators
+    // read registrations for their assigned events; admins have full access.
+    match /registrations/{registrationId} {
+      allow read: if isSignedIn() && (
+        isAdmin()
+        || (isCoordinator() && isAssignedEvent(resource.data.event_id))
+        || request.auth.uid == resource.data.participant_id
+        || request.auth.uid == resource.data.participant_user_id
+      );
+      allow create: if isSignedIn()
+        && request.resource.data.participant_id == request.auth.uid
+        && request.resource.data.event_id != null;
+      allow update: if isAdmin() || (isCoordinator() && isAssignedEvent(resource.data.event_id));
+      allow delete: if isAdmin();
+    }
+
+    // Attendance: a coordinator can only create/update/delete attendance for
+    // their assigned event. Admins have full access.
+    match /attendance/{attendanceId} {
+      allow read: if isSignedIn() && (isAdmin() || isCoordinator() && isAssignedEvent(resource.data.event_id));
+      allow create: if isSignedIn() && (isAdmin() || isCoordinator() && isAssignedEvent(request.resource.data.event_id));
+      allow update: if isSignedIn() && (isAdmin() || isCoordinator() && isAssignedEvent(resource.data.event_id) && isAssignedEvent(request.resource.data.event_id));
+      allow delete: if isSignedIn() && (isAdmin() || isCoordinator() && isAssignedEvent(resource.data.event_id));
+    }
+
+    // Sequence counters are read and incremented when participants register.
+    match /counters/{key} {
+      allow read, write: if isSignedIn();
+    }
+  }
+}

@@ -1,0 +1,51 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Read the coordinator's role and assigned event IDs from their Firestore
+    // user record so permissions stay centralized.
+    function getUserData() {
+      return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function getUserRole() {
+      return isSignedIn() ? getUserData().role : null;
+    }
+
+    function isAdmin() {
+      return getUserRole() in ['Super Admin', 'Admin'];
+    }
+
+    function isCoordinator() {
+      return getUserRole() in [
+        'Event Coordinator',
+        'Coordinator',
+        'Event Coordinator (Student)',
+        'Event Coordinator (Faculty)'
+      ];
+    }
+
+    function isAssignedEvent(eventId) {
+      return isSignedIn() && eventId in getUserData().assigned_event_ids;
+    }
+
+    // Structured event images: events/{eventId}/{hero|logo|about|gallery|...}/{file}
+    // Publicly readable. Only admins and the coordinator assigned to that event
+    // may upload, replace, or delete files inside their own event folder.
+    match /events/{eventId}/{folder}/{fileName} {
+      allow read: if true;
+      allow write: if isSignedIn() && (isAdmin() || (isCoordinator() && isAssignedEvent(eventId)));
+    }
+
+    // Generic uploads (admin profile photos, admin gallery media, CMS extras).
+    // Readable by signed-in staff; writable only by admins.
+    match /{allPaths=**} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && isAdmin();
+    }
+  }
+}

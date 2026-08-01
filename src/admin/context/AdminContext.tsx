@@ -28,6 +28,7 @@ import {
 import { listAuditLogs, addAuditLog } from '../../services/auditLogService';
 import { readSettings, saveSettings } from '../../services/settingsService';
 import { listAllAttendance, upsertAttendance } from '../../services/attendanceService';
+import { EVENT_IMAGE_MAP, DEFAULT_EVENT_IMAGE } from '../../services/eventSlug';
 
 interface NotificationItem {
   id: string;
@@ -140,19 +141,6 @@ interface AdminContextType {
   clearNotifications: () => void;
 }
 
-const EVENT_BANNERS: Record<string, string> = {
-  Debugging: '/images/events/debugging.png',
-  'Tech Quiz': '/images/events/tech_quiz.png',
-  'Paper Presentation': '/images/events/paper_presentation.png',
-  Hackathon: '/images/events/hackathon.png',
-  'Poster Designing': '/images/events/poster_designing.png',
-  Connexion: '/images/events/connexion.png',
-  'LAN Party': '/images/events/lan_party.png',
-  ADZAP: '/images/events/adzap.png',
-  'Short Film': '/images/events/short_film.png',
-  'IPL Auction': '/images/events/ipl_auction.png',
-};
-
 const DEFAULT_SETTINGS: SystemSettings = {
   symposiumName: 'CASYUM 2K26',
   tagline: 'Annual National Level Technical Symposium',
@@ -224,7 +212,7 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       tagline: row?.tagline || '',
       description: row?.description || '',
       iconName: row?.iconName || 'Calendar',
-      bannerImage: EVENT_BANNERS[name] || '/images/final.jpeg',
+      bannerImage: EVENT_IMAGE_MAP[name] || DEFAULT_EVENT_IMAGE,
       venue: row?.venue || '',
       time: row?.time || '',
       date: row?.event_date || '',

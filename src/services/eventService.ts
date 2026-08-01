@@ -59,7 +59,7 @@ export interface RegistrationRow {
   payment_remarks: string;
 }
 
-function mapEventDoc(docId: string, data: Record<string, any>): EventRow {
+export function mapEventDoc(docId: string, data: Record<string, any>): EventRow {
   return {
     id: docId,
     name: data.name || '',
@@ -196,6 +196,8 @@ export async function updateEvent(
     name: string;
     category: string;
     description: string;
+    shortDescription: string;
+    tagline: string;
     venue: string;
     event_date: string;
     time: string;
@@ -204,6 +206,10 @@ export async function updateEvent(
     status: string;
     faculty_coordinator: string;
     student_coordinator: string;
+    slug: string;
+    cardImage: string;
+    banner: string;
+    registered_count: number;
   }>
 ): Promise<{ event: EventRow }> {
   const db = getDb();

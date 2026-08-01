@@ -16,6 +16,7 @@ import {
 import { useAdmin } from '../../context/AdminContext';
 import type { EventItem } from '../../types';
 import { ConfirmationDialog } from '../common/ConfirmationDialog';
+import { DEFAULT_EVENT_IMAGE } from '../../../services/eventSlug';
 
 const emptyEventForm = {
   name: '',
@@ -176,7 +177,14 @@ export const EventManagement: React.FC = () => {
             return (
               <div key={e.id} className="group rounded-3xl bg-zinc-950/60 border border-white/10 hover:border-violet-500/40 backdrop-blur-md overflow-hidden transition-all duration-300 flex flex-col justify-between hover:shadow-[0_0_30px_rgba(139,92,246,0.15)]">
                 <div className="relative h-36 overflow-hidden">
-                  <img src={e.bannerImage} alt={e.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                  <img
+                    src={e.bannerImage}
+                    alt={e.name}
+                    onError={(ev) => {
+                      if (ev.currentTarget.src !== window.location.origin + DEFAULT_EVENT_IMAGE) ev.currentTarget.src = DEFAULT_EVENT_IMAGE;
+                    }}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                  />
                   <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/40 to-transparent" />
                   <div className="absolute top-3 left-3">
                     <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-black/60 backdrop-blur-md text-violet-300 border border-white/10">{e.category}</span>

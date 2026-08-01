@@ -1,7 +1,28 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import MagicBento from './MagicBento';
+import { listPublicEvents, type PublicEvent } from '../services/publicEventService';
 
 export const Events: React.FC = () => {
+  const [events, setEvents] = useState<PublicEvent[] | null>(null);
+  const [error, setError] = useState('');
+  const [retryKey, setRetryKey] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    setError('');
+    setEvents(null);
+    listPublicEvents()
+      .then((list) => {
+        if (!cancelled) setEvents(list);
+      })
+      .catch(() => {
+        if (!cancelled) setError('Unable to load events right now.');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [retryKey]);
+
   return (
     <section id="events" className="relative min-h-screen bg-black py-24 px-6 select-none overflow-hidden">
       {/* Decorative ambient background glows */}
@@ -19,9 +40,22 @@ export const Events: React.FC = () => {
           </p>
         </div>
 
+        {error && (
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 text-center">
+            <span className="text-xs text-white/40">{error}</span>
+            <button
+              onClick={() => setRetryKey((k) => k + 1)}
+              className="px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-[10px] font-bold uppercase tracking-widest text-white/60 hover:text-white hover:border-white/20 transition-colors cursor-pointer"
+            >
+              Retry
+            </button>
+          </div>
+        )}
+
         {/* Magic Bento Container */}
         <div className="w-full flex justify-center">
-          <MagicBento 
+          <MagicBento
+            events={events || undefined}
             textAutoHide={true}
             enableStars={true}
             enableSpotlight={true}

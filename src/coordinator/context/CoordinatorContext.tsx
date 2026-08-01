@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import type { EventItem } from '../../admin/types';
 import { AttendanceService } from '../services/AttendanceService';
-import type { EventAttendanceStats } from '../types';
+import type { EventAttendanceStats, EventParticipant } from '../types';
 import { employeeLogin, signOut, readUserRecord } from '../../services/authService';
 import { getAssignedEvents as fetchCoordinatorEvents, COORDINATOR_ROLES } from '../../services/coordinatorService';
 import { useRBAC } from '../../rbac/context/RBACContext';
@@ -29,9 +29,10 @@ interface CoordinatorContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   assignedEvents: EventItem[];
+  assignedEvent: EventItem | null;
   login: (email: string, password: string) => Promise<{ is_first_login: boolean; user: CoordinatorUser; token: string }>;
   logout: () => void;
-  getEventStats: (eventId: string) => EventAttendanceStats;
+  getEventStats: (eventId: string, participants?: EventParticipant[]) => EventAttendanceStats;
   toasts: ToastData[];
   addToast: (title: string, message: string, type: ToastData['type']) => void;
   dismissToast: (id: string) => void;
@@ -154,8 +155,8 @@ export const CoordinatorProvider: React.FC<{ children: React.ReactNode }> = ({ c
     void signOut();
   }, []);
 
-  const getEventStats = useCallback((eventId: string): EventAttendanceStats => {
-    return AttendanceService.getEventAttendanceStats(eventId);
+  const getEventStats = useCallback((eventId: string, participants?: EventParticipant[]): EventAttendanceStats => {
+    return AttendanceService.getEventAttendanceStats(eventId, participants);
   }, []);
 
   const refreshEvents = useCallback(async () => {
@@ -172,6 +173,7 @@ export const CoordinatorProvider: React.FC<{ children: React.ReactNode }> = ({ c
         isAuthenticated: !!user,
         isLoading,
         assignedEvents,
+        assignedEvent: assignedEvents[0] ?? null,
         login,
         logout,
         getEventStats,

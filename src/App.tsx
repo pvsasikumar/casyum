@@ -8,6 +8,7 @@ import { About } from './components/About';
 import { Events } from './components/Events';
 import { ParticipantRegistration } from './components/ParticipantRegistration';
 import { ParticipantDashboard } from './participant/ParticipantDashboard';
+import { EventDetailsPage } from './components/events/EventDetailsPage';
 import { AdminDashboard } from './admin/AdminDashboard';
 import { CoordinatorApp } from './coordinator/CoordinatorApp';
 import { AdminLogin } from './pages/admin/AdminLogin';
@@ -102,7 +103,7 @@ function PublicSite() {
               <button onClick={handleReplayIntro} className="px-6 py-2.5 rounded-full border border-white/10 text-white/50 hover:text-white hover:border-white/20 bg-white/5 hover:bg-white/10 transition-all duration-300 text-[10px] uppercase font-bold tracking-widest cursor-pointer active:scale-95">
                 Replay Intro Video
               </button>
-              <button onClick={signIn} disabled={isSigningIn} className="px-6 py-2.5 rounded-full border border-violet-500/30 text-violet-400 hover:text-violet-300 hover:border-violet-500/50 bg-violet-500/10 hover:bg-violet-500/20 transition-all duration-300 text-[10px] uppercase font-bold tracking-widest cursor-pointer active:scale-95 flex items-center gap-2 disabled:opacity-50 disabled:cursor-wait">
+              <button onClick={() => void signIn()} disabled={isSigningIn} className="px-6 py-2.5 rounded-full border border-violet-500/30 text-violet-400 hover:text-violet-300 hover:border-violet-500/50 bg-violet-500/10 hover:bg-violet-500/20 transition-all duration-300 text-[10px] uppercase font-bold tracking-widest cursor-pointer active:scale-95 flex items-center gap-2 disabled:opacity-50 disabled:cursor-wait">
                 {isSigningIn ? (
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
                 ) : (
@@ -187,6 +188,7 @@ export default function App() {
 
       <Route path="/" element={<PublicSite />} />
       <Route path="/events" element={<PublicSite />} />
+      <Route path="/events/:eventSlug" element={<EventDetailsPage />} />
       <Route path="/register" element={<PublicSite />} />
       <Route path="/profile" element={<RedirectToParticipantOrHome />} />
       <Route path="/my-events" element={<RedirectToParticipantOrHome />} />
@@ -203,12 +205,17 @@ export default function App() {
       <Route path="/admin/login" element={<AdminLogin />} />
 
       <Route
-        path="/admin/coordinator/dashboard"
+        path="/coordinator/*"
         element={
           <AdminRoute roles={COORDINATOR_PORTAL_ROLES}>
             <CoordinatorApp />
           </AdminRoute>
         }
+      />
+
+      <Route
+        path="/admin/coordinator/dashboard"
+        element={<Navigate to="/coordinator/dashboard" replace />}
       />
 
       <Route

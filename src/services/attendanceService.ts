@@ -6,8 +6,11 @@ import {
   query,
   where,
   setDoc,
-  deleteDoc,
   updateDoc,
+  writeBatch,
+  onSnapshot,
+  type QuerySnapshot,
+  type DocumentData,
 } from 'firebase/firestore';
 import { getDb } from '../firebase/firestore';
 import { now } from './helpers';
@@ -24,6 +27,12 @@ export interface AttendanceRecordRow {
   updated_at: string;
 }
 
+// Deterministic document id so one participant + event always maps to a single
+// attendance document. setDoc becomes an idempotent upsert with no read needed.
+export function attendanceDocId(eventId: string, participantId: string): string {
+  return `att-${eventId}-${participantId}`;
+}
+
 export async function listAllAttendance(): Promise<AttendanceRecordRow[]> {
   const db = getDb();
   const snap = await getDocs(collection(db, 'attendance'));
@@ -36,6 +45,23 @@ export async function listAttendanceByEvent(eventId: string): Promise<Attendance
     query(collection(db, 'attendance'), where('event_id', '==', eventId))
   );
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as any);
+}
+
+// Firestore real-time listener for a single event's attendance records.
+export function subscribeAttendanceByEvent(
+  eventId: string,
+  onNext: (rows: AttendanceRecordRow[]) => void,
+  onError?: (error: Error) => void
+): () => void {
+  const db = getDb();
+  const q = query(collection(db, 'attendance'), where('event_id', '==', eventId));
+  return onSnapshot(
+    q,
+    (snapshot: QuerySnapshot<DocumentData>) => {
+      onNext(snapshot.docs.map((d) => ({ id: d.id, ...d.data() }) as any));
+    },
+    onError
+  );
 }
 
 export async function setEventAttendanceLocked(eventId: string, locked: boolean): Promise<void> {
@@ -61,20 +87,10 @@ export async function upsertAttendance(record: {
   remarks?: string;
 }): Promise<void> {
   const db = getDb();
-  const existing = await listAttendanceByEvent(record.event_id);
-  const found = existing.find((a) => a.participant_id === record.participant_id);
-  if (found) {
-    await updateDoc(doc(db, 'attendance', found.id), {
-      status: record.status,
-      check_in_time: record.check_in_time ?? null,
-      remarks: record.remarks || found.remarks || '',
-      updated_at: now(),
-    });
-    return;
-  }
+  const id = attendanceDocId(record.event_id, record.participant_id);
   const row: AttendanceRecordRow = {
-    id: `att-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-    attendance_id: `att-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    id,
+    attendance_id: id,
     event_id: record.event_id,
     participant_id: record.participant_id,
     coordinator_id: record.coordinator_id,
@@ -83,13 +99,18 @@ export async function upsertAttendance(record: {
     remarks: record.remarks || '',
     updated_at: now(),
   };
-  await setDoc(doc(db, 'attendance', row.attendance_id), row);
+  await setDoc(doc(db, 'attendance', id), row);
 }
 
 export async function clearAttendanceByEvent(eventId: string): Promise<void> {
   const db = getDb();
-  const existing = await listAttendanceByEvent(eventId);
-  await Promise.all(existing.map((a) => deleteDoc(doc(db, 'attendance', a.id))));
+  const snap = await getDocs(
+    query(collection(db, 'attendance'), where('event_id', '==', eventId))
+  );
+  if (snap.empty) return;
+  const batch = writeBatch(db);
+  snap.docs.forEach((d) => batch.delete(doc(db, 'attendance', d.id)));
+  await batch.commit();
 }
 
 export async function saveAttendanceBatch(
@@ -97,13 +118,23 @@ export async function saveAttendanceBatch(
   eventId: string,
   coordinatorId: string
 ): Promise<void> {
-  for (const r of records) {
-    await upsertAttendance({
+  const db = getDb();
+  const batch = writeBatch(db);
+  const nowIso = now();
+  records.forEach((r) => {
+    const id = attendanceDocId(eventId, r.participant_id);
+    const row: AttendanceRecordRow = {
+      id,
+      attendance_id: id,
       event_id: eventId,
       participant_id: r.participant_id,
       coordinator_id: coordinatorId,
       status: r.status,
-      check_in_time: r.status === 'Present' ? new Date().toISOString() : null,
-    });
-  }
+      check_in_time: r.status === 'Present' ? nowIso : null,
+      remarks: '',
+      updated_at: nowIso,
+    };
+    batch.set(doc(db, 'attendance', id), row);
+  });
+  await batch.commit();
 }

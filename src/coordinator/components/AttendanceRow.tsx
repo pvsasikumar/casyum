@@ -4,12 +4,14 @@ import type { ParticipantAttendanceView } from '../types';
 
 interface AttendanceRowProps {
   participant: ParticipantAttendanceView;
+  isSaving?: boolean;
   onMarkPresent: (participantId: string) => void;
   onMarkAbsent: (participantId: string) => void;
 }
 
 export const AttendanceRow: React.FC<AttendanceRowProps> = ({
   participant,
+  isSaving = false,
   onMarkPresent,
   onMarkAbsent,
 }) => {
@@ -47,7 +49,10 @@ export const AttendanceRow: React.FC<AttendanceRowProps> = ({
         <div className="flex items-center gap-1.5">
           <button
             onClick={() => onMarkPresent(participant.participantId)}
+            disabled={isSaving}
             className={`px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-all cursor-pointer flex items-center gap-1 ${
+              isSaving ? 'opacity-50 cursor-not-allowed' : ''
+            } ${
               isPresent
                 ? 'bg-emerald-500 text-white shadow-md'
                 : 'bg-white/5 hover:bg-emerald-500/20 text-emerald-400 border border-transparent hover:border-emerald-500/30'
@@ -58,7 +63,10 @@ export const AttendanceRow: React.FC<AttendanceRowProps> = ({
           </button>
           <button
             onClick={() => onMarkAbsent(participant.participantId)}
+            disabled={isSaving}
             className={`px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-all cursor-pointer flex items-center gap-1 ${
+              isSaving ? 'opacity-50 cursor-not-allowed' : ''
+            } ${
               isAbsent
                 ? 'bg-rose-500 text-white shadow-md'
                 : 'bg-white/5 hover:bg-rose-500/20 text-rose-400 border border-transparent hover:border-rose-500/30'

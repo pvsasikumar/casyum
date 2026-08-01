@@ -1,30 +1,42 @@
 import React from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, Route, Routes } from 'react-router-dom';
 import { CoordinatorProvider, useCoordinator } from './context/CoordinatorContext';
-import { CoordinatorDashboard } from './CoordinatorDashboard';
+import { CoordinatorLayout } from './CoordinatorLayout';
+import { NoEventAssigned } from './components/NoEventAssigned';
+import { DashboardPage } from './pages/DashboardPage';
+import { AttendancePage } from './pages/AttendancePage';
+import { ParticipantsPage } from './pages/ParticipantsPage';
+import { EventOverviewPage } from './pages/EventOverviewPage';
+import { EventDescriptionPage } from './pages/EventDescriptionPage';
+import { ResultsPage } from './pages/ResultsPage';
+import { ProfilePage } from './pages/ProfilePage';
 
-const CoordinatorContent: React.FC = () => {
-  const { isAuthenticated, isLoading } = useCoordinator();
+const AttendanceRoute: React.FC = () => {
+  const { assignedEvent } = useCoordinator();
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-black flex items-center justify-center">
-        <div className="w-8 h-8 border-2 border-violet-400 border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
+  if (!assignedEvent) {
+    return <NoEventAssigned />;
   }
 
-  if (!isAuthenticated) {
-    return <Navigate to="/admin/login" replace />;
-  }
-
-  return <CoordinatorDashboard />;
+  return <AttendancePage eventId={assignedEvent.id} eventName={assignedEvent.name} />;
 };
 
 export const CoordinatorApp: React.FC = () => {
   return (
     <CoordinatorProvider>
-      <CoordinatorContent />
+      <Routes>
+        <Route element={<CoordinatorLayout />}>
+          <Route index element={<Navigate to="/coordinator/dashboard" replace />} />
+          <Route path="dashboard" element={<DashboardPage />} />
+          <Route path="attendance" element={<AttendanceRoute />} />
+          <Route path="participants" element={<ParticipantsPage />} />
+          <Route path="event-overview" element={<EventOverviewPage />} />
+          <Route path="event-description" element={<EventDescriptionPage />} />
+          <Route path="results" element={<ResultsPage />} />
+          <Route path="profile" element={<ProfilePage />} />
+          <Route path="*" element={<Navigate to="/coordinator/dashboard" replace />} />
+        </Route>
+      </Routes>
     </CoordinatorProvider>
   );
 };

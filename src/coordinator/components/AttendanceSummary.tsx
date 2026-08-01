@@ -4,9 +4,10 @@ import type { EventAttendanceStats } from '../types';
 
 interface AttendanceSummaryProps {
   stats: EventAttendanceStats;
+  isLoading?: boolean;
 }
 
-export const AttendanceSummary: React.FC<AttendanceSummaryProps> = ({ stats }) => {
+export const AttendanceSummary: React.FC<AttendanceSummaryProps> = ({ stats, isLoading = false }) => {
   const cards = [
     {
       label: 'Total Registered',
@@ -57,9 +58,13 @@ export const AttendanceSummary: React.FC<AttendanceSummaryProps> = ({ stats }) =
               </span>
               <Icon className={`w-4 h-4 ${card.color}`} />
             </div>
-            <span className={`text-2xl font-extrabold font-display ${card.color}`}>
-              {card.value}
-            </span>
+            {isLoading ? (
+              <div className="h-8 w-16 rounded-lg bg-white/10 animate-pulse" />
+            ) : (
+              <span className={`text-2xl font-extrabold font-display ${card.color}`}>
+                {card.value}
+              </span>
+            )}
           </div>
         );
       })}

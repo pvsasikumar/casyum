@@ -2,6 +2,7 @@ import { sanitizeFilename, downloadCSV, downloadExcel, downloadPDF } from '../co
 import type { Participant, EventItem } from '../types';
 import { api } from '../../services/api';
 import { listAttendanceByEvent } from '../../services/attendanceService';
+import { EVENT_IMAGE_MAP, DEFAULT_EVENT_IMAGE } from '../../services/eventSlug';
 
 export interface RegisteredParticipant extends Participant {
   registrationId: string;
@@ -46,7 +47,7 @@ function mapEventRow(row: any): EventItem {
     tagline: row?.tagline || '',
     description: row?.description || '',
     iconName: row?.iconName || 'Calendar',
-    bannerImage: row?.banner_image || '/images/final.jpeg',
+    bannerImage: row?.banner_image || EVENT_IMAGE_MAP[name] || DEFAULT_EVENT_IMAGE,
     venue: row?.venue || '',
     time: row?.time || '',
     date: row?.event_date || '',

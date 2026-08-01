@@ -19,7 +19,7 @@ import {
   createRegistration,
   removeRegistrationsByParticipant,
 } from './registrationService';
-import { getEvent } from './eventService';
+import { mapEventDoc } from './eventService';
 import { nextSequence, now } from './helpers';
 
 function mapParticipantRow(
@@ -160,7 +160,12 @@ export async function registerEvent(eventId: string | number): Promise<{ message
     throw new Error('Please complete your profile before registering for events.');
   }
 
-  const { event } = await getEvent(id);
+  const db = getDb();
+  const eventSnap = await getDoc(doc(db, 'events', id));
+  if (!eventSnap.exists()) {
+    throw new Error('Event not found.');
+  }
+  const event = mapEventDoc(eventSnap.id, eventSnap.data());
   if (event.status === 'Closed') {
     throw new Error('This event is no longer accepting registrations.');
   }

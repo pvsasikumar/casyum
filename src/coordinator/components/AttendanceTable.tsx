@@ -6,6 +6,7 @@ import type { ParticipantAttendanceView } from '../types';
 interface AttendanceTableProps {
   participants: ParticipantAttendanceView[];
   isLoading: boolean;
+  savingIds?: Record<string, boolean>;
   onMarkPresent: (participantId: string) => void;
   onMarkAbsent: (participantId: string) => void;
   onMarkAllPresent: () => void;
@@ -19,6 +20,7 @@ const PAGE_SIZE = 10;
 export const AttendanceTable: React.FC<AttendanceTableProps> = ({
   participants,
   isLoading,
+  savingIds = {},
   onMarkPresent,
   onMarkAbsent,
   onMarkAllPresent,
@@ -191,6 +193,7 @@ export const AttendanceTable: React.FC<AttendanceTableProps> = ({
                 <AttendanceRow
                   key={p.participantId}
                   participant={p}
+                  isSaving={!!savingIds[p.participantId]}
                   onMarkPresent={onMarkPresent}
                   onMarkAbsent={onMarkAbsent}
                 />

@@ -172,6 +172,8 @@ export type ActiveTabModule =
   | 'Dashboard'
   | 'Registrations'
   | 'Events'
+  | 'Event Overview'
+  | 'Event Cards'
   | 'Payments'
   | 'Attendance'
   | 'Analytics'
@@ -185,7 +187,8 @@ export type ActiveTabModule =
   | 'Settings'
   | 'Audit Logs'
   | 'Employees'
-  | 'Email Logs';
+  | 'Email Logs'
+  | 'Results';
 
 export interface EmailLog {
   id: string;

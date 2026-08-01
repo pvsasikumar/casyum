@@ -34,7 +34,7 @@ export const AdminRoute: React.FC<AdminRouteProps> = ({ roles, children }) => {
   }
 
   if (COORDINATOR_PORTAL_ROLES.includes(role)) {
-    return <Navigate to="/admin/coordinator/dashboard" replace />;
+    return <Navigate to="/coordinator/dashboard" replace />;
   }
 
   return <Navigate to="/admin/login" replace state={{ unauthorized: true }} />;

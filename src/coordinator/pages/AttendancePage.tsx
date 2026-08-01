@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, QrCode, CheckCircle2, AlertCircle, X } from 'lucide-react';
 import { AttendanceTable } from '../components/AttendanceTable';
@@ -6,19 +6,28 @@ import { AttendanceSummary } from '../components/AttendanceSummary';
 import { AttendanceService } from '../services/AttendanceService';
 import { useCoordinator } from '../context/CoordinatorContext';
 import { ConfirmationDialog } from '../../admin/components/common/ConfirmationDialog';
-import type { ParticipantAttendanceView, EventAttendanceStats } from '../types';
+import type {
+  ParticipantAttendanceView,
+  EventAttendanceStats,
+  EventParticipant,
+  CoordinatorAttendanceRecord,
+} from '../types';
 
 interface AttendancePageProps {
   eventId: string;
+  eventName: string;
 }
 
-export const AttendancePage: React.FC<AttendancePageProps> = ({ eventId }) => {
+export const AttendancePage: React.FC<AttendancePageProps> = ({ eventId, eventName }) => {
   const navigate = useNavigate();
   const { user, addToast } = useCoordinator();
-  const [participants, setParticipants] = useState<ParticipantAttendanceView[]>([]);
-  const [stats, setStats] = useState<EventAttendanceStats>({
-    totalRegistered: 0, present: 0, absent: 0, percentage: 0,
-  });
+  const [baseParticipants, setBaseParticipants] = useState<EventParticipant[]>([]);
+  const [dbAttendance, setDbAttendance] = useState<Record<string, CoordinatorAttendanceRecord>>({});
+  const [pendingAttendance, setPendingAttendance] = useState<Record<string, CoordinatorAttendanceRecord>>({});
+  const [clearedOverride, setClearedOverride] = useState(false);
+  const [savingIds, setSavingIds] = useState<Record<string, boolean>>({});
+  const [registrationsLoaded, setRegistrationsLoaded] = useState(false);
+  const [attendanceLoaded, setAttendanceLoaded] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [clearDialogOpen, setClearDialogOpen] = useState(false);
@@ -27,66 +36,273 @@ export const AttendancePage: React.FC<AttendancePageProps> = ({ eventId }) => {
   const [qrInput, setQrInput] = useState('');
   const [qrError, setQrError] = useState('');
 
-  const eventName = participants.length > 0
-    ? 'Event'
-    : 'Event';
+  // Firestore real-time listeners for the coordinator's assigned event only.
+  useEffect(() => {
+    let active = true;
 
-  const loadData = useCallback(async () => {
+    setBaseParticipants([]);
+    setDbAttendance({});
+    setPendingAttendance({});
+    setClearedOverride(false);
+    setSavingIds({});
+    setRegistrationsLoaded(false);
+    setAttendanceLoaded(false);
     setIsLoading(true);
-    const data = await AttendanceService.loadEventParticipants(eventId);
-    setParticipants(data);
-    setStats(AttendanceService.getEventAttendanceStats(eventId, data));
-    setIsLoading(false);
-  }, [eventId]);
+
+    const unsubscribeAttendance = AttendanceService.subscribeAttendance(
+      eventId,
+      (records) => {
+        if (!active) return;
+        setDbAttendance(AttendanceService.latestPerParticipant(records));
+        setAttendanceLoaded(true);
+      },
+      (error) => {
+        console.error('Attendance listener failed:', error);
+        if (active) {
+          setAttendanceLoaded(true);
+          addToast('Sync Error', 'Could not load attendance. Check your connection.', 'error');
+        }
+      }
+    );
+
+    const unsubscribeRegistrations = AttendanceService.subscribeRegistrations(
+      eventId,
+      (participants) => {
+        if (!active) return;
+        setBaseParticipants(participants);
+        setRegistrationsLoaded(true);
+      },
+      (error) => {
+        console.error('Registrations listener failed:', error);
+        if (active) {
+          setRegistrationsLoaded(true);
+          addToast('Sync Error', 'Could not load participants. Check your connection.', 'error');
+        }
+      }
+    );
+
+    return () => {
+      active = false;
+      unsubscribeAttendance();
+      unsubscribeRegistrations();
+    };
+  }, [eventId, addToast]);
 
   useEffect(() => {
-    loadData();
-  }, [loadData]);
+    if (registrationsLoaded && attendanceLoaded) {
+      setIsLoading(false);
+    }
+  }, [registrationsLoaded, attendanceLoaded]);
 
-  const handleMarkPresent = useCallback((participantId: string) => {
-    if (!user) return;
-    AttendanceService.markPresent(participantId, eventId, user.id);
-    loadData();
-    addToast('Attendance Updated', 'Marked as Present', 'success');
-  }, [eventId, user, addToast, loadData]);
+  // Drop optimistic records once Firestore confirms them, so local state never
+  // diverges from the real-time source of truth.
+  useEffect(() => {
+    setPendingAttendance((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      for (const participantId of Object.keys(prev)) {
+        const record = prev[participantId];
+        const dbRecord = dbAttendance[participantId];
+        if (
+          dbRecord &&
+          AttendanceService.normalizeAttendanceStatus(dbRecord.status) ===
+            AttendanceService.normalizeAttendanceStatus(record.status) &&
+          String(dbRecord.updatedAt || '') >= String(record.updatedAt || '')
+        ) {
+          delete next[participantId];
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [dbAttendance]);
 
-  const handleMarkAbsent = useCallback((participantId: string) => {
-    if (!user) return;
-    AttendanceService.markAbsent(participantId, eventId, user.id);
-    loadData();
-    addToast('Attendance Updated', 'Marked as Absent', 'info');
-  }, [eventId, user, addToast, loadData]);
+  // Once the cleared state is confirmed by Firestore (no attendance docs left),
+  // remove the temporary override so real-time updates continue to flow.
+  useEffect(() => {
+    if (clearedOverride && Object.keys(dbAttendance).length === 0) {
+      setClearedOverride(false);
+    }
+  }, [dbAttendance, clearedOverride]);
 
-  const handleMarkAllPresent = useCallback(() => {
-    if (!user) return;
-    AttendanceService.markAllPresent(eventId, user.id, participants);
-    loadData();
+  // Single source of truth: merge base participants with attendance status.
+  const viewParticipants = useMemo<ParticipantAttendanceView[]>(() => {
+    return baseParticipants.map((participant) => {
+      const pending = pendingAttendance[participant.participantId];
+      const db = clearedOverride ? undefined : dbAttendance[participant.participantId];
+      const record = pending || db;
+      return {
+        ...participant,
+        attendanceStatus: record
+          ? AttendanceService.normalizeAttendanceStatus(record.status)
+          : 'Not Marked',
+      } as ParticipantAttendanceView;
+    });
+  }, [baseParticipants, dbAttendance, pendingAttendance, clearedOverride]);
+
+  // All summary values derive from the same rendered participants state.
+  const stats = useMemo<EventAttendanceStats>(() => {
+    const totalRegistered = viewParticipants.length;
+    const verified = viewParticipants.filter((p) => p.paymentStatus === 'Approved').length;
+    const present = viewParticipants.filter(
+      (p) => AttendanceService.normalizeAttendanceStatus(p.attendanceStatus) === 'Present'
+    ).length;
+    const absent = viewParticipants.filter(
+      (p) => AttendanceService.normalizeAttendanceStatus(p.attendanceStatus) === 'Absent'
+    ).length;
+    const percentage = totalRegistered > 0 ? Math.round((present / totalRegistered) * 100) : 0;
+    return {
+      totalRegistered,
+      verified,
+      pendingVerification: Math.max(0, totalRegistered - verified),
+      present,
+      absent,
+      percentage,
+    };
+  }, [viewParticipants]);
+
+  const updateAttendance = useCallback(
+    async (participantId: string, newStatus: 'Present' | 'Absent'): Promise<boolean> => {
+      if (!user) return false;
+      if (savingIds[participantId]) return false;
+
+      const existing = pendingAttendance[participantId] || dbAttendance[participantId];
+      const record = AttendanceService.createRecord(
+        eventId,
+        participantId,
+        user.id,
+        newStatus,
+        existing
+      );
+
+      // Optimistic UI update — never wait for Firebase.
+      setPendingAttendance((prev) => ({ ...prev, [participantId]: record }));
+      setSavingIds((prev) => ({ ...prev, [participantId]: true }));
+      setClearedOverride(false);
+
+      try {
+        await AttendanceService.writeAttendance(record);
+        return true;
+      } catch (error) {
+        console.error('Attendance update failed', error);
+        setPendingAttendance((prev) => {
+          const next = { ...prev };
+          delete next[participantId];
+          return next;
+        });
+        addToast('Update Failed', 'Unable to update attendance. Please try again.', 'error');
+        return false;
+      } finally {
+        setSavingIds((prev) => {
+          const next = { ...prev };
+          delete next[participantId];
+          return next;
+        });
+      }
+    },
+    [user, eventId, savingIds, pendingAttendance, dbAttendance, addToast]
+  );
+
+  const handleMarkPresent = useCallback(
+    async (participantId: string) => {
+      const ok = await updateAttendance(participantId, 'Present');
+      if (ok) addToast('Attendance Updated', 'Marked as Present', 'success');
+    },
+    [updateAttendance, addToast]
+  );
+
+  const handleMarkAbsent = useCallback(
+    async (participantId: string) => {
+      const ok = await updateAttendance(participantId, 'Absent');
+      if (ok) addToast('Attendance Updated', 'Marked as Absent', 'info');
+    },
+    [updateAttendance, addToast]
+  );
+
+  const handleMarkAllPresent = useCallback(async () => {
+    if (!user || viewParticipants.length === 0) return;
+
+    const participantIds = viewParticipants.map((p) => p.participantId);
+
+    setPendingAttendance((prev) => {
+      const next = { ...prev };
+      viewParticipants.forEach((p) => {
+        const existing = prev[p.participantId] || dbAttendance[p.participantId];
+        next[p.participantId] = AttendanceService.createRecord(
+          eventId,
+          p.participantId,
+          user.id,
+          'Present',
+          existing
+        );
+      });
+      return next;
+    });
+    setClearedOverride(false);
     setMarkAllDialogOpen(false);
-    addToast('All Marked', 'All participants marked as Present', 'success');
-  }, [eventId, user, participants, addToast, loadData]);
 
-  const handleClearAttendance = useCallback(() => {
-    AttendanceService.clearAttendance(eventId);
-    loadData();
+    try {
+      await AttendanceService.markAllPresent(eventId, user.id, participantIds);
+      addToast('All Marked', 'All participants marked as Present', 'success');
+    } catch (error) {
+      console.error('Mark all present failed', error);
+      setPendingAttendance((prev) => {
+        const next = { ...prev };
+        participantIds.forEach((id) => {
+          delete next[id];
+        });
+        return next;
+      });
+      addToast('Update Failed', 'Unable to mark all present. Please try again.', 'error');
+    }
+  }, [user, eventId, viewParticipants, dbAttendance, addToast]);
+
+  const handleClearAttendance = useCallback(async () => {
+    setClearedOverride(true);
+    setPendingAttendance({});
     setClearDialogOpen(false);
-    addToast('Attendance Cleared', 'All attendance records have been cleared', 'info');
-  }, [eventId, addToast, loadData]);
+
+    try {
+      await AttendanceService.clearAttendance(eventId);
+      addToast('Attendance Cleared', 'All attendance records have been cleared', 'success');
+    } catch (error) {
+      console.error('Clear attendance failed', error);
+      setClearedOverride(false);
+      addToast(
+        'Clear Failed',
+        'Unable to clear attendance. Please check your connection and try again.',
+        'error'
+      );
+    }
+  }, [eventId, addToast]);
 
   const handleSave = useCallback(() => {
     setSaveDialogOpen(true);
   }, []);
 
-  const confirmSave = useCallback(() => {
+  const confirmSave = useCallback(async () => {
     setSaveDialogOpen(false);
-    const currentRecords = AttendanceService.getAttendanceRecords(eventId);
-    addToast(
-      'Attendance Saved',
-      `${currentRecords.length} attendance records saved successfully`,
-      'success'
-    );
-  }, [eventId, addToast]);
+    if (!user) return;
+    const records = viewParticipants
+      .filter((p) => AttendanceService.normalizeAttendanceStatus(p.attendanceStatus) !== 'Not Marked')
+      .map((p) => ({
+        participantId: p.participantId,
+        status: AttendanceService.normalizeAttendanceStatus(p.attendanceStatus) as 'Present' | 'Absent',
+      }));
+    try {
+      await AttendanceService.saveAttendanceBatch(records, eventId, user.id);
+      addToast(
+        'Attendance Saved',
+        `${records.length} attendance records saved successfully`,
+        'success'
+      );
+    } catch (error) {
+      console.error('Save attendance failed', error);
+      addToast('Save Failed', 'Unable to save attendance. Please try again.', 'error');
+    }
+  }, [eventId, user, viewParticipants, addToast]);
 
-  const handleQRScan = useCallback(() => {
+  const handleQRScan = useCallback(async () => {
     if (!qrInput.trim()) {
       setQrError('Please enter or scan a QR code');
       return;
@@ -98,18 +314,20 @@ export const AttendancePage: React.FC<AttendancePageProps> = ({ eventId }) => {
       return;
     }
 
-    if (AttendanceService.isDuplicateCheckIn(data.participantId, eventId)) {
+    const existing = pendingAttendance[data.participantId] || dbAttendance[data.participantId];
+    if (existing && AttendanceService.normalizeAttendanceStatus(existing.status) === 'Present') {
       setQrError('Participant already checked in');
       return;
     }
 
     if (!user) return;
-    AttendanceService.markPresent(data.participantId, eventId, user.id);
-    loadData();
-    setQrInput('');
-    setQrError('');
-    addToast('QR Check-In', 'Participant checked in successfully', 'success');
-  }, [qrInput, eventId, user, addToast, loadData]);
+    const ok = await updateAttendance(data.participantId, 'Present');
+    if (ok) {
+      setQrInput('');
+      setQrError('');
+      addToast('QR Check-In', 'Participant checked in successfully', 'success');
+    }
+  }, [qrInput, eventId, user, updateAttendance, pendingAttendance, dbAttendance, addToast]);
 
   const generateQRForParticipant = (participantId: string) => {
     return AttendanceService.generateQRData(participantId, eventId);
@@ -122,7 +340,7 @@ export const AttendancePage: React.FC<AttendancePageProps> = ({ eventId }) => {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             <button
-              onClick={() => navigate('/coordinator')}
+              onClick={() => navigate('/coordinator/dashboard')}
               className="p-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white/60 hover:text-white transition-all cursor-pointer"
             >
               <ArrowLeft className="w-4 h-4" />
@@ -149,12 +367,13 @@ export const AttendancePage: React.FC<AttendancePageProps> = ({ eventId }) => {
         </div>
 
         {/* Summary */}
-        <AttendanceSummary stats={stats} />
+        <AttendanceSummary stats={stats} isLoading={isLoading} />
 
         {/* Attendance Table */}
         <AttendanceTable
-          participants={participants}
+          participants={viewParticipants}
           isLoading={isLoading}
+          savingIds={savingIds}
           onMarkPresent={handleMarkPresent}
           onMarkAbsent={handleMarkAbsent}
           onMarkAllPresent={() => setMarkAllDialogOpen(true)}
@@ -224,7 +443,7 @@ export const AttendancePage: React.FC<AttendancePageProps> = ({ eventId }) => {
                 Show participant QR codes (testing)
               </summary>
               <div className="mt-2 max-h-40 overflow-y-auto flex flex-col gap-1">
-                {participants.slice(0, 10).map((p) => (
+                {viewParticipants.slice(0, 10).map((p) => (
                   <div key={p.participantId} className="flex items-center justify-between px-2 py-1 rounded bg-white/5 text-[9px]">
                     <span className="text-white/70 truncate max-w-[120px]">{p.participantName}</span>
                     <button

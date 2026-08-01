@@ -19,6 +19,7 @@ import {
   History,
   Briefcase,
   Mail,
+  Trophy,
 } from 'lucide-react';
 import type { ActiveTabModule } from '../../types';
 import { useAdmin } from '../../context/AdminContext';
@@ -44,6 +45,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ onCloseMobile, onExitAdmin }) 
   const allNavItems: NavItemConfig[] = [
     { name: 'Dashboard', icon: LayoutDashboard, permission: 'dashboard.view' },
     { name: 'Events', icon: Calendar, permission: 'events.view' },
+    { name: 'Event Overview', icon: LayoutDashboard, permission: 'events.view' },
+    { name: 'Event Cards', icon: Calendar, permission: 'events.view' },
     { name: 'Event Export', icon: FileDown, permission: 'events.export' },
     { name: 'Coordinators', icon: UserCheck, permission: 'coordinators.view' },
     { name: 'Participants', icon: Users, permission: 'participants.view', badge: participants.length },
@@ -52,6 +55,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onCloseMobile, onExitAdmin }) 
     { name: 'Attendance', icon: UserCheck, permission: 'attendance.view' },
     { name: 'Certificates', icon: Award, permission: 'certificates.view' },
     { name: 'Gallery', icon: Image, permission: 'gallery.view' },
+    { name: 'Results', icon: Trophy, permission: 'results.view' },
     { name: 'Analytics', icon: BarChart3, permission: 'reports.view' },
     { name: 'Announcements', icon: Megaphone, permission: 'announcements.view' },
     { name: 'Employees', icon: Briefcase, permission: 'employees.view' },

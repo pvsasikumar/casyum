@@ -2,265 +2,177 @@ import type {
   CoordinatorAttendanceRecord,
   ParticipantAttendanceView,
   EventAttendanceStats,
+  EventParticipant,
 } from '../types';
-import { getEvent } from '../../services/eventService';
+import type { AttendanceRecordRow } from '../../services/attendanceService';
+import { now } from '../../services/helpers';
 import {
   upsertAttendance,
   clearAttendanceByEvent,
   saveAttendanceBatch as saveFirestoreBatch,
   listAttendanceByEvent,
+  subscribeAttendanceByEvent,
+  attendanceDocId,
 } from '../../services/attendanceService';
+import { ParticipantService } from './ParticipantService';
 
-const COORDINATOR_ATTENDANCE_KEY = 'casyum_coordinator_attendance';
+export type AttendanceStatusValue = 'Present' | 'Absent' | 'Not Marked';
 
-function getStoredAttendance(): CoordinatorAttendanceRecord[] {
-  const saved = localStorage.getItem(COORDINATOR_ATTENDANCE_KEY);
-  return saved ? JSON.parse(saved) : [];
-}
-
-function saveAttendance(records: CoordinatorAttendanceRecord[]): void {
-  localStorage.setItem(COORDINATOR_ATTENDANCE_KEY, JSON.stringify(records));
+function toRecord(row: AttendanceRecordRow): CoordinatorAttendanceRecord {
+  return {
+    attendanceId: String(row.id || row.attendance_id),
+    eventId: row.event_id,
+    participantId: row.participant_id,
+    coordinatorId: row.coordinator_id,
+    status: row.status === 'Absent' ? 'Absent' : 'Present',
+    checkInTime: row.check_in_time,
+    remarks: row.remarks || '',
+    updatedAt: row.updated_at,
+  };
 }
 
 export const AttendanceService = {
-  async loadEventParticipants(eventId: string): Promise<ParticipantAttendanceView[]> {
-    try {
-      const { event } = await getEvent(eventId);
-      const registrations = event?.registrations || [];
-      const stored = getStoredAttendance();
-      const firestoreRecords = await listAttendanceByEvent(eventId);
+  // Normalize inconsistent status values (Present/present/PRESENT, etc.).
+  normalizeAttendanceStatus(raw: unknown): AttendanceStatusValue {
+    const value = String(raw ?? '').trim().toLowerCase();
+    if (value === 'present') return 'Present';
+    if (value === 'absent') return 'Absent';
+    return 'Not Marked';
+  },
 
-      if (firestoreRecords.length) {
-        const synced: CoordinatorAttendanceRecord[] = firestoreRecords.map((a) => ({
-          attendanceId: String(a.id || a.attendance_id),
-          eventId: a.event_id,
-          participantId: a.participant_id,
-          coordinatorId: a.coordinator_id,
-          status: a.status,
-          checkInTime: a.check_in_time,
-          remarks: a.remarks || '',
-          updatedAt: a.updated_at,
-        }));
-        const merged = [...synced, ...stored.filter((s) => s.eventId !== eventId)];
-        saveAttendance(merged);
+  // One status per participant: keep the most recently updated record.
+  latestPerParticipant(records: CoordinatorAttendanceRecord[]): Record<string, CoordinatorAttendanceRecord> {
+    const map: Record<string, CoordinatorAttendanceRecord> = {};
+    records.forEach((record) => {
+      const existing = map[record.participantId];
+      if (!existing || String(record.updatedAt || '') >= String(existing.updatedAt || '')) {
+        map[record.participantId] = record;
       }
-
-      return registrations
-        .filter((r: any) => r.status !== 'Cancelled')
-        .map((r: any) => {
-          const participantId = String(r.participant_user_id || r.participant_email || r.registration_id);
-          const localRecord = stored.find(
-            (a) => a.participantId === participantId && a.eventId === eventId
-          );
-          const fbRecord = firestoreRecords.find((a) => a.participant_id === participantId);
-          const record = fbRecord || localRecord;
-          return {
-            registrationId: r.registration_id || `REG-${participantId}`,
-            participantId,
-            participantName: r.user_full_name || r.participant_name || 'Participant',
-            college: r.college || '',
-            department: r.user_department || '',
-            phoneNumber: r.user_phone || '',
-            registrationStatus: r.status === 'Confirmed' ? 'Confirmed' : (r.status || 'Pending'),
-            attendanceStatus: record ? (record.status as 'Present' | 'Absent') : 'Not Marked',
-          } as ParticipantAttendanceView;
-        });
-    } catch {
-      return [];
-    }
+    });
+    return map;
   },
 
-  getEventAttendanceStats(eventId: string, participants?: ParticipantAttendanceView[]): EventAttendanceStats {
-    const list = participants || [];
-    const attendance = getStoredAttendance().filter(
-      (a) => a.eventId === eventId
-    );
-
-    const totalRegistered = list.length;
-    const present = attendance.filter((a) => a.status === 'Present').length;
-    const absent = attendance.filter((a) => a.status === 'Absent').length;
-    const percentage = totalRegistered > 0
-      ? Math.round(((present + absent) / totalRegistered) * 100)
-      : 0;
-
-    return { totalRegistered, present, absent, percentage };
-  },
-
-  getAttendanceRecords(eventId: string): CoordinatorAttendanceRecord[] {
-    return getStoredAttendance().filter((a) => a.eventId === eventId);
-  },
-
-  markPresent(
-    participantId: string,
+  createRecord(
     eventId: string,
-    coordinatorId: string
-  ): CoordinatorAttendanceRecord {
-    const records = getStoredAttendance();
-    const existing = records.find(
-      (r) => r.participantId === participantId && r.eventId === eventId
-    );
-
-    let result: CoordinatorAttendanceRecord;
-    if (existing) {
-      result = {
-        ...existing,
-        status: 'Present' as const,
-        checkInTime: existing.checkInTime || new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-      const newRecords = records.map((r) =>
-        r.attendanceId === existing.attendanceId ? result : r
-      );
-      saveAttendance(newRecords);
-    } else {
-      result = {
-        attendanceId: `att-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-        eventId,
-        participantId,
-        coordinatorId,
-        status: 'Present',
-        checkInTime: new Date().toISOString(),
-        remarks: '',
-        updatedAt: new Date().toISOString(),
-      };
-      saveAttendance([...records, result]);
-    }
-    void upsertAttendance({
-      event_id: eventId,
-      participant_id: participantId,
-      coordinator_id: coordinatorId,
-      status: 'Present',
-      check_in_time: result.checkInTime,
-      remarks: result.remarks,
-    });
-    return result;
-  },
-
-  markAbsent(
     participantId: string,
-    eventId: string,
-    coordinatorId: string
+    coordinatorId: string,
+    status: 'Present' | 'Absent',
+    existing?: CoordinatorAttendanceRecord
   ): CoordinatorAttendanceRecord {
-    const records = getStoredAttendance();
-    const existing = records.find(
-      (r) => r.participantId === participantId && r.eventId === eventId
-    );
+    const nowIso = now();
+    return {
+      attendanceId: existing?.attendanceId || attendanceDocId(eventId, participantId),
+      eventId,
+      participantId,
+      coordinatorId,
+      status,
+      checkInTime: status === 'Present' ? (existing?.checkInTime || nowIso) : null,
+      remarks: existing?.remarks || '',
+      updatedAt: nowIso,
+    };
+  },
 
-    let result: CoordinatorAttendanceRecord;
-    if (existing) {
-      result = {
-        ...existing,
-        status: 'Absent' as const,
-        checkInTime: null,
-        updatedAt: new Date().toISOString(),
-      };
-      const newRecords = records.map((r) =>
-        r.attendanceId === existing.attendanceId ? result : r
-      );
-      saveAttendance(newRecords);
-    } else {
-      result = {
-        attendanceId: `att-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-        eventId,
-        participantId,
-        coordinatorId,
-        status: 'Absent',
-        checkInTime: null,
-        remarks: '',
-        updatedAt: new Date().toISOString(),
-      };
-      saveAttendance([...records, result]);
-    }
-    void upsertAttendance({
-      event_id: eventId,
-      participant_id: participantId,
-      coordinator_id: coordinatorId,
-      status: 'Absent',
-      check_in_time: null,
-      remarks: result.remarks,
+  // One-time load used by the dashboard. The attendance page uses the real-time
+  // subscriptions below instead.
+  async loadEventParticipants(eventId: string): Promise<ParticipantAttendanceView[]> {
+    const [participants, rows] = await Promise.all([
+      ParticipantService.getEventParticipants(eventId),
+      listAttendanceByEvent(eventId).catch(() => [] as AttendanceRecordRow[]),
+    ]);
+    const byParticipant = this.latestPerParticipant(rows.map(toRecord));
+    return participants.map((p) => ({
+      ...p,
+      attendanceStatus: byParticipant[p.participantId]
+        ? this.normalizeAttendanceStatus(byParticipant[p.participantId].status)
+        : 'Not Marked',
+    }) as ParticipantAttendanceView);
+  },
+
+  subscribeRegistrations(
+    eventId: string,
+    onNext: (participants: EventParticipant[]) => void,
+    onError?: (error: Error) => void
+  ): () => void {
+    return ParticipantService.subscribeEventParticipants(eventId, onNext, onError);
+  },
+
+  subscribeAttendance(
+    eventId: string,
+    onNext: (records: CoordinatorAttendanceRecord[]) => void,
+    onError?: (error: Error) => void
+  ): () => void {
+    return subscribeAttendanceByEvent(eventId, (rows) => onNext(rows.map(toRecord)), onError);
+  },
+
+  // Single-record write. The UI drives optimistic state and calls this in the
+  // background; a failure is reported to the caller so it can revert.
+  async writeAttendance(record: CoordinatorAttendanceRecord): Promise<void> {
+    await upsertAttendance({
+      event_id: record.eventId,
+      participant_id: record.participantId,
+      coordinator_id: record.coordinatorId,
+      status: record.status,
+      check_in_time: record.checkInTime,
+      remarks: record.remarks,
     });
-    return result;
   },
 
-  markAllPresent(eventId: string, coordinatorId: string, participants: ParticipantAttendanceView[]): void {
-    participants.forEach((p) => {
-      this.markPresent(p.participantId, eventId, coordinatorId);
-    });
-  },
-
-  clearAttendance(eventId: string): void {
-    const records = getStoredAttendance();
-    const filtered = records.filter((r) => r.eventId !== eventId);
-    saveAttendance(filtered);
-    void clearAttendanceByEvent(eventId);
-  },
-
-  updateAttendance(
-    attendanceId: string,
-    status: 'Present' | 'Absent'
-  ): void {
-    const records = getStoredAttendance();
-    const updated = records.map((r) =>
-      r.attendanceId === attendanceId
-        ? {
-            ...r,
-            status,
-            checkInTime: status === 'Present' ? (r.checkInTime || new Date().toISOString()) : null,
-            updatedAt: new Date().toISOString(),
-          }
-        : r
+  async markAllPresent(eventId: string, coordinatorId: string, participantIds: string[]): Promise<void> {
+    await saveFirestoreBatch(
+      participantIds.map((participant_id) => ({ participant_id, status: 'Present' as const })),
+      eventId,
+      coordinatorId
     );
-    saveAttendance(updated);
-    const target = updated.find((r) => r.attendanceId === attendanceId);
-    if (target) {
-      void upsertAttendance({
-        event_id: target.eventId,
-        participant_id: target.participantId,
-        coordinator_id: target.coordinatorId,
-        status,
-        check_in_time: target.checkInTime,
-        remarks: target.remarks,
-      });
-    }
   },
 
-  saveAttendanceBatch(
+  async clearAttendance(eventId: string): Promise<void> {
+    await clearAttendanceByEvent(eventId);
+  },
+
+  async saveAttendanceBatch(
     records: Array<{ participantId: string; status: 'Present' | 'Absent' }>,
     eventId: string,
     coordinatorId: string
-  ): void {
-    const existing = getStoredAttendance();
-    const newRecords = records.map((r) => {
-      const found = existing.find(
-        (e) => e.participantId === r.participantId && e.eventId === eventId
-      );
-      if (found) {
-        return {
-          ...found,
-          status: r.status,
-          checkInTime: r.status === 'Present' ? (found.checkInTime || new Date().toISOString()) : null,
-          updatedAt: new Date().toISOString(),
-        };
-      }
-      return {
-        attendanceId: `att-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-        eventId,
-        participantId: r.participantId,
-        coordinatorId,
-        status: r.status,
-        checkInTime: r.status === 'Present' ? new Date().toISOString() : null,
-        remarks: '',
-        updatedAt: new Date().toISOString(),
-      } as CoordinatorAttendanceRecord;
-    });
-
-    const filtered = existing.filter((e) => e.eventId !== eventId);
-    saveAttendance([...filtered, ...newRecords]);
-    void saveFirestoreBatch(
+  ): Promise<void> {
+    await saveFirestoreBatch(
       records.map((r) => ({ participant_id: r.participantId, status: r.status })),
       eventId,
       coordinatorId
     );
+  },
+
+  getEventAttendanceStats(
+    _eventId: string,
+    participants?: EventParticipant[],
+    capacity?: number
+  ): EventAttendanceStats {
+    const list = participants || [];
+    const totalRegistered = list.length;
+    const verified = list.filter((p) => p.paymentStatus === 'Approved').length;
+    const pendingVerification = Math.max(0, totalRegistered - verified);
+    const present = list.filter(
+      (p) => this.normalizeAttendanceStatus((p as ParticipantAttendanceView).attendanceStatus) === 'Present'
+    ).length;
+    const absent = list.filter(
+      (p) => this.normalizeAttendanceStatus((p as ParticipantAttendanceView).attendanceStatus) === 'Absent'
+    ).length;
+    const percentage = totalRegistered > 0
+      ? Math.round((present / totalRegistered) * 100)
+      : 0;
+
+    const stats: EventAttendanceStats = {
+      totalRegistered,
+      verified,
+      pendingVerification,
+      present,
+      absent,
+      percentage,
+    };
+    if (capacity && capacity > 0) {
+      stats.capacity = capacity;
+      stats.remainingSeats = Math.max(0, capacity - totalRegistered);
+    }
+    return stats;
   },
 
   generateQRData(participantId: string, eventId: string): string {
@@ -275,12 +187,5 @@ export const AttendanceService = {
     } catch {
       return null;
     }
-  },
-
-  isDuplicateCheckIn(participantId: string, eventId: string): boolean {
-    const records = getStoredAttendance();
-    return records.some(
-      (r) => r.participantId === participantId && r.eventId === eventId && r.status === 'Present'
-    );
   },
 };

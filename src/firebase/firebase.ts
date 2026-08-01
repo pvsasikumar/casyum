@@ -16,6 +16,8 @@ export const isFirebaseConfigured = Boolean(
     firebaseConfig.appId
 );
 
+export const isStorageConfigured = Boolean(firebaseConfig.storageBucket);
+
 export const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
 
 let app: FirebaseApp | undefined;

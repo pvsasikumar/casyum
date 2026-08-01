@@ -30,6 +30,7 @@ export type PermissionDomain =
   | 'gallery'
   | 'activity_logs'
   | 'emails'
+  | 'results'
   | 'profile';
 
 export type Permission = `${PermissionDomain}.${PermissionAction}`;
@@ -72,4 +73,5 @@ export interface AuthUser {
   department?: string;
   phone?: string;
   is_first_login?: boolean;
+  profile_completed?: number;
 }
