@@ -30,6 +30,7 @@ export type PermissionDomain =
   | 'gallery'
   | 'activity_logs'
   | 'emails'
+  | 'results'
   | 'profile';
 
 export type Permission = `${PermissionDomain}.${PermissionAction}`;

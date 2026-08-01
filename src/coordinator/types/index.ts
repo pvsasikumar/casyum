@@ -11,19 +11,28 @@ export interface CoordinatorAttendanceRecord {
 
 export interface EventAttendanceStats {
   totalRegistered: number;
+  verified: number;
+  pendingVerification: number;
   present: number;
   absent: number;
   percentage: number;
+  capacity?: number;
+  remainingSeats?: number;
 }
 
-export interface ParticipantAttendanceView {
+export interface EventParticipant {
   registrationId: string;
   participantId: string;
   participantName: string;
   college: string;
   department: string;
   phoneNumber: string;
+  email: string;
   registrationStatus: string;
+  paymentStatus: string;
+}
+
+export interface ParticipantAttendanceView extends EventParticipant {
   attendanceStatus: 'Present' | 'Absent' | 'Not Marked';
 }
 

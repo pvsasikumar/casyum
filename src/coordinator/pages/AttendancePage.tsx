@@ -10,14 +10,15 @@ import type { ParticipantAttendanceView, EventAttendanceStats } from '../types';
 
 interface AttendancePageProps {
   eventId: string;
+  eventName: string;
 }
 
-export const AttendancePage: React.FC<AttendancePageProps> = ({ eventId }) => {
+export const AttendancePage: React.FC<AttendancePageProps> = ({ eventId, eventName }) => {
   const navigate = useNavigate();
   const { user, addToast } = useCoordinator();
   const [participants, setParticipants] = useState<ParticipantAttendanceView[]>([]);
   const [stats, setStats] = useState<EventAttendanceStats>({
-    totalRegistered: 0, present: 0, absent: 0, percentage: 0,
+    totalRegistered: 0, verified: 0, pendingVerification: 0, present: 0, absent: 0, percentage: 0,
   });
   const [isLoading, setIsLoading] = useState(true);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
@@ -26,10 +27,6 @@ export const AttendancePage: React.FC<AttendancePageProps> = ({ eventId }) => {
   const [qrDialogOpen, setQrDialogOpen] = useState(false);
   const [qrInput, setQrInput] = useState('');
   const [qrError, setQrError] = useState('');
-
-  const eventName = participants.length > 0
-    ? 'Event'
-    : 'Event';
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
@@ -43,50 +40,63 @@ export const AttendancePage: React.FC<AttendancePageProps> = ({ eventId }) => {
     loadData();
   }, [loadData]);
 
-  const handleMarkPresent = useCallback((participantId: string) => {
+  const handleMarkPresent = useCallback(async (participantId: string) => {
     if (!user) return;
-    AttendanceService.markPresent(participantId, eventId, user.id);
-    loadData();
+    await AttendanceService.markPresent(participantId, eventId, user.id);
+    await loadData();
     addToast('Attendance Updated', 'Marked as Present', 'success');
   }, [eventId, user, addToast, loadData]);
 
-  const handleMarkAbsent = useCallback((participantId: string) => {
+  const handleMarkAbsent = useCallback(async (participantId: string) => {
     if (!user) return;
-    AttendanceService.markAbsent(participantId, eventId, user.id);
-    loadData();
+    await AttendanceService.markAbsent(participantId, eventId, user.id);
+    await loadData();
     addToast('Attendance Updated', 'Marked as Absent', 'info');
   }, [eventId, user, addToast, loadData]);
 
-  const handleMarkAllPresent = useCallback(() => {
+  const handleMarkAllPresent = useCallback(async () => {
     if (!user) return;
-    AttendanceService.markAllPresent(eventId, user.id, participants);
-    loadData();
+    await AttendanceService.markAllPresent(eventId, user.id, participants);
+    await loadData();
     setMarkAllDialogOpen(false);
     addToast('All Marked', 'All participants marked as Present', 'success');
   }, [eventId, user, participants, addToast, loadData]);
 
-  const handleClearAttendance = useCallback(() => {
-    AttendanceService.clearAttendance(eventId);
-    loadData();
+  const handleClearAttendance = useCallback(async () => {
+    const cleared = await AttendanceService.clearAttendance(eventId);
+    await loadData();
     setClearDialogOpen(false);
-    addToast('Attendance Cleared', 'All attendance records have been cleared', 'info');
+    if (cleared) {
+      addToast('Attendance Cleared', 'All attendance records have been cleared', 'success');
+    } else {
+      addToast(
+        'Clear Failed',
+        'Local records cleared, but the database update failed. Check your connection and try again.',
+        'error'
+      );
+    }
   }, [eventId, addToast, loadData]);
 
   const handleSave = useCallback(() => {
     setSaveDialogOpen(true);
   }, []);
 
-  const confirmSave = useCallback(() => {
+  const confirmSave = useCallback(async () => {
     setSaveDialogOpen(false);
-    const currentRecords = AttendanceService.getAttendanceRecords(eventId);
+    if (!user) return;
+    const records = participants
+      .filter((p) => p.attendanceStatus === 'Present' || p.attendanceStatus === 'Absent')
+      .map((p) => ({ participantId: p.participantId, status: p.attendanceStatus as 'Present' | 'Absent' }));
+    await AttendanceService.saveAttendanceBatch(records, eventId, user.id);
+    await loadData();
     addToast(
       'Attendance Saved',
-      `${currentRecords.length} attendance records saved successfully`,
+      `${records.length} attendance records saved successfully`,
       'success'
     );
-  }, [eventId, addToast]);
+  }, [eventId, user, participants, addToast, loadData]);
 
-  const handleQRScan = useCallback(() => {
+  const handleQRScan = useCallback(async () => {
     if (!qrInput.trim()) {
       setQrError('Please enter or scan a QR code');
       return;
@@ -104,8 +114,8 @@ export const AttendancePage: React.FC<AttendancePageProps> = ({ eventId }) => {
     }
 
     if (!user) return;
-    AttendanceService.markPresent(data.participantId, eventId, user.id);
-    loadData();
+    await AttendanceService.markPresent(data.participantId, eventId, user.id);
+    await loadData();
     setQrInput('');
     setQrError('');
     addToast('QR Check-In', 'Participant checked in successfully', 'success');
@@ -122,7 +132,7 @@ export const AttendancePage: React.FC<AttendancePageProps> = ({ eventId }) => {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             <button
-              onClick={() => navigate('/coordinator')}
+              onClick={() => navigate('/coordinator/dashboard')}
               className="p-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white/60 hover:text-white transition-all cursor-pointer"
             >
               <ArrowLeft className="w-4 h-4" />

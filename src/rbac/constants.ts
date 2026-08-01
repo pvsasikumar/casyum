@@ -80,6 +80,7 @@ export const ROLE_PERMISSIONS: RolePermission[] = [
       ...all('gallery'),
       ...all('activity_logs'),
       ...all('emails'),
+      ...all('results'),
       ...all('profile'),
       'payments.verify',
       'payments.refund',

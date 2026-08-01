@@ -11,6 +11,7 @@ import { Settings } from '../pages/admin/Settings';
 import { DashboardHome } from './components/modules/DashboardHome';
 import { RegistrationManagement } from './components/modules/RegistrationManagement';
 import { EventManagement } from './components/modules/EventManagement';
+import { EventOverviewModule } from './components/modules/EventOverviewModule';
 import { PaymentVerification } from './components/modules/PaymentVerification';
 import { AttendanceModule } from './components/modules/AttendanceModule';
 import { AnalyticsModule } from './components/modules/AnalyticsModule';
@@ -25,6 +26,7 @@ import { SettingsModule } from './components/modules/SettingsModule';
 import { AuditLogs } from './components/modules/AuditLogs';
 import { EmployeeManagement } from './components/modules/EmployeeManagement';
 import { EmailLogs } from './components/modules/EmailLogs';
+import { ResultsModule } from './components/modules/ResultsModule';
 
 const ModuleRouter: React.FC = () => {
   const { activeTab } = useAdmin();
@@ -36,6 +38,8 @@ const ModuleRouter: React.FC = () => {
       return <RegistrationManagement />;
     case 'Events':
       return <EventManagement />;
+    case 'Event Overview':
+      return <EventOverviewModule />;
     case 'Payments':
       return <PaymentVerification />;
     case 'Attendance':
@@ -64,6 +68,8 @@ const ModuleRouter: React.FC = () => {
       return <EmployeeManagement />;
     case 'Email Logs':
       return <EmailLogs />;
+    case 'Results':
+      return <ResultsModule />;
     default:
       return <DashboardHome />;
   }
