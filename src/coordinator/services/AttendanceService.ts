@@ -2,8 +2,10 @@ import type {
   CoordinatorAttendanceRecord,
   ParticipantAttendanceView,
   EventAttendanceStats,
+  EventParticipant,
 } from '../types';
-import { getEvent } from '../../services/eventService';
+import type { AttendanceRecordRow } from '../../services/attendanceService';
+import { ParticipantService } from './ParticipantService';
 import {
   upsertAttendance,
   clearAttendanceByEvent,
@@ -12,26 +14,58 @@ import {
 } from '../../services/attendanceService';
 
 const COORDINATOR_ATTENDANCE_KEY = 'casyum_coordinator_attendance';
+const CLEARED_FLAG_PREFIX = 'casyum_attendance_cleared_';
+
+function isCleared(eventId: string): boolean {
+  return localStorage.getItem(CLEARED_FLAG_PREFIX + eventId) !== null;
+}
+
+function markCleared(eventId: string): void {
+  localStorage.setItem(CLEARED_FLAG_PREFIX + eventId, String(Date.now()));
+}
+
+function clearClearedFlag(eventId: string): void {
+  localStorage.removeItem(CLEARED_FLAG_PREFIX + eventId);
+}
 
 function getStoredAttendance(): CoordinatorAttendanceRecord[] {
   const saved = localStorage.getItem(COORDINATOR_ATTENDANCE_KEY);
-  return saved ? JSON.parse(saved) : [];
+  try {
+    const parsed = saved ? JSON.parse(saved) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
 }
 
 function saveAttendance(records: CoordinatorAttendanceRecord[]): void {
   localStorage.setItem(COORDINATOR_ATTENDANCE_KEY, JSON.stringify(records));
 }
 
+function createAttendanceId(): string {
+  return `att-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
 export const AttendanceService = {
   async loadEventParticipants(eventId: string): Promise<ParticipantAttendanceView[]> {
-    try {
-      const { event } = await getEvent(eventId);
-      const registrations = event?.registrations || [];
-      const stored = getStoredAttendance();
-      const firestoreRecords = await listAttendanceByEvent(eventId);
+    const participants = await ParticipantService.getEventParticipants(eventId);
 
-      if (firestoreRecords.length) {
-        const synced: CoordinatorAttendanceRecord[] = firestoreRecords.map((a) => ({
+    let firestoreRecords: AttendanceRecordRow[] = [];
+    try {
+      firestoreRecords = await listAttendanceByEvent(eventId);
+    } catch {
+      firestoreRecords = [];
+    }
+
+    const stored = getStoredAttendance();
+
+    // Merge firestore + local records for this event, keyed by participant.
+    // Local (working) state takes precedence so a quick mark/clear is never
+    // reverted by a stale firestore read, and one status exists per participant.
+    const recordByParticipant = new Map<string, CoordinatorAttendanceRecord>();
+    if (!isCleared(eventId)) {
+      firestoreRecords.forEach((a) => {
+        recordByParticipant.set(a.participant_id, {
           attendanceId: String(a.id || a.attendance_id),
           eventId: a.event_id,
           participantId: a.participant_id,
@@ -40,159 +74,190 @@ export const AttendanceService = {
           checkInTime: a.check_in_time,
           remarks: a.remarks || '',
           updatedAt: a.updated_at,
-        }));
-        const merged = [...synced, ...stored.filter((s) => s.eventId !== eventId)];
-        saveAttendance(merged);
-      }
-
-      return registrations
-        .filter((r: any) => r.status !== 'Cancelled')
-        .map((r: any) => {
-          const participantId = String(r.participant_user_id || r.participant_email || r.registration_id);
-          const localRecord = stored.find(
-            (a) => a.participantId === participantId && a.eventId === eventId
-          );
-          const fbRecord = firestoreRecords.find((a) => a.participant_id === participantId);
-          const record = fbRecord || localRecord;
-          return {
-            registrationId: r.registration_id || `REG-${participantId}`,
-            participantId,
-            participantName: r.user_full_name || r.participant_name || 'Participant',
-            college: r.college || '',
-            department: r.user_department || '',
-            phoneNumber: r.user_phone || '',
-            registrationStatus: r.status === 'Confirmed' ? 'Confirmed' : (r.status || 'Pending'),
-            attendanceStatus: record ? (record.status as 'Present' | 'Absent') : 'Not Marked',
-          } as ParticipantAttendanceView;
         });
-    } catch {
-      return [];
+      });
     }
+    stored
+      .filter((a) => a.eventId === eventId)
+      .forEach((a) => {
+        recordByParticipant.set(a.participantId, a);
+      });
+
+    saveAttendance([
+      ...stored.filter((a) => a.eventId !== eventId),
+      ...Array.from(recordByParticipant.values()),
+    ]);
+
+    return participants.map((p) => {
+      const record = recordByParticipant.get(p.participantId);
+      return {
+        ...p,
+        attendanceStatus: record ? (record.status as 'Present' | 'Absent') : 'Not Marked',
+      } as ParticipantAttendanceView;
+    });
   },
 
-  getEventAttendanceStats(eventId: string, participants?: ParticipantAttendanceView[]): EventAttendanceStats {
+  getEventAttendanceStats(
+    eventId: string,
+    participants?: EventParticipant[],
+    capacity?: number
+  ): EventAttendanceStats {
     const list = participants || [];
     const attendance = getStoredAttendance().filter(
       (a) => a.eventId === eventId
     );
 
     const totalRegistered = list.length;
+    const verified = list.filter((p) => p.paymentStatus === 'Approved').length;
+    const pendingVerification = Math.max(0, totalRegistered - verified);
     const present = attendance.filter((a) => a.status === 'Present').length;
     const absent = attendance.filter((a) => a.status === 'Absent').length;
-    const percentage = totalRegistered > 0
-      ? Math.round(((present + absent) / totalRegistered) * 100)
+    const percentage = verified > 0
+      ? Math.round((present / verified) * 100)
       : 0;
 
-    return { totalRegistered, present, absent, percentage };
+    const stats: EventAttendanceStats = {
+      totalRegistered,
+      verified,
+      pendingVerification,
+      present,
+      absent,
+      percentage,
+    };
+    if (capacity && capacity > 0) {
+      stats.capacity = capacity;
+      stats.remainingSeats = Math.max(0, capacity - totalRegistered);
+    }
+    return stats;
   },
 
   getAttendanceRecords(eventId: string): CoordinatorAttendanceRecord[] {
     return getStoredAttendance().filter((a) => a.eventId === eventId);
   },
 
-  markPresent(
+  // Replace any existing record for the same participant + event so that only
+  // ONE attendance status can exist at a time (Present XOR Absent).
+  upsertLocalRecord(record: CoordinatorAttendanceRecord): void {
+    const records = getStoredAttendance();
+    const filtered = records.filter(
+      (r) => !(r.participantId === record.participantId && r.eventId === record.eventId)
+    );
+    saveAttendance([...filtered, record]);
+  },
+
+  // Persist a single record to Firestore. Failures are reported to the console
+  // but never block the UI, which is driven by local state.
+  async syncToFirestore(record: CoordinatorAttendanceRecord): Promise<void> {
+    try {
+      await upsertAttendance({
+        event_id: record.eventId,
+        participant_id: record.participantId,
+        coordinator_id: record.coordinatorId,
+        status: record.status,
+        check_in_time: record.checkInTime,
+        remarks: record.remarks,
+      });
+      clearClearedFlag(record.eventId);
+    } catch (error) {
+      console.error('Attendance sync failed', error);
+    }
+  },
+
+  async markPresent(
     participantId: string,
     eventId: string,
     coordinatorId: string
-  ): CoordinatorAttendanceRecord {
-    const records = getStoredAttendance();
-    const existing = records.find(
+  ): Promise<CoordinatorAttendanceRecord> {
+    const nowIso = new Date().toISOString();
+    const existing = getStoredAttendance().find(
       (r) => r.participantId === participantId && r.eventId === eventId
     );
 
-    let result: CoordinatorAttendanceRecord;
-    if (existing) {
-      result = {
-        ...existing,
-        status: 'Present' as const,
-        checkInTime: existing.checkInTime || new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-      const newRecords = records.map((r) =>
-        r.attendanceId === existing.attendanceId ? result : r
-      );
-      saveAttendance(newRecords);
-    } else {
-      result = {
-        attendanceId: `att-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    const result: CoordinatorAttendanceRecord = {
+      attendanceId: existing?.attendanceId || createAttendanceId(),
+      eventId,
+      participantId,
+      coordinatorId,
+      status: 'Present',
+      checkInTime: existing?.checkInTime || nowIso,
+      remarks: existing?.remarks || '',
+      updatedAt: nowIso,
+    };
+    this.upsertLocalRecord(result);
+    await this.syncToFirestore(result);
+    return result;
+  },
+
+  async markAbsent(
+    participantId: string,
+    eventId: string,
+    coordinatorId: string
+  ): Promise<CoordinatorAttendanceRecord> {
+    const nowIso = new Date().toISOString();
+    const existing = getStoredAttendance().find(
+      (r) => r.participantId === participantId && r.eventId === eventId
+    );
+
+    const result: CoordinatorAttendanceRecord = {
+      attendanceId: existing?.attendanceId || createAttendanceId(),
+      eventId,
+      participantId,
+      coordinatorId,
+      status: 'Absent',
+      checkInTime: null,
+      remarks: existing?.remarks || '',
+      updatedAt: nowIso,
+    };
+    this.upsertLocalRecord(result);
+    await this.syncToFirestore(result);
+    return result;
+  },
+
+  async markAllPresent(eventId: string, coordinatorId: string, participants: ParticipantAttendanceView[]): Promise<void> {
+    const nowIso = new Date().toISOString();
+    const records = getStoredAttendance();
+    const others = records.filter((r) => r.eventId !== eventId);
+    const updated: CoordinatorAttendanceRecord[] = [...others];
+    const batch: Array<{ participant_id: string; status: 'Present' | 'Absent' }> = [];
+
+    participants.forEach((p) => {
+      updated.push({
+        attendanceId: createAttendanceId(),
         eventId,
-        participantId,
+        participantId: p.participantId,
         coordinatorId,
         status: 'Present',
-        checkInTime: new Date().toISOString(),
+        checkInTime: nowIso,
         remarks: '',
-        updatedAt: new Date().toISOString(),
-      };
-      saveAttendance([...records, result]);
+        updatedAt: nowIso,
+      });
+      batch.push({ participant_id: p.participantId, status: 'Present' });
+    });
+
+    saveAttendance(updated);
+    clearClearedFlag(eventId);
+    try {
+      await saveFirestoreBatch(batch, eventId, coordinatorId);
+    } catch (error) {
+      console.error('Attendance sync failed', error);
     }
-    void upsertAttendance({
-      event_id: eventId,
-      participant_id: participantId,
-      coordinator_id: coordinatorId,
-      status: 'Present',
-      check_in_time: result.checkInTime,
-      remarks: result.remarks,
-    });
-    return result;
   },
 
-  markAbsent(
-    participantId: string,
-    eventId: string,
-    coordinatorId: string
-  ): CoordinatorAttendanceRecord {
+  // Clears attendance for an event. Local state is always reset synchronously
+  // and the cleared-flag hides any stale Firestore records until the DB delete
+  // succeeds. Returns true only when the Firestore records were actually deleted.
+  async clearAttendance(eventId: string): Promise<boolean> {
     const records = getStoredAttendance();
-    const existing = records.find(
-      (r) => r.participantId === participantId && r.eventId === eventId
-    );
-
-    let result: CoordinatorAttendanceRecord;
-    if (existing) {
-      result = {
-        ...existing,
-        status: 'Absent' as const,
-        checkInTime: null,
-        updatedAt: new Date().toISOString(),
-      };
-      const newRecords = records.map((r) =>
-        r.attendanceId === existing.attendanceId ? result : r
-      );
-      saveAttendance(newRecords);
-    } else {
-      result = {
-        attendanceId: `att-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-        eventId,
-        participantId,
-        coordinatorId,
-        status: 'Absent',
-        checkInTime: null,
-        remarks: '',
-        updatedAt: new Date().toISOString(),
-      };
-      saveAttendance([...records, result]);
+    saveAttendance(records.filter((r) => r.eventId !== eventId));
+    markCleared(eventId);
+    try {
+      await clearAttendanceByEvent(eventId);
+      clearClearedFlag(eventId);
+      return true;
+    } catch (error) {
+      console.error('Attendance clear failed', error);
+      return false;
     }
-    void upsertAttendance({
-      event_id: eventId,
-      participant_id: participantId,
-      coordinator_id: coordinatorId,
-      status: 'Absent',
-      check_in_time: null,
-      remarks: result.remarks,
-    });
-    return result;
-  },
-
-  markAllPresent(eventId: string, coordinatorId: string, participants: ParticipantAttendanceView[]): void {
-    participants.forEach((p) => {
-      this.markPresent(p.participantId, eventId, coordinatorId);
-    });
-  },
-
-  clearAttendance(eventId: string): void {
-    const records = getStoredAttendance();
-    const filtered = records.filter((r) => r.eventId !== eventId);
-    saveAttendance(filtered);
-    void clearAttendanceByEvent(eventId);
   },
 
   updateAttendance(
@@ -200,67 +265,48 @@ export const AttendanceService = {
     status: 'Present' | 'Absent'
   ): void {
     const records = getStoredAttendance();
-    const updated = records.map((r) =>
-      r.attendanceId === attendanceId
-        ? {
-            ...r,
-            status,
-            checkInTime: status === 'Present' ? (r.checkInTime || new Date().toISOString()) : null,
-            updatedAt: new Date().toISOString(),
-          }
-        : r
-    );
-    saveAttendance(updated);
-    const target = updated.find((r) => r.attendanceId === attendanceId);
-    if (target) {
-      void upsertAttendance({
-        event_id: target.eventId,
-        participant_id: target.participantId,
-        coordinator_id: target.coordinatorId,
-        status,
-        check_in_time: target.checkInTime,
-        remarks: target.remarks,
-      });
-    }
+    const target = records.find((r) => r.attendanceId === attendanceId);
+    if (!target) return;
+    const updated: CoordinatorAttendanceRecord = {
+      ...target,
+      status,
+      checkInTime: status === 'Present' ? (target.checkInTime || new Date().toISOString()) : null,
+      updatedAt: new Date().toISOString(),
+    };
+    this.upsertLocalRecord(updated);
+    void this.syncToFirestore(updated);
   },
 
-  saveAttendanceBatch(
+  async saveAttendanceBatch(
     records: Array<{ participantId: string; status: 'Present' | 'Absent' }>,
     eventId: string,
     coordinatorId: string
-  ): void {
+  ): Promise<void> {
+    const nowIso = new Date().toISOString();
     const existing = getStoredAttendance();
-    const newRecords = records.map((r) => {
-      const found = existing.find(
-        (e) => e.participantId === r.participantId && e.eventId === eventId
-      );
-      if (found) {
-        return {
-          ...found,
-          status: r.status,
-          checkInTime: r.status === 'Present' ? (found.checkInTime || new Date().toISOString()) : null,
-          updatedAt: new Date().toISOString(),
-        };
-      }
-      return {
-        attendanceId: `att-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-        eventId,
-        participantId: r.participantId,
-        coordinatorId,
-        status: r.status,
-        checkInTime: r.status === 'Present' ? new Date().toISOString() : null,
-        remarks: '',
-        updatedAt: new Date().toISOString(),
-      } as CoordinatorAttendanceRecord;
-    });
-
-    const filtered = existing.filter((e) => e.eventId !== eventId);
-    saveAttendance([...filtered, ...newRecords]);
-    void saveFirestoreBatch(
-      records.map((r) => ({ participant_id: r.participantId, status: r.status })),
+    const others = existing.filter((e) => e.eventId !== eventId);
+    const newRecords: CoordinatorAttendanceRecord[] = records.map((r) => ({
+      attendanceId: createAttendanceId(),
       eventId,
-      coordinatorId
-    );
+      participantId: r.participantId,
+      coordinatorId,
+      status: r.status,
+      checkInTime: r.status === 'Present' ? nowIso : null,
+      remarks: '',
+      updatedAt: nowIso,
+    }));
+
+    saveAttendance([...others, ...newRecords]);
+    clearClearedFlag(eventId);
+    try {
+      await saveFirestoreBatch(
+        records.map((r) => ({ participant_id: r.participantId, status: r.status })),
+        eventId,
+        coordinatorId
+      );
+    } catch (error) {
+      console.error('Attendance save failed', error);
+    }
   },
 
   generateQRData(participantId: string, eventId: string): string {

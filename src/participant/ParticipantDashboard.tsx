@@ -14,11 +14,13 @@ import {
   GraduationCap,
   UserRound,
   ChevronRight,
+  ChevronDown,
   CircleCheckBig,
   CircleDollarSign,
 } from 'lucide-react';
 import { useRBAC } from '../rbac/context/RBACContext';
 import { api } from '../services/api';
+import { EventOverviewCms } from '../components/cms/EventOverviewCms';
 
 const YEARS = ['1st Year', '2nd Year', '3rd Year', '4th Year', 'Other'];
 
@@ -38,6 +40,7 @@ export const ParticipantDashboard: React.FC = () => {
   const [profileErrors, setProfileErrors] = useState<Record<string, string>>({});
   const [savingProfile, setSavingProfile] = useState(false);
   const [registeringId, setRegisteringId] = useState<string | number | null>(null);
+  const [viewingEvent, setViewingEvent] = useState<any>(null);
 
   const loadAll = useCallback(async () => {
     try {
@@ -291,6 +294,27 @@ export const ParticipantDashboard: React.FC = () => {
                         </div>
 
                         <button
+                          onClick={() => setViewingEvent(viewingEvent?.id === ev.id ? null : ev)}
+                          className={`w-full py-2.5 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all cursor-pointer flex items-center justify-center gap-2 border ${
+                            viewingEvent?.id === ev.id
+                              ? 'bg-violet-500/15 border-violet-500/40 text-violet-300'
+                              : 'bg-white/5 border-white/10 text-white/60 hover:text-white hover:border-white/25'
+                          }`}
+                        >
+                          {viewingEvent?.id === ev.id ? (
+                            <>
+                              <ChevronDown className="w-3.5 h-3.5" />
+                              Hide Details
+                            </>
+                          ) : (
+                            <>
+                              <Calendar className="w-3.5 h-3.5" />
+                              View Event Details
+                            </>
+                          )}
+                        </button>
+
+                        <button
                           onClick={() => handleRegister(ev.id)}
                           disabled={isRegistered || isFull || registeringId === ev.id}
                           className={`w-full py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all cursor-pointer flex items-center justify-center gap-2 disabled:cursor-not-allowed ${
@@ -322,6 +346,23 @@ export const ParticipantDashboard: React.FC = () => {
                 </div>
               )}
             </section>
+
+            {viewingEvent && (
+              <section className="flex flex-col gap-4">
+                <div className="flex items-center justify-between gap-4">
+                  <h2 className="text-lg font-extrabold tracking-tight font-display">
+                    <span className="text-gradient">{viewingEvent.name}</span> · Event Details
+                  </h2>
+                  <button
+                    onClick={() => setViewingEvent(null)}
+                    className="px-3.5 py-2 rounded-xl bg-white/5 border border-white/10 text-[10px] font-bold uppercase tracking-widest text-white/60 hover:text-white hover:border-white/25 transition-all cursor-pointer"
+                  >
+                    Close
+                  </button>
+                </div>
+                <EventOverviewCms eventId={String(viewingEvent.id)} canEdit={false} />
+              </section>
+            )}
 
             <section className="flex flex-col gap-4">
               <h2 className="text-lg font-extrabold tracking-tight font-display">

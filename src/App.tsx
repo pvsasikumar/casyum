@@ -203,12 +203,17 @@ export default function App() {
       <Route path="/admin/login" element={<AdminLogin />} />
 
       <Route
-        path="/admin/coordinator/dashboard"
+        path="/coordinator/*"
         element={
           <AdminRoute roles={COORDINATOR_PORTAL_ROLES}>
             <CoordinatorApp />
           </AdminRoute>
         }
+      />
+
+      <Route
+        path="/admin/coordinator/dashboard"
+        element={<Navigate to="/coordinator/dashboard" replace />}
       />
 
       <Route

@@ -9,7 +9,7 @@ import { ADMIN_PORTAL_ROLES } from '../../rbac/constants';
 import type { UserRole } from '../../rbac/types';
 
 function dashboardPathFor(role: string): string {
-  return role === 'Super Admin' ? '/admin/dashboard' : '/admin/coordinator/dashboard';
+  return role === 'Super Admin' ? '/admin/dashboard' : '/coordinator/dashboard';
 }
 
 export const AdminLogin: React.FC = () => {
