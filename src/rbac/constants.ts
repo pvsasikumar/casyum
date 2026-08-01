@@ -25,6 +25,19 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   'Participant': 'Participant',
 };
 
+export const SUPER_ADMIN_ROLE: UserRole = 'Super Admin';
+
+export const ADMIN_PORTAL_ROLES: UserRole[] = [
+  'Super Admin',
+  'Event Coordinator (Student)',
+  'Event Coordinator (Faculty)',
+];
+
+export const COORDINATOR_PORTAL_ROLES: UserRole[] = [
+  'Event Coordinator (Student)',
+  'Event Coordinator (Faculty)',
+];
+
 export const ROLE_HIERARCHY: Record<UserRole, number> = {
   'Super Admin': 0,
   'Admin': 1,

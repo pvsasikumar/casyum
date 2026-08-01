@@ -6,15 +6,15 @@ import { api } from '../../services/api';
 import { useRBAC } from '../../rbac/context/RBACContext';
 
 const ROLE_PATHS: Record<string, string> = {
-  'Super Admin': '/super-admin/dashboard',
+  'Super Admin': '/admin/dashboard',
   'Admin': '/admin/dashboard',
-  'Event Coordinator': '/coordinator/dashboard',
-  'Coordinator': '/coordinator/dashboard',
-  'Event Coordinator (Student)': '/coordinator/dashboard',
-  'Event Coordinator (Faculty)': '/coordinator/dashboard',
-  'Registration Manager': '/registrations/dashboard',
-  'Certificate Manager': '/certificates/dashboard',
-  'Finance Manager': '/finance/dashboard',
+  'Event Coordinator': '/admin/coordinator/dashboard',
+  'Coordinator': '/admin/coordinator/dashboard',
+  'Event Coordinator (Student)': '/admin/coordinator/dashboard',
+  'Event Coordinator (Faculty)': '/admin/coordinator/dashboard',
+  'Registration Manager': '/admin/dashboard',
+  'Certificate Manager': '/admin/dashboard',
+  'Finance Manager': '/admin/dashboard',
   'Participant': '/participant/dashboard',
 };
 

@@ -1,54 +1,97 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Sparkles, Lock, Eye, EyeOff, Loader2, AlertCircle, LogIn, ArrowLeft, Mail } from 'lucide-react';
-import { useCoordinator } from './context/CoordinatorContext';
-import { useRBAC } from '../rbac/context/RBACContext';
+import { Sparkles, Lock, Eye, EyeOff, Loader2, AlertCircle, ShieldCheck, Mail, ArrowLeft } from 'lucide-react';
+import { useRBAC } from '../../rbac/context/RBACContext';
+import { api } from '../../services/api';
+import { signOut } from '../../services/authService';
+import { ADMIN_PORTAL_ROLES } from '../../rbac/constants';
+import type { UserRole } from '../../rbac/types';
 
-interface CoordinatorLoginProps {
-  onBack: () => void;
+function dashboardPathFor(role: string): string {
+  return role === 'Super Admin' ? '/admin/dashboard' : '/admin/coordinator/dashboard';
 }
 
-export const CoordinatorLogin: React.FC<CoordinatorLoginProps> = ({ onBack }) => {
+export const AdminLogin: React.FC = () => {
   const navigate = useNavigate();
-  const { login } = useCoordinator();
-  const rbac = useRBAC();
+  const location = useLocation();
+  const { login, setFirstLogin, isAuthenticated, role, isLoading: rbacLoading } = useRBAC();
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState(() => {
+    const state = (location.state as { unauthorized?: boolean }) || {};
+    return state.unauthorized
+      ? 'Unauthorized Access. This portal is restricted to authorized staff only.'
+      : '';
+  });
 
-  const handleLogin = async (e: React.FormEvent) => {
+  useEffect(() => {
+    if (rbacLoading) return;
+    if (isAuthenticated && role) {
+      if (ADMIN_PORTAL_ROLES.includes(role)) {
+        const target = dashboardPathFor(role);
+        if (location.pathname !== target && location.pathname !== '/create-password') {
+          navigate(target, { replace: true });
+        }
+      } else {
+        setError('Unauthorized Access. This portal is restricted to authorized staff only.');
+      }
+    }
+  }, [rbacLoading, isAuthenticated, role, location.pathname, navigate]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
     const trimmedEmail = email.trim();
     const trimmedPassword = password.trim();
-    if (!trimmedEmail || !trimmedPassword) {
-      setError('Please enter email and password');
+    if (!trimmedEmail) {
+      setError('Please enter your email address.');
+      return;
+    }
+    if (!trimmedPassword) {
+      setError('Please enter your password.');
       return;
     }
 
     setIsLoading(true);
     try {
-      const result = await login(trimmedEmail, trimmedPassword);
+      const result = await api.employeeLogin(trimmedEmail, trimmedPassword);
+      const userRole = result.user.role as UserRole;
+
+      if (!ADMIN_PORTAL_ROLES.includes(userRole)) {
+        await signOut();
+        setPassword('');
+        setError('Unauthorized Access. Only Super Admin and Event Coordinators may access this portal.');
+        return;
+      }
+
+      login({
+        id: result.user.id || `user-${Date.now()}`,
+        name: result.user.name,
+        email: result.user.email || trimmedEmail,
+        role: userRole,
+        token: result.token,
+        department: result.user.department,
+        phone: result.user.phone,
+        is_first_login: result.is_first_login === true,
+      });
+
+      setFirstLogin(result.is_first_login === true);
+      setPassword('');
+      setError('');
 
       if (result.is_first_login) {
-        rbac.login({
-          id: result.user.id,
-          name: result.user.name,
-          email: result.user.email,
-          role: 'Coordinator',
-          token: result.token,
-          department: result.user.department,
-          phone: result.user.phone,
-        });
-        rbac.setFirstLogin(true);
         navigate('/create-password', { replace: true });
+      } else {
+        navigate(dashboardPathFor(userRole), { replace: true });
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Login failed');
+      setPassword('');
+      setError(err instanceof Error ? err.message : 'Login failed. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -66,7 +109,7 @@ export const CoordinatorLogin: React.FC<CoordinatorLoginProps> = ({ onBack }) =>
         className="relative w-full max-w-md bg-zinc-950/90 border border-white/15 rounded-3xl p-6 sm:p-8 shadow-[0_0_50px_rgba(139,92,246,0.2)] overflow-hidden"
       >
         <button
-          onClick={onBack}
+          onClick={() => navigate('/')}
           className="flex items-center gap-1.5 text-white/50 hover:text-white text-xs transition-colors mb-6 cursor-pointer"
         >
           <ArrowLeft className="w-3.5 h-3.5" />
@@ -81,15 +124,23 @@ export const CoordinatorLogin: React.FC<CoordinatorLoginProps> = ({ onBack }) =>
           </div>
           <div className="flex flex-col">
             <h3 className="text-lg font-bold font-display text-white tracking-tight">
-              CASYUM <span className="text-violet-400">Coordinator</span>
+              CASYUM <span className="text-violet-400">Admin</span>
             </h3>
             <span className="text-[10px] text-white/40 tracking-widest uppercase">
-              Event Attendance Portal
+              Admin Portal Sign In
             </span>
           </div>
         </div>
 
-        <form onSubmit={handleLogin} className="flex flex-col gap-4">
+        <div className="flex flex-wrap gap-1.5 mb-5">
+          {['Super Admin', 'Event Coordinator (Student)', 'Event Coordinator (Faculty)'].map((label) => (
+            <span key={label} className="px-2 py-0.5 rounded-md bg-violet-500/10 border border-violet-500/20 text-[9px] text-violet-300/70 font-medium">
+              {label}
+            </span>
+          ))}
+        </div>
+
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <div className="flex flex-col gap-1.5">
             <label className="text-[10px] font-bold text-white/50 uppercase tracking-wider">
               Email Address
@@ -100,7 +151,7 @@ export const CoordinatorLogin: React.FC<CoordinatorLoginProps> = ({ onBack }) =>
                 type="email"
                 value={email}
                 onChange={(e) => { setEmail(e.target.value); if (error) setError(''); }}
-                placeholder="coordinator@casyum.edu"
+                placeholder="admin@casyum.edu"
                 autoComplete="email"
                 disabled={isLoading}
                 className="w-full bg-white/5 border border-white/10 rounded-xl pl-10 pr-4 py-3 text-xs text-white placeholder-white/30 focus:outline-none focus:border-violet-500/50 disabled:opacity-50"
@@ -128,10 +179,21 @@ export const CoordinatorLogin: React.FC<CoordinatorLoginProps> = ({ onBack }) =>
                 onClick={() => setShowPassword((prev) => !prev)}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white/70 transition-colors cursor-pointer"
                 tabIndex={-1}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
               >
                 {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
             </div>
+          </div>
+
+          <div className="flex items-center justify-end">
+            <button
+              type="button"
+              onClick={() => navigate('/forgot-password')}
+              className="text-[10px] text-violet-400 hover:text-violet-300 font-bold transition-colors cursor-pointer"
+            >
+              Forgot Password?
+            </button>
           </div>
 
           {error && (
@@ -157,11 +219,19 @@ export const CoordinatorLogin: React.FC<CoordinatorLoginProps> = ({ onBack }) =>
               </>
             ) : (
               <>
-                <LogIn className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
-                <span>Login to Dashboard</span>
+                <ShieldCheck className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+                <span>Sign In</span>
               </>
             )}
           </button>
+
+          <div className="flex items-center gap-3 mt-1">
+            <div className="h-px flex-1 bg-white/10" />
+            <span className="text-[9px] text-white/30 uppercase tracking-widest text-center">
+              Authorized staff only
+            </span>
+            <div className="h-px flex-1 bg-white/10" />
+          </div>
         </form>
       </motion.div>
     </div>

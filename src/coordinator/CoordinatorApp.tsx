@@ -1,13 +1,9 @@
 import React from 'react';
+import { Navigate } from 'react-router-dom';
 import { CoordinatorProvider, useCoordinator } from './context/CoordinatorContext';
-import { CoordinatorLogin } from './CoordinatorLogin';
 import { CoordinatorDashboard } from './CoordinatorDashboard';
 
-interface CoordinatorAppProps {
-  onBack: () => void;
-}
-
-const CoordinatorContent: React.FC<{ onBack: () => void }> = ({ onBack }) => {
+const CoordinatorContent: React.FC = () => {
   const { isAuthenticated, isLoading } = useCoordinator();
 
   if (isLoading) {
@@ -19,16 +15,16 @@ const CoordinatorContent: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   }
 
   if (!isAuthenticated) {
-    return <CoordinatorLogin onBack={onBack} />;
+    return <Navigate to="/admin/login" replace />;
   }
 
   return <CoordinatorDashboard />;
 };
 
-export const CoordinatorApp: React.FC<CoordinatorAppProps> = ({ onBack }) => {
+export const CoordinatorApp: React.FC = () => {
   return (
     <CoordinatorProvider>
-      <CoordinatorContent onBack={onBack} />
+      <CoordinatorContent />
     </CoordinatorProvider>
   );
 };

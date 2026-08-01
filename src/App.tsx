@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { useNavigate, useLocation, Routes, Route } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, Routes, Route, Navigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { IntroVideo } from './components/IntroVideo';
 import { Navbar } from './components/Navbar';
@@ -10,14 +10,18 @@ import { ParticipantRegistration } from './components/ParticipantRegistration';
 import { ParticipantDashboard } from './participant/ParticipantDashboard';
 import { AdminDashboard } from './admin/AdminDashboard';
 import { CoordinatorApp } from './coordinator/CoordinatorApp';
-import { LoginModal } from './components/LoginModal';
+import { AdminLogin } from './pages/admin/AdminLogin';
+import { AdminRoute } from './rbac/components/AdminRoute';
 import { CreatePassword } from './pages/auth/CreatePassword';
 import { ForgotPassword } from './pages/auth/ForgotPassword';
 import { ResetPassword } from './pages/auth/ResetPassword';
-import { ShieldCheck } from 'lucide-react';
+import { LogIn, Loader2, AlertCircle, X } from 'lucide-react';
 import { useRBAC } from './rbac/context/RBACContext';
+import { SUPER_ADMIN_ROLE, COORDINATOR_PORTAL_ROLES } from './rbac/constants';
+import { useGoogleParticipantLogin } from './hooks/useGoogleParticipantLogin';
 
-function PublicSite({ onOpenLogin }: { onOpenLogin: () => void }) {
+function PublicSite() {
+  const { signIn, isSigningIn, error, clearError } = useGoogleParticipantLogin();
   const [showIntro, setShowIntro] = useState(() => {
     const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     if (prefersReducedMotion) return false;
@@ -87,7 +91,7 @@ function PublicSite({ onOpenLogin }: { onOpenLogin: () => void }) {
       </AnimatePresence>
 
       <div className="relative z-10">
-        <Hero startAnimation={startAnimation} onOpenLogin={onOpenLogin} />
+        <Hero startAnimation={startAnimation} onOpenLogin={signIn} isSigningIn={isSigningIn} />
         <About />
         <Events />
         <ParticipantRegistration />
@@ -98,9 +102,13 @@ function PublicSite({ onOpenLogin }: { onOpenLogin: () => void }) {
               <button onClick={handleReplayIntro} className="px-6 py-2.5 rounded-full border border-white/10 text-white/50 hover:text-white hover:border-white/20 bg-white/5 hover:bg-white/10 transition-all duration-300 text-[10px] uppercase font-bold tracking-widest cursor-pointer active:scale-95">
                 Replay Intro Video
               </button>
-              <button onClick={onOpenLogin} className="px-6 py-2.5 rounded-full border border-violet-500/30 text-violet-400 hover:text-violet-300 hover:border-violet-500/50 bg-violet-500/10 hover:bg-violet-500/20 transition-all duration-300 text-[10px] uppercase font-bold tracking-widest cursor-pointer active:scale-95 flex items-center gap-2">
-                <ShieldCheck className="w-3.5 h-3.5" />
-                <span>Staff Login</span>
+              <button onClick={signIn} disabled={isSigningIn} className="px-6 py-2.5 rounded-full border border-violet-500/30 text-violet-400 hover:text-violet-300 hover:border-violet-500/50 bg-violet-500/10 hover:bg-violet-500/20 transition-all duration-300 text-[10px] uppercase font-bold tracking-widest cursor-pointer active:scale-95 flex items-center gap-2 disabled:opacity-50 disabled:cursor-wait">
+                {isSigningIn ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <LogIn className="w-3.5 h-3.5" />
+                )}
+                <span>Login</span>
               </button>
             </div>
             <span>© 2026 CASYUM SYMPOSIUM. ALL RIGHTS RESERVED.</span>
@@ -108,67 +116,55 @@ function PublicSite({ onOpenLogin }: { onOpenLogin: () => void }) {
           </div>
         </footer>
       </div>
+
+      {error && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[10000] flex items-center gap-3 px-4 py-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs backdrop-blur-xl shadow-2xl max-w-[90vw]">
+          <AlertCircle className="w-4 h-4 flex-shrink-0" />
+          <span>{error}</span>
+          <button onClick={clearError} className="p-1 rounded-lg hover:bg-white/10 transition-colors cursor-pointer" aria-label="Dismiss">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
     </div>
   );
 }
 
+function ParticipantRoute({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, role, isLoading } = useRBAC();
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-violet-400 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (!isAuthenticated || role !== 'Participant') {
+    return <Navigate to="/" replace />;
+  }
+
+  return <>{children}</>;
+}
+
+function RedirectToParticipantOrHome() {
+  const { isAuthenticated, role, isLoading } = useRBAC();
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-violet-400 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  return <Navigate to={isAuthenticated && role === 'Participant' ? '/participant/dashboard' : '/'} replace />;
+}
+
 export default function App() {
   const navigate = useNavigate();
-  const location = useLocation();
-  const { isAuthenticated, role, logout, isLoading } = useRBAC();
-  const [isLoginOpen, setIsLoginOpen] = useState(false);
-  const [isAdminMode, setIsAdminMode] = useState(false);
-  const [isCoordinatorMode, setIsCoordinatorMode] = useState(false);
-  const [isParticipantMode, setIsParticipantMode] = useState(false);
-
-  const authPaths = ['/create-password', '/forgot-password', '/reset-password'];
-  const isAuthPage = authPaths.includes(location.pathname);
-
-  const isProtectedPath =
-    location.pathname.startsWith('/admin') ||
-    location.pathname.startsWith('/super-admin') ||
-    location.pathname.startsWith('/registrations') ||
-    location.pathname.startsWith('/certificates') ||
-    location.pathname.startsWith('/payments') ||
-    location.pathname.startsWith('/finance') ||
-    location.pathname.startsWith('/coordinator') ||
-    location.pathname.startsWith('/participant') ||
-    location.pathname.startsWith('/dashboard');
-
-  const isCoordinatorRole = (r: string | null | undefined) =>
-    r === 'Event Coordinator' ||
-    r === 'Coordinator' ||
-    r === 'Event Coordinator (Student)' ||
-    r === 'Event Coordinator (Faculty)';
-
-  useEffect(() => {
-    if (isLoading) return;
-    if (isAuthenticated && role) {
-      if (isCoordinatorRole(role)) {
-        setIsCoordinatorMode(true);
-      } else if (role === 'Participant') {
-        setIsParticipantMode(true);
-      } else {
-        setIsAdminMode(true);
-      }
-      return;
-    }
-    if (!isAuthPage && isProtectedPath) {
-      setIsLoginOpen(true);
-    }
-    navigate('/', { replace: true });
-  }, [isLoading, isAuthenticated, role, isAuthPage, isProtectedPath, navigate]);
-
-  const handleLoginSuccess = () => {
-    if (!role) return;
-    if (isCoordinatorRole(role)) {
-      setIsCoordinatorMode(true);
-    } else if (role === 'Participant') {
-      setIsParticipantMode(true);
-    } else {
-      setIsAdminMode(true);
-    }
-  };
+  const { logout } = useRBAC();
 
   const handleExitAdmin = () => {
     logout();
@@ -180,56 +176,51 @@ export default function App() {
       }
     }
     keysToRemove.forEach((key) => localStorage.removeItem(key));
-    setIsAdminMode(false);
-    setIsCoordinatorMode(false);
-    setIsParticipantMode(false);
-    navigate('/');
+    navigate('/', { replace: true });
   };
 
-  useEffect(() => {
-    if (isParticipantMode) {
-      navigate('/participant/dashboard', { replace: true });
-    }
-  }, [isParticipantMode, navigate]);
-
-  if (isAuthPage) {
-    return (
-      <Routes>
-        <Route path="/create-password" element={<CreatePassword />} />
-        <Route path="/forgot-password" element={<ForgotPassword />} />
-        <Route path="/reset-password" element={<ResetPassword />} />
-      </Routes>
-    );
-  }
-
-  if (isLoading) {
-    return null;
-  }
-
-  if (isCoordinatorMode) {
-    return <CoordinatorApp onBack={() => { setIsCoordinatorMode(false); navigate('/'); }} />;
-  }
-
-  if (isParticipantMode) {
-    return (
-      <Routes>
-        <Route path="/participant/dashboard" element={<ParticipantDashboard />} />
-      </Routes>
-    );
-  }
-
-  if (isAdminMode) {
-    return <AdminDashboard onExitAdmin={handleExitAdmin} />;
-  }
-
   return (
-    <>
-      <PublicSite onOpenLogin={() => setIsLoginOpen(true)} />
-      <LoginModal
-        isOpen={isLoginOpen}
-        onClose={() => setIsLoginOpen(false)}
-        onLoginSuccess={handleLoginSuccess}
+    <Routes>
+      <Route path="/create-password" element={<CreatePassword />} />
+      <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
+
+      <Route path="/" element={<PublicSite />} />
+      <Route path="/events" element={<PublicSite />} />
+      <Route path="/register" element={<PublicSite />} />
+      <Route path="/profile" element={<RedirectToParticipantOrHome />} />
+      <Route path="/my-events" element={<RedirectToParticipantOrHome />} />
+
+      <Route
+        path="/participant/dashboard"
+        element={
+          <ParticipantRoute>
+            <ParticipantDashboard />
+          </ParticipantRoute>
+        }
       />
-    </>
+
+      <Route path="/admin/login" element={<AdminLogin />} />
+
+      <Route
+        path="/admin/coordinator/dashboard"
+        element={
+          <AdminRoute roles={COORDINATOR_PORTAL_ROLES}>
+            <CoordinatorApp />
+          </AdminRoute>
+        }
+      />
+
+      <Route
+        path="/admin/*"
+        element={
+          <AdminRoute roles={[SUPER_ADMIN_ROLE]}>
+            <AdminDashboard onExitAdmin={handleExitAdmin} />
+          </AdminRoute>
+        }
+      />
+
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
   );
 }

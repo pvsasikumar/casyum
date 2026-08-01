@@ -1,6 +1,7 @@
 import {
   signInWithEmailAndPassword,
   signInWithCredential,
+  signInWithPopup,
   GoogleAuthProvider,
   EmailAuthProvider,
   reauthenticateWithCredential,
@@ -224,6 +225,52 @@ export async function employeeLogin(email: string, password: string): Promise<Lo
 
 export function googleConfig(): { clientId: string } {
   return { clientId: googleClientId };
+}
+
+export async function googleLoginPopup(): Promise<LoginResult> {
+  const auth = getFirebaseAuth();
+  const result = await signInWithPopup(auth, new GoogleAuthProvider()).catch((err) => {
+    const code = (err as { code?: string })?.code || '';
+    if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
+      throw new Error('Google sign-in was cancelled. Please try again.');
+    }
+    throw new Error(mapFirebaseAuthError(err));
+  });
+  const uid = result.user.uid;
+
+  const staff = await readUserRecord(uid);
+  if (staff) {
+    throw new Error('This Google account is registered as staff. Please use the Staff Sign In.');
+  }
+
+  let record = await readParticipantRecord(uid);
+  if (!record) {
+    await setDocParticipant(uid, {
+      full_name: result.user.displayName || 'Participant',
+      email: result.user.email || '',
+      profile_picture: result.user.photoURL || '',
+      google_id: uid,
+    });
+    record = await readParticipantRecord(uid);
+  }
+
+  return {
+    token: await result.user.getIdToken(),
+    user: {
+      id: uid,
+      name: record?.full_name || result.user.displayName || 'Participant',
+      email: record?.email || result.user.email || '',
+      role: 'Participant',
+      phone: record?.phone,
+      department: record?.department,
+      college: record?.college,
+      year_of_study: record?.year_of_study,
+      profile_picture: record?.profile_picture || result.user.photoURL || '',
+      profile_completed: record?.profile_completed === true ? 1 : 0,
+      google_id: record?.google_id,
+    },
+    is_first_login: false,
+  };
 }
 
 export async function googleLogin(credential: string): Promise<LoginResult> {
