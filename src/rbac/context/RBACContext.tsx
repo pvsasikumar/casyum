@@ -164,6 +164,7 @@ export const RBACProvider: React.FC<{ children: React.ReactNode }> = ({ children
     'Event Coordinator (Student)': 2,
     'Event Coordinator (Faculty)': 2,
     'Registration Manager': 3,
+    'Registration Team': 3,
     'Certificate Manager': 4,
     'Finance Manager': 5,
     'Participant': 6,

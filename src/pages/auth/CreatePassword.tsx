@@ -3,24 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Lock, Eye, EyeOff, CheckCircle2, XCircle, Sparkles, ShieldCheck } from 'lucide-react';
 import { api } from '../../services/api';
-import { useRBAC } from '../../rbac/context/RBACContext';
-
-const ROLE_PATHS: Record<string, string> = {
-  'Super Admin': '/admin/dashboard',
-  'Admin': '/admin/dashboard',
-  'Event Coordinator': '/coordinator/dashboard',
-  'Coordinator': '/coordinator/dashboard',
-  'Event Coordinator (Student)': '/coordinator/dashboard',
-  'Event Coordinator (Faculty)': '/coordinator/dashboard',
-  'Registration Manager': '/admin/dashboard',
-  'Certificate Manager': '/admin/dashboard',
-  'Finance Manager': '/admin/dashboard',
-  'Participant': '/participant/dashboard',
-};
+import { signOut } from '../../services/authService';
 
 export const CreatePassword: React.FC = () => {
   const navigate = useNavigate();
-  const { user } = useRBAC();
 
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -55,6 +41,8 @@ export const CreatePassword: React.FC = () => {
       newErrors.newPassword = 'New password is required';
     } else if (newPassword.length < 8) {
       newErrors.newPassword = 'Minimum 8 characters required';
+    } else if (newPassword === currentPassword) {
+      newErrors.newPassword = 'New password must be different from the temporary password';
     } else if (!strengthChecks.hasUpper) {
       newErrors.newPassword = 'Must contain an uppercase letter';
     } else if (!strengthChecks.hasLower) {
@@ -82,9 +70,9 @@ export const CreatePassword: React.FC = () => {
     try {
       await api.changePassword(currentPassword, newPassword, confirmPassword);
       setIsSuccess(true);
-      setTimeout(() => {
-        const path = ROLE_PATHS[user?.role || ''] || '/admin/dashboard';
-        navigate(path, { replace: true });
+      setTimeout(async () => {
+        await signOut();
+        navigate('/admin/login', { replace: true, state: { passwordChanged: true } });
       }, 2000);
     } catch (err) {
       setServerError(err instanceof Error ? err.message : 'Failed to change password');
@@ -141,7 +129,7 @@ export const CreatePassword: React.FC = () => {
             <CheckCircle2 className="w-5 h-5 text-emerald-400 flex-shrink-0" />
             <div>
               <span className="text-sm font-bold text-emerald-300">Password changed successfully!</span>
-              <span className="text-xs text-emerald-400/80 block mt-1">Redirecting to your dashboard...</span>
+              <span className="text-xs text-emerald-400/80 block mt-1">Logging you out — please sign in with your new password...</span>
             </div>
           </motion.div>
         )}

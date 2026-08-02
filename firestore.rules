@@ -27,8 +27,18 @@ service cloud.firestore {
       ];
     }
 
+    function isRegistrationTeam() {
+      return getUserRole() in ['Registration Team'];
+    }
+
     function isAssignedEvent(eventId) {
       return isSignedIn() && eventId in getUserData().assigned_event_ids;
+    }
+
+    // Registration Desk verification must be complete before attendance can be
+    // recorded for a participant.
+    function isVerifiedParticipant(participantId) {
+      return get(/databases/$(database)/documents/participants/$(participantId)).data.verificationStatus == 'Verified';
     }
 
     // Only the fields below may change when a participant registers for an
@@ -70,11 +80,30 @@ service cloud.firestore {
     }
 
     // Participants must be able to read and update their own profile, and
-    // create their own record on first Google sign-in.
+    // create their own record on first Google sign-in. Registration Desk
+    // staff read participants to verify them and may only touch the
+    // verification fields.
     match /participants/{participantId} {
-      allow read: if isSignedIn() && (isAdmin() || isCoordinator() || request.auth.uid == participantId);
+      allow read: if isSignedIn() && (isAdmin() || isCoordinator() || isRegistrationTeam() || request.auth.uid == participantId);
       allow create: if isSignedIn() && request.auth.uid == participantId;
-      allow update: if isSignedIn() && (isAdmin() || request.auth.uid == participantId);
+      allow update: if isSignedIn() && (
+        isAdmin()
+        || request.auth.uid == participantId
+        || (isRegistrationTeam() && onlyChanges([
+          'verificationStatus',
+          'verifiedBy',
+          'verifiedByName',
+          'verifiedByUserId',
+          'verifiedAt',
+          'verificationRemarks',
+          'rejectedBy',
+          'rejectedByName',
+          'rejectedByUserId',
+          'rejectedAt',
+          'rejectionReason',
+          'updated_at'
+        ]))
+      );
       allow delete: if isAdmin();
     }
 
@@ -95,12 +124,29 @@ service cloud.firestore {
     }
 
     // Attendance: a coordinator can only create/update/delete attendance for
-    // their assigned event. Admins have full access.
+    // their assigned event, and only for participants whose verification is
+    // complete at the Registration Desk. Admins have full access.
     match /attendance/{attendanceId} {
       allow read: if isSignedIn() && (isAdmin() || isCoordinator() && isAssignedEvent(resource.data.event_id));
-      allow create: if isSignedIn() && (isAdmin() || isCoordinator() && isAssignedEvent(request.resource.data.event_id));
-      allow update: if isSignedIn() && (isAdmin() || isCoordinator() && isAssignedEvent(resource.data.event_id) && isAssignedEvent(request.resource.data.event_id));
+      allow create: if isSignedIn() && (isAdmin() || (isCoordinator() && isAssignedEvent(request.resource.data.event_id) && isVerifiedParticipant(request.resource.data.participant_id)));
+      allow update: if isSignedIn() && (isAdmin() || (isCoordinator() && isAssignedEvent(resource.data.event_id) && isAssignedEvent(request.resource.data.event_id) && isVerifiedParticipant(request.resource.data.participant_id)));
       allow delete: if isSignedIn() && (isAdmin() || isCoordinator() && isAssignedEvent(resource.data.event_id));
+    }
+
+    // Registration Desk verification records and audit logs.
+    match /verification_logs/{logId} {
+      allow read: if isSignedIn() && (isAdmin() || isRegistrationTeam());
+      allow write: if isAdmin() || isRegistrationTeam();
+    }
+
+    match /participant_verifications/{recordId} {
+      allow read: if isSignedIn() && (isAdmin() || isRegistrationTeam());
+      allow write: if isAdmin() || isRegistrationTeam();
+    }
+
+    match /registration_team_logs/{logId} {
+      allow read: if isSignedIn() && (isAdmin() || isRegistrationTeam());
+      allow write: if isAdmin() || isRegistrationTeam();
     }
 
     // Sequence counters are read and incremented when participants register.

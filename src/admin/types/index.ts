@@ -1,4 +1,4 @@
-export type UserRole = 'Super Admin' | 'Admin' | 'Event Coordinator' | 'Registration Manager' | 'Certificate Manager' | 'Finance Manager' | 'Participant' | 'Faculty Coordinator' | 'Student Coordinator';
+export type UserRole = 'Super Admin' | 'Admin' | 'Event Coordinator' | 'Registration Manager' | 'Registration Team' | 'Certificate Manager' | 'Finance Manager' | 'Participant' | 'Faculty Coordinator' | 'Student Coordinator';
 
 export type PaymentStatus = 'Approved' | 'Pending' | 'Rejected';
 export type AttendanceStatus = 'Present' | 'Absent' | 'Late';
@@ -183,6 +183,7 @@ export type ActiveTabModule =
   | 'Gallery'
   | 'Certificates'
   | 'Coordinators'
+  | 'Registration Team'
   | 'Participants'
   | 'Settings'
   | 'Audit Logs'

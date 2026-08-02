@@ -2,7 +2,7 @@ import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import type { UserRole } from '../types';
 import { useRBAC } from '../context/RBACContext';
-import { SUPER_ADMIN_ROLE, COORDINATOR_PORTAL_ROLES } from '../constants';
+import { SUPER_ADMIN_ROLE, COORDINATOR_PORTAL_ROLES, REGISTRATION_TEAM_PORTAL_ROLES } from '../constants';
 
 interface AdminRouteProps {
   roles: UserRole[];
@@ -35,6 +35,10 @@ export const AdminRoute: React.FC<AdminRouteProps> = ({ roles, children }) => {
 
   if (COORDINATOR_PORTAL_ROLES.includes(role)) {
     return <Navigate to="/coordinator/dashboard" replace />;
+  }
+
+  if (REGISTRATION_TEAM_PORTAL_ROLES.includes(role)) {
+    return <Navigate to="/registration-team/dashboard" replace />;
   }
 
   return <Navigate to="/admin/login" replace state={{ unauthorized: true }} />;

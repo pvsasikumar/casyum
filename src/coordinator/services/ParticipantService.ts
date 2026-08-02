@@ -3,6 +3,7 @@ import {
   query,
   where,
   onSnapshot,
+  getDocs,
   type QuerySnapshot,
   type DocumentData,
 } from 'firebase/firestore';
@@ -10,7 +11,12 @@ import { getDb } from '../../firebase/firestore';
 import { listRegistrationsByEvent } from '../../services/registrationService';
 import { mapRegDoc } from '../../services/eventService';
 import type { RegistrationRow } from '../../services/eventService';
-import type { EventParticipant } from '../types';
+import type { EventParticipant, VerificationStatus } from '../types';
+
+export interface ParticipantVerificationInfo {
+  verificationStatus: VerificationStatus;
+  verifiedBy: string;
+}
 
 function toParticipant(r: RegistrationRow): EventParticipant {
   const participantId = String(
@@ -26,6 +32,8 @@ function toParticipant(r: RegistrationRow): EventParticipant {
     email: r.participant_email || '',
     registrationStatus: r.status === 'Confirmed' ? 'Confirmed' : (r.status || 'Pending'),
     paymentStatus: r.payment_status || 'Pending',
+    verificationStatus: 'Pending',
+    verifiedBy: '',
   } as EventParticipant;
 }
 
@@ -58,5 +66,41 @@ export const ParticipantService = {
       },
       onError
     );
+  },
+
+  subscribeParticipantVerifications(
+    onNext: (byId: Record<string, ParticipantVerificationInfo>) => void,
+    onError?: (error: Error) => void
+  ): () => void {
+    const db = getDb();
+    return onSnapshot(
+      collection(db, 'participants'),
+      (snapshot: QuerySnapshot<DocumentData>) => {
+        const map: Record<string, ParticipantVerificationInfo> = {};
+        snapshot.docs.forEach((d) => {
+          const data = d.data();
+          map[d.id] = {
+            verificationStatus: (data.verificationStatus || 'Pending') as VerificationStatus,
+            verifiedBy: data.verifiedBy || '',
+          };
+        });
+        onNext(map);
+      },
+      onError
+    );
+  },
+
+  async getParticipantVerifications(): Promise<Record<string, ParticipantVerificationInfo>> {
+    const db = getDb();
+    const snap = await getDocs(collection(db, 'participants'));
+    const map: Record<string, ParticipantVerificationInfo> = {};
+    snap.docs.forEach((d) => {
+      const data = d.data();
+      map[d.id] = {
+        verificationStatus: (data.verificationStatus || 'Pending') as VerificationStatus,
+        verifiedBy: data.verifiedBy || '',
+      };
+    });
+    return map;
   },
 };

@@ -147,7 +147,9 @@ export const AttendanceTable: React.FC<AttendanceTableProps> = ({
         <div className="flex items-center gap-2">
           <button
             onClick={onMarkAllPresent}
-            className="px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[10px] font-bold hover:bg-emerald-500/20 transition-all cursor-pointer"
+            disabled={participants.length > 0 && !participants.some((p) => p.verificationStatus === 'Verified')}
+            title={participants.some((p) => p.verificationStatus === 'Verified') ? 'Mark all verified participants present' : 'Marking attendance is locked until participants are verified'}
+            className="px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[10px] font-bold hover:bg-emerald-500/20 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
           >
             Mark All Present
           </button>
@@ -178,13 +180,14 @@ export const AttendanceTable: React.FC<AttendanceTableProps> = ({
               <th className="p-3">Department</th>
               <th className="p-3">Phone</th>
               <th className="p-3">Registration Status</th>
+              <th className="p-3">Verification</th>
               <th className="p-3">Attendance</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-white/5">
             {paginated.length === 0 ? (
               <tr>
-                <td colSpan={8} className="p-8 text-center text-xs text-white/40">
+                <td colSpan={9} className="p-8 text-center text-xs text-white/40">
                   No matching participants found
                 </td>
               </tr>
@@ -193,6 +196,7 @@ export const AttendanceTable: React.FC<AttendanceTableProps> = ({
                 <AttendanceRow
                   key={p.participantId}
                   participant={p}
+                  locked={p.verificationStatus !== 'Verified'}
                   isSaving={!!savingIds[p.participantId]}
                   onMarkPresent={onMarkPresent}
                   onMarkAbsent={onMarkAbsent}

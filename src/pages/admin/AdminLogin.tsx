@@ -1,15 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Sparkles, Lock, Eye, EyeOff, Loader2, AlertCircle, ShieldCheck, Mail, ArrowLeft } from 'lucide-react';
+import { Sparkles, Lock, Eye, EyeOff, Loader2, AlertCircle, ShieldCheck, Mail, ArrowLeft, CheckCircle2 } from 'lucide-react';
 import { useRBAC } from '../../rbac/context/RBACContext';
 import { api } from '../../services/api';
 import { signOut } from '../../services/authService';
-import { ADMIN_PORTAL_ROLES } from '../../rbac/constants';
+import { ADMIN_PORTAL_ROLES, REGISTRATION_TEAM_ROLE } from '../../rbac/constants';
 import type { UserRole } from '../../rbac/types';
 
 function dashboardPathFor(role: string): string {
-  return role === 'Super Admin' ? '/admin/dashboard' : '/coordinator/dashboard';
+  if (role === 'Super Admin') return '/admin/dashboard';
+  if (role === REGISTRATION_TEAM_ROLE) return '/registration-team/dashboard';
+  return '/coordinator/dashboard';
 }
 
 export const AdminLogin: React.FC = () => {
@@ -21,6 +23,10 @@ export const AdminLogin: React.FC = () => {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [passwordChanged, setPasswordChanged] = useState(() => {
+    const state = (location.state as { passwordChanged?: boolean }) || {};
+    return !!state.passwordChanged;
+  });
   const [error, setError] = useState(() => {
     const state = (location.state as { unauthorized?: boolean }) || {};
     return state.unauthorized
@@ -36,6 +42,11 @@ export const AdminLogin: React.FC = () => {
         if (location.pathname !== target && location.pathname !== '/create-password') {
           navigate(target, { replace: true });
         }
+      } else if (role === REGISTRATION_TEAM_ROLE) {
+        const target = dashboardPathFor(role);
+        if (location.pathname !== target && location.pathname !== '/create-password') {
+          navigate(target, { replace: true });
+        }
       } else {
         setError('Unauthorized Access. This portal is restricted to authorized staff only.');
       }
@@ -45,6 +56,7 @@ export const AdminLogin: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setPasswordChanged(false);
 
     const trimmedEmail = email.trim();
     const trimmedPassword = password.trim();
@@ -62,10 +74,10 @@ export const AdminLogin: React.FC = () => {
       const result = await api.employeeLogin(trimmedEmail, trimmedPassword);
       const userRole = result.user.role as UserRole;
 
-      if (!ADMIN_PORTAL_ROLES.includes(userRole)) {
+      if (!ADMIN_PORTAL_ROLES.includes(userRole) && userRole !== REGISTRATION_TEAM_ROLE) {
         await signOut();
         setPassword('');
-        setError('Unauthorized Access. Only Super Admin and Event Coordinators may access this portal.');
+        setError('Unauthorized Access. Only Super Admin, Event Coordinators and Registration Team members may access this portal.');
         return;
       }
 
@@ -133,7 +145,7 @@ export const AdminLogin: React.FC = () => {
         </div>
 
         <div className="flex flex-wrap gap-1.5 mb-5">
-          {['Super Admin', 'Event Coordinator (Student)', 'Event Coordinator (Faculty)'].map((label) => (
+          {['Super Admin', 'Event Coordinator (Student)', 'Event Coordinator (Faculty)', 'Registration Team'].map((label) => (
             <span key={label} className="px-2 py-0.5 rounded-md bg-violet-500/10 border border-violet-500/20 text-[9px] text-violet-300/70 font-medium">
               {label}
             </span>
@@ -141,6 +153,17 @@ export const AdminLogin: React.FC = () => {
         </div>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          {passwordChanged && (
+            <motion.div
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-xs"
+            >
+              <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" />
+              <span>Password changed! Please log in with your new password.</span>
+            </motion.div>
+          )}
+
           <div className="flex flex-col gap-1.5">
             <label className="text-[10px] font-bold text-white/50 uppercase tracking-wider">
               Email Address

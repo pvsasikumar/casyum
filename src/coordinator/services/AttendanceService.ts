@@ -14,7 +14,7 @@ import {
   subscribeAttendanceByEvent,
   attendanceDocId,
 } from '../../services/attendanceService';
-import { ParticipantService } from './ParticipantService';
+import { ParticipantService, type ParticipantVerificationInfo } from './ParticipantService';
 
 export type AttendanceStatusValue = 'Present' | 'Absent' | 'Not Marked';
 
@@ -75,17 +75,26 @@ export const AttendanceService = {
   // One-time load used by the dashboard. The attendance page uses the real-time
   // subscriptions below instead.
   async loadEventParticipants(eventId: string): Promise<ParticipantAttendanceView[]> {
-    const [participants, rows] = await Promise.all([
+    const [participants, rows, verificationMap] = await Promise.all([
       ParticipantService.getEventParticipants(eventId),
       listAttendanceByEvent(eventId).catch(() => [] as AttendanceRecordRow[]),
+      ParticipantService.getParticipantVerifications().catch(
+        () => ({} as Record<string, ParticipantVerificationInfo>)
+      ),
     ]);
     const byParticipant = this.latestPerParticipant(rows.map(toRecord));
-    return participants.map((p) => ({
-      ...p,
-      attendanceStatus: byParticipant[p.participantId]
-        ? this.normalizeAttendanceStatus(byParticipant[p.participantId].status)
-        : 'Not Marked',
-    }) as ParticipantAttendanceView);
+    return participants.map((p) => {
+      const verification = verificationMap[p.participantId];
+      return {
+        ...p,
+        ...(verification
+          ? { verificationStatus: verification.verificationStatus, verifiedBy: verification.verifiedBy }
+          : {}),
+        attendanceStatus: byParticipant[p.participantId]
+          ? this.normalizeAttendanceStatus(byParticipant[p.participantId].status)
+          : 'Not Marked',
+      } as ParticipantAttendanceView;
+    });
   },
 
   subscribeRegistrations(
@@ -102,6 +111,15 @@ export const AttendanceService = {
     onError?: (error: Error) => void
   ): () => void {
     return subscribeAttendanceByEvent(eventId, (rows) => onNext(rows.map(toRecord)), onError);
+  },
+
+  // Realtime map of participant verification status used to lock attendance
+  // until the participant is verified at the Registration Desk.
+  subscribeVerifications(
+    onNext: (byId: Record<string, ParticipantVerificationInfo>) => void,
+    onError?: (error: Error) => void
+  ): () => void {
+    return ParticipantService.subscribeParticipantVerifications(onNext, onError);
   },
 
   // Single-record write. The UI drives optimistic state and calls this in the

@@ -6,6 +6,7 @@ export type UserRole =
   | 'Event Coordinator (Student)'
   | 'Event Coordinator (Faculty)'
   | 'Registration Manager'
+  | 'Registration Team'
   | 'Certificate Manager'
   | 'Finance Manager'
   | 'Participant';
@@ -26,6 +27,8 @@ export type PermissionDomain =
   | 'admins'
   | 'employees'
   | 'coordinators'
+  | 'registration_team'
+  | 'verification'
   | 'announcements'
   | 'gallery'
   | 'activity_logs'

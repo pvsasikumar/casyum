@@ -21,6 +21,7 @@ import {
 import { useRBAC } from '../rbac/context/RBACContext';
 import { api } from '../services/api';
 import { EventOverviewCms } from '../components/cms/EventOverviewCms';
+import { ParticipantQRCard } from './ParticipantQRCard';
 
 const YEARS = ['1st Year', '2nd Year', '3rd Year', '4th Year', 'Other'];
 
@@ -244,6 +245,14 @@ export const ParticipantDashboard: React.FC = () => {
                   <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-300">Profile Completed</span>
                 </div>
               </div>
+
+              <ParticipantQRCard
+                participantId={participant.participant_id || participant.id}
+                participantName={participant.full_name}
+                verificationStatus={participant.verificationStatus || 'Pending'}
+                verifiedBy={participant.verifiedBy}
+                verifiedAt={participant.verifiedAt}
+              />
 
               {openEvents.length === 0 ? (
                 <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-10 text-center text-white/40 text-sm">

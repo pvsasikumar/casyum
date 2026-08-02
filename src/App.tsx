@@ -11,6 +11,7 @@ import { ParticipantDashboard } from './participant/ParticipantDashboard';
 import { EventDetailsPage } from './components/events/EventDetailsPage';
 import { AdminDashboard } from './admin/AdminDashboard';
 import { CoordinatorApp } from './coordinator/CoordinatorApp';
+import { RegistrationTeamApp } from './registration-team/RegistrationTeamApp';
 import { AdminLogin } from './pages/admin/AdminLogin';
 import { AdminRoute } from './rbac/components/AdminRoute';
 import { CreatePassword } from './pages/auth/CreatePassword';
@@ -18,7 +19,7 @@ import { ForgotPassword } from './pages/auth/ForgotPassword';
 import { ResetPassword } from './pages/auth/ResetPassword';
 import { LogIn, Loader2, AlertCircle, X } from 'lucide-react';
 import { useRBAC } from './rbac/context/RBACContext';
-import { SUPER_ADMIN_ROLE, COORDINATOR_PORTAL_ROLES } from './rbac/constants';
+import { SUPER_ADMIN_ROLE, COORDINATOR_PORTAL_ROLES, REGISTRATION_TEAM_PORTAL_ROLES } from './rbac/constants';
 import { useGoogleParticipantLogin } from './hooks/useGoogleParticipantLogin';
 
 function PublicSite() {
@@ -209,6 +210,15 @@ export default function App() {
         element={
           <AdminRoute roles={COORDINATOR_PORTAL_ROLES}>
             <CoordinatorApp />
+          </AdminRoute>
+        }
+      />
+
+      <Route
+        path="/registration-team/*"
+        element={
+          <AdminRoute roles={REGISTRATION_TEAM_PORTAL_ROLES}>
+            <RegistrationTeamApp />
           </AdminRoute>
         }
       />

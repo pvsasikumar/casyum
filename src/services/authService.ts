@@ -77,6 +77,9 @@ export interface UserRecord {
   role: string;
   status: string;
   is_first_login: boolean;
+  mustChangePassword?: boolean;
+  passwordStatus?: string;
+  passwordChangedAt?: string | null;
   coordinator_type?: string;
   notes?: string;
   password_changed_at: string | null;
@@ -110,6 +113,11 @@ export interface ParticipantRecord {
   payment_uploaded_time?: string;
   payment_remarks?: string;
   event_ids: string[];
+  verificationStatus?: string;
+  verifiedBy?: string;
+  verifiedByUserId?: string;
+  verifiedAt?: string;
+  verificationRemarks?: string;
 }
 
 export function mapFirebaseAuthError(err: unknown): string {
@@ -219,7 +227,7 @@ export async function employeeLogin(email: string, password: string): Promise<Lo
       coordinator_id: record.coordinator_id || record.user_id,
       coordinator_type: record.coordinator_type,
     },
-    is_first_login: record.is_first_login === true,
+    is_first_login: record.is_first_login === true || record.mustChangePassword === true,
   };
 }
 
@@ -359,6 +367,9 @@ export async function changePassword(
   });
   await updateDoc(doc(getDb(), 'users', user.uid), {
     is_first_login: false,
+    mustChangePassword: false,
+    passwordStatus: 'updated',
+    passwordChangedAt: now(),
     password_changed_at: now(),
     updated_at: now(),
   });
@@ -405,7 +416,7 @@ export async function verifyToken(): Promise<VerifyResult> {
         role: staff.role,
         email: staff.email,
       },
-      is_first_login: staff.is_first_login === true,
+      is_first_login: staff.is_first_login === true || staff.mustChangePassword === true,
     };
   }
 

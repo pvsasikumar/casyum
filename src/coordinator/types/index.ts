@@ -20,6 +20,8 @@ export interface EventAttendanceStats {
   remainingSeats?: number;
 }
 
+export type VerificationStatus = 'Pending' | 'Verified' | 'Rejected';
+
 export interface EventParticipant {
   registrationId: string;
   participantId: string;
@@ -30,6 +32,8 @@ export interface EventParticipant {
   email: string;
   registrationStatus: string;
   paymentStatus: string;
+  verificationStatus: VerificationStatus;
+  verifiedBy?: string;
 }
 
 export interface ParticipantAttendanceView extends EventParticipant {

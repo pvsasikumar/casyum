@@ -8,6 +8,7 @@ export const ALL_ROLES: UserRole[] = [
   'Event Coordinator (Student)',
   'Event Coordinator (Faculty)',
   'Registration Manager',
+  'Registration Team',
   'Certificate Manager',
   'Finance Manager',
 ];
@@ -20,12 +21,15 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   'Event Coordinator (Student)': 'Event Coordinator (Student)',
   'Event Coordinator (Faculty)': 'Event Coordinator (Faculty)',
   'Registration Manager': 'Registration Manager',
+  'Registration Team': 'Registration Team',
   'Certificate Manager': 'Certificate Manager',
   'Finance Manager': 'Finance Manager',
   'Participant': 'Participant',
 };
 
 export const SUPER_ADMIN_ROLE: UserRole = 'Super Admin';
+
+export const REGISTRATION_TEAM_ROLE: UserRole = 'Registration Team';
 
 export const ADMIN_PORTAL_ROLES: UserRole[] = [
   'Super Admin',
@@ -38,6 +42,13 @@ export const COORDINATOR_PORTAL_ROLES: UserRole[] = [
   'Event Coordinator (Faculty)',
 ];
 
+export const REGISTRATION_TEAM_PORTAL_ROLES: UserRole[] = ['Registration Team'];
+
+export const STAFF_PORTAL_ROLES: UserRole[] = [
+  ...ADMIN_PORTAL_ROLES,
+  ...REGISTRATION_TEAM_PORTAL_ROLES,
+];
+
 export const ROLE_HIERARCHY: Record<UserRole, number> = {
   'Super Admin': 0,
   'Admin': 1,
@@ -46,6 +57,7 @@ export const ROLE_HIERARCHY: Record<UserRole, number> = {
   'Event Coordinator (Student)': 2,
   'Event Coordinator (Faculty)': 2,
   'Registration Manager': 3,
+  'Registration Team': 3,
   'Certificate Manager': 4,
   'Finance Manager': 5,
   'Participant': 6,
@@ -76,6 +88,8 @@ export const ROLE_PERMISSIONS: RolePermission[] = [
       ...all('admins'),
       ...all('employees'),
       ...all('coordinators'),
+      ...all('registration_team'),
+      ...all('verification'),
       ...all('announcements'),
       ...all('gallery'),
       ...all('activity_logs'),
@@ -144,6 +158,24 @@ export const ROLE_PERMISSIONS: RolePermission[] = [
       'payments.verify',
       'participants.view',
       'participants.edit',
+      'reports.view',
+      'reports.export',
+      'export.view',
+      'export.export',
+      'profile.view',
+      'profile.edit',
+    ],
+  },
+  {
+    role: 'Registration Team',
+    permissions: [
+      'dashboard.view',
+      'participants.view',
+      'participants.edit',
+      'registrations.view',
+      'verification.view',
+      'verification.edit',
+      'verification.create',
       'reports.view',
       'reports.export',
       'export.view',

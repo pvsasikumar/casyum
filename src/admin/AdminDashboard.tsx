@@ -22,6 +22,7 @@ import { AnnouncementCenter } from './components/modules/AnnouncementCenter';
 import { GalleryManagement } from './components/modules/GalleryManagement';
 import { CertificateManagement } from './components/modules/CertificateManagement';
 import { CoordinatorManagement } from './components/modules/CoordinatorManagement';
+import { RegistrationTeamManagement } from './components/modules/RegistrationTeamManagement';
 import { ParticipantsModule } from './components/modules/ParticipantsModule';
 import { SettingsModule } from './components/modules/SettingsModule';
 import { AuditLogs } from './components/modules/AuditLogs';
@@ -61,6 +62,8 @@ const ModuleRouter: React.FC = () => {
       return <CertificateManagement />;
     case 'Coordinators':
       return <CoordinatorManagement />;
+    case 'Registration Team':
+      return <RegistrationTeamManagement />;
     case 'Participants':
       return <ParticipantsModule />;
     case 'Settings':

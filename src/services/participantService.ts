@@ -51,6 +51,11 @@ function mapParticipantRow(
     payment_uploaded_time: record.payment_uploaded_time || '',
     payment_remarks: record.payment_remarks || '',
     event_ids: record.event_ids || [],
+    verificationStatus: record.verificationStatus || 'Pending',
+    verifiedBy: record.verifiedBy || '',
+    verifiedByUserId: record.verifiedByUserId || '',
+    verifiedAt: record.verifiedAt || '',
+    verificationRemarks: record.verificationRemarks || '',
     registered_events: regs.map((r) => ({
       registration_id: r.registration_id,
       event_id: r.event_id,
