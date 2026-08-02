@@ -62,7 +62,8 @@ const participantApi = {
   me: () => participantService.me(),
   completeProfile: (data: any) => participantService.completeProfile(data),
   myEvents: () => participantService.myEvents(),
-  registerEvent: (eventId: string | number) => participantService.registerEvent(eventId),
+  registerEvent: (eventId: string | number, payment?: import('./participantService').RegisterPaymentInput) =>
+    participantService.registerEvent(eventId, payment),
   register: (data: any) => participantService.register(data),
   list: (params?: { search?: string; status?: string }) => participantService.list(params),
   get: (id: string | number) => participantService.get(id),

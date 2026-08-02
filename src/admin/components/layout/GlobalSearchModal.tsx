@@ -42,6 +42,7 @@ export const GlobalSearchModal: React.FC = () => {
           p.mobile.includes(q) ||
           p.registerNumber.toLowerCase().includes(q) ||
           p.college.toLowerCase().includes(q) ||
+          p.city.toLowerCase().includes(q) ||
           p.transactionId.toLowerCase().includes(q)
       )
     : [];
@@ -123,7 +124,7 @@ export const GlobalSearchModal: React.FC = () => {
                               {p.name}
                             </span>
                             <span className="text-[10px] text-white/50">
-                              {p.college} · {p.email}
+                              {p.college} · {p.city} · {p.email}
                             </span>
                           </div>
                         </div>

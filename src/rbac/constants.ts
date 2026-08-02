@@ -11,6 +11,7 @@ export const ALL_ROLES: UserRole[] = [
   'Registration Team',
   'Certificate Manager',
   'Finance Manager',
+  'casyum_faculty_manager',
 ];
 
 export const ROLE_LABELS: Record<UserRole, string> = {
@@ -25,11 +26,14 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   'Certificate Manager': 'Certificate Manager',
   'Finance Manager': 'Finance Manager',
   'Participant': 'Participant',
+  'casyum_faculty_manager': 'CASYUM Faculty Manager',
 };
 
 export const SUPER_ADMIN_ROLE: UserRole = 'Super Admin';
 
 export const REGISTRATION_TEAM_ROLE: UserRole = 'Registration Team';
+
+export const CASYUM_FACULTY_MANAGER_ROLE: UserRole = 'casyum_faculty_manager';
 
 export const ADMIN_PORTAL_ROLES: UserRole[] = [
   'Super Admin',
@@ -44,9 +48,12 @@ export const COORDINATOR_PORTAL_ROLES: UserRole[] = [
 
 export const REGISTRATION_TEAM_PORTAL_ROLES: UserRole[] = ['Registration Team'];
 
+export const CASYUM_FACULTY_PORTAL_ROLES: UserRole[] = [CASYUM_FACULTY_MANAGER_ROLE];
+
 export const STAFF_PORTAL_ROLES: UserRole[] = [
   ...ADMIN_PORTAL_ROLES,
   ...REGISTRATION_TEAM_PORTAL_ROLES,
+  ...CASYUM_FACULTY_PORTAL_ROLES,
 ];
 
 export const ROLE_HIERARCHY: Record<UserRole, number> = {
@@ -61,6 +68,7 @@ export const ROLE_HIERARCHY: Record<UserRole, number> = {
   'Certificate Manager': 4,
   'Finance Manager': 5,
   'Participant': 6,
+  'casyum_faculty_manager': 2,
 };
 
 const all = (domain: PermissionDomain): Permission[] => [
@@ -89,6 +97,7 @@ export const ROLE_PERMISSIONS: RolePermission[] = [
       ...all('employees'),
       ...all('coordinators'),
       ...all('registration_team'),
+      ...all('casyum_faculty_managers'),
       ...all('verification'),
       ...all('announcements'),
       ...all('gallery'),
@@ -259,6 +268,28 @@ export const ROLE_PERMISSIONS: RolePermission[] = [
       'attendance.create',
       'attendance.edit',
       'reports.view',
+      'profile.view',
+      'profile.edit',
+    ],
+  },
+  {
+    role: 'casyum_faculty_manager',
+    permissions: [
+      'dashboard.view',
+      'events.view',
+      'participants.view',
+      'registrations.view',
+      'registrations.approve',
+      'registrations.reject',
+      'payments.view',
+      'payments.verify',
+      'payments.reject',
+      'verification.view',
+      'attendance.view',
+      'reports.view',
+      'reports.export',
+      'export.view',
+      'export.export',
       'profile.view',
       'profile.edit',
     ],

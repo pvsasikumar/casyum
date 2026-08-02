@@ -23,6 +23,7 @@ import { GalleryManagement } from './components/modules/GalleryManagement';
 import { CertificateManagement } from './components/modules/CertificateManagement';
 import { CoordinatorManagement } from './components/modules/CoordinatorManagement';
 import { RegistrationTeamManagement } from './components/modules/RegistrationTeamManagement';
+import { CasyumFacultyManagerManagement } from './components/modules/CasyumFacultyManagerManagement';
 import { ParticipantsModule } from './components/modules/ParticipantsModule';
 import { SettingsModule } from './components/modules/SettingsModule';
 import { AuditLogs } from './components/modules/AuditLogs';
@@ -64,6 +65,8 @@ const ModuleRouter: React.FC = () => {
       return <CoordinatorManagement />;
     case 'Registration Team':
       return <RegistrationTeamManagement />;
+    case 'CASYUM Faculty Managers':
+      return <CasyumFacultyManagerManagement />;
     case 'Participants':
       return <ParticipantsModule />;
     case 'Settings':

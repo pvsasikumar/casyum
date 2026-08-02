@@ -14,7 +14,6 @@ import {
   ShieldAlert,
 } from 'lucide-react';
 import { useAdmin } from '../../context/AdminContext';
-import type { PaymentStatus } from '../../types';
 import { ParticipantDrawer } from './ParticipantDrawer';
 import { exportToCSV } from '../../utils/exportUtils';
 
@@ -40,24 +39,19 @@ export const RegistrationManagement: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [showAddModal, setShowAddModal] = useState(false);
 
-  // Form state for manual registration modal
+  // Form state for manual registration modal (payment data is not fabricated:
+  // payments are captured and reviewed through the per-event payment flow).
   const [newParticipant, setNewParticipant] = useState({
     name: '',
     college: 'SRM Institute of Science and Technology',
+    city: '',
     department: 'Department of Computer Applications',
     year: '1st Year',
     registerNumber: '',
     mobile: '',
     email: '',
     gender: 'Male' as const,
-    studentId: '',
     registeredEvents: ['evt-1'],
-    paymentStatus: 'Approved' as PaymentStatus,
-    paymentScreenshotUrl: 'https://images.unsplash.com/photo-1559526324-4b87b5e36e44?auto=format&fit=crop&w=600&q=80',
-    transactionId: `UPI/${Math.floor(100000000000 + Math.random() * 900000000000)}`,
-    paymentAmount: 350,
-    paymentUploadedTime: new Date().toLocaleString(),
-    photo: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80',
   });
 
   const pageSize = 8;
@@ -77,6 +71,7 @@ export const RegistrationManagement: React.FC = () => {
           p.mobile.includes(search) ||
           p.registerNumber.toLowerCase().includes(search.toLowerCase()) ||
           p.college.toLowerCase().includes(search.toLowerCase()) ||
+          p.city.toLowerCase().includes(search.toLowerCase()) ||
           p.transactionId.toLowerCase().includes(search.toLowerCase());
 
         const matchesStatus = statusFilter === 'All' || p.paymentStatus === statusFilter;
@@ -123,6 +118,7 @@ export const RegistrationManagement: React.FC = () => {
       ID: p.id,
       Name: p.name,
       College: p.college,
+      City: p.city,
       Department: p.department,
       Year: p.year,
       RegNo: p.registerNumber,
@@ -346,6 +342,7 @@ export const RegistrationManagement: React.FC = () => {
                         <div className="flex flex-col">
                           <span className="font-semibold text-white/90 truncate max-w-[160px]">{p.college}</span>
                           <span className="text-[10px] text-white/40">{p.department} ({p.year})</span>
+                          <span className="text-[10px] text-white/40">{p.city || '—'}</span>
                         </div>
                       </td>
                       <td className="p-4">
@@ -484,6 +481,14 @@ export const RegistrationManagement: React.FC = () => {
                   className="p-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder-white/40 focus:outline-none"
                 />
               </div>
+              <input
+                type="text"
+                required
+                placeholder="City"
+                value={newParticipant.city}
+                onChange={(e) => setNewParticipant({ ...newParticipant, city: e.target.value })}
+                className="p-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder-white/40 focus:outline-none"
+              />
               <div className="grid grid-cols-2 gap-3">
                 <input
                   type="text"

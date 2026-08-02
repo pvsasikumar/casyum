@@ -52,6 +52,7 @@ export const ReportsPage: React.FC = () => {
           p.full_name.toLowerCase().includes(term) ||
           p.email.toLowerCase().includes(term) ||
           p.phone.toLowerCase().includes(term) ||
+          p.city.toLowerCase().includes(term) ||
           p.register_number.toLowerCase().includes(term) ||
           p.id.toLowerCase().includes(term);
         return matchesFilter && matchesSearch;
@@ -70,6 +71,7 @@ export const ReportsPage: React.FC = () => {
       'Email': p.email,
       'Phone': p.phone,
       'College': p.college,
+      'City': p.city,
       'Department': p.department,
       'Register Number': p.register_number,
       'Payment Status': p.payment_status,
@@ -83,11 +85,12 @@ export const ReportsPage: React.FC = () => {
   const handleExportPrint = () => {
     exportToPrintableReport(
       'CASYUM Verification Report',
-      ['ID', 'Name', 'College', 'Register No', 'Status', 'Verified By', 'Verified At'],
+      ['ID', 'Name', 'College', 'City', 'Register No', 'Status', 'Verified By', 'Verified At'],
       filtered.map((p) => [
         p.participant_id,
         p.full_name,
         p.college || 'N/A',
+        p.city || 'N/A',
         p.register_number || '',
         p.verificationStatus,
         p.verifiedBy || '',
@@ -188,6 +191,7 @@ export const ReportsPage: React.FC = () => {
                   <th className="px-5 py-3 font-bold">Participant</th>
                   <th className="px-5 py-3 font-bold">Register No.</th>
                   <th className="px-5 py-3 font-bold">College</th>
+                  <th className="px-5 py-3 font-bold">City</th>
                   <th className="px-5 py-3 font-bold">Payment</th>
                   <th className="px-5 py-3 font-bold">Status</th>
                   <th className="px-5 py-3 font-bold">Verified By</th>
@@ -197,7 +201,7 @@ export const ReportsPage: React.FC = () => {
               <tbody>
                 {filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-5 py-10 text-center text-xs text-white/40">
+                    <td colSpan={8} className="px-5 py-10 text-center text-xs text-white/40">
                       No participants match the current filters.
                     </td>
                   </tr>
@@ -212,6 +216,7 @@ export const ReportsPage: React.FC = () => {
                       </td>
                       <td className="px-5 py-3 text-xs text-white/60">{p.register_number || '—'}</td>
                       <td className="px-5 py-3 text-xs text-white/60">{p.college || '—'}</td>
+                      <td className="px-5 py-3 text-xs text-white/60">{p.city || '—'}</td>
                       <td className="px-5 py-3">
                         <span className={`text-[10px] font-bold ${p.payment_status === 'Approved' ? 'text-emerald-400' : p.payment_status === 'Rejected' ? 'text-rose-400' : 'text-amber-400'}`}>
                           {p.payment_status}

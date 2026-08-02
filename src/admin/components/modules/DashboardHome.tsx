@@ -48,6 +48,13 @@ export const DashboardHome: React.FC = () => {
   });
   const topDepts = Object.entries(departmentCounts).sort((a, b) => b[1] - a[1]).slice(0, 5);
 
+  const cityCounts: Record<string, number> = {};
+  participants.forEach((p) => {
+    const city = p.city || 'Other';
+    cityCounts[city] = (cityCounts[city] || 0) + 1;
+  });
+  const topCities = Object.entries(cityCounts).sort((a, b) => b[1] - a[1]).slice(0, 5);
+
   const statCards = [
     { label: 'Total Events', value: totalEvents, icon: Calendar, color: 'from-violet-500 to-purple-600', textColor: 'text-violet-400', bgColor: 'bg-violet-500/10', borderColor: 'border-violet-500/20', trend: '+3 this month' },
     { label: 'Active Events', value: activeEvents, icon: Calendar, color: 'from-emerald-500 to-teal-600', textColor: 'text-emerald-400', bgColor: 'bg-emerald-500/10', borderColor: 'border-emerald-500/20', trend: 'Registration open' },
@@ -261,6 +268,19 @@ export const DashboardHome: React.FC = () => {
               <div key={dept} className="flex items-center justify-between text-xs">
                 <span className="text-white/80 truncate max-w-[180px]">{dept}</span>
                 <span className="font-mono font-bold text-cyan-300 px-2 py-0.5 rounded bg-cyan-500/10 border border-cyan-500/20">{count}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Top Cities */}
+        <div className="p-5 rounded-3xl bg-zinc-950/60 border border-white/10 backdrop-blur-md">
+          <h3 className="text-xs font-bold text-white uppercase tracking-wider mb-4">Top Cities</h3>
+          <div className="flex flex-col gap-3">
+            {topCities.map(([city, count]) => (
+              <div key={city} className="flex items-center justify-between text-xs">
+                <span className="text-white/80 truncate max-w-[180px]">{city}</span>
+                <span className="font-mono font-bold text-fuchsia-300 px-2 py-0.5 rounded bg-fuchsia-500/10 border border-fuchsia-500/20">{count}</span>
               </div>
             ))}
           </div>

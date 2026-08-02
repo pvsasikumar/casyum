@@ -61,6 +61,7 @@ export const ParticipantTable: React.FC<ParticipantTableProps> = ({
           !p.name.toLowerCase().includes(q) &&
           !p.email.toLowerCase().includes(q) &&
           !p.id.toLowerCase().includes(q) &&
+          !p.city.toLowerCase().includes(q) &&
           !p.mobile.includes(q)
         )
           return false;
@@ -326,6 +327,7 @@ export const ParticipantTable: React.FC<ParticipantTableProps> = ({
                   <th className="p-4 whitespace-nowrap">Email</th>
                   <th className="p-4 whitespace-nowrap">Phone Number</th>
                   <th className="p-4 whitespace-nowrap">College</th>
+                  <th className="p-4 whitespace-nowrap">City</th>
                   <th className="p-4 whitespace-nowrap">Department</th>
                   <th className="p-4 whitespace-nowrap">Year</th>
                   <th className="p-4 whitespace-nowrap">Gender</th>
@@ -343,6 +345,7 @@ export const ParticipantTable: React.FC<ParticipantTableProps> = ({
                     <td className="p-4 text-white/60 whitespace-nowrap">{p.email}</td>
                     <td className="p-4 text-white/60 whitespace-nowrap font-mono text-[10px]">{p.mobile}</td>
                     <td className="p-4 text-white/70 whitespace-nowrap max-w-[150px] truncate">{p.college}</td>
+                    <td className="p-4 text-white/70 whitespace-nowrap">{p.city || '—'}</td>
                     <td className="p-4 text-white/70 whitespace-nowrap">{p.department}</td>
                     <td className="p-4 text-white/60 whitespace-nowrap">{p.year}</td>
                     <td className="p-4 whitespace-nowrap">{p.gender}</td>

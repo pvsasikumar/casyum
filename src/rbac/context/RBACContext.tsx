@@ -168,6 +168,7 @@ export const RBACProvider: React.FC<{ children: React.ReactNode }> = ({ children
     'Certificate Manager': 4,
     'Finance Manager': 5,
     'Participant': 6,
+    'casyum_faculty_manager': 2,
   };
 
   const isAtLeast = useCallback(

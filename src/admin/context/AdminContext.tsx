@@ -87,6 +87,7 @@ interface AdminContextType {
   toasts: ToastData[];
   addToast: (title: string, message: string, type: ToastData['type'], duration?: number) => void;
   dismissToast: (id: string) => void;
+  pushNotification: (title: string, message: string, type: 'info' | 'success' | 'warning' | 'error') => void;
 
   // Email Logs
   emailLogs: EmailLog[];
@@ -123,7 +124,17 @@ interface AdminContextType {
   // Actions
   approvePayment: (id: string, remarks?: string) => void;
   rejectPayment: (id: string, remarks: string) => void;
-  addRegistration: (p: Omit<Participant, 'id' | 'registrationDate'>) => void;
+  addRegistration: (p: {
+    name: string;
+    email: string;
+    mobile: string;
+    college: string;
+    city: string;
+    department: string;
+    year: string;
+    gender: 'Male' | 'Female' | 'Other';
+    registeredEvents: string[];
+  }) => void;
   updateRegistration: (p: Participant) => void;
   deleteParticipant: (id: string) => void;
   bulkDeleteParticipants: (ids: string[]) => void;
@@ -249,6 +260,7 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       name: row.full_name || '',
       photo: row.photo || DEFAULT_PARTICIPANT_PHOTO,
       college: row.college || '',
+      city: row.city || '',
       department: row.department || '',
       year: row.year_of_study || '',
       registerNumber: row.register_number || '',
@@ -626,7 +638,17 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     pushNotification('Payment Rejected', `Payment for ${p?.name} was rejected: ${remarks}`, 'error');
   };
 
-  const addRegistration = async (data: Omit<Participant, 'id' | 'registrationDate'>) => {
+  const addRegistration = async (data: {
+    name: string;
+    email: string;
+    mobile: string;
+    college: string;
+    city: string;
+    department: string;
+    year: string;
+    gender: 'Male' | 'Female' | 'Other';
+    registeredEvents: string[];
+  }) => {
     const eventIds = (data.registeredEvents || [])
       .map((e) => {
         const str = String(e);
@@ -642,6 +664,7 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       email: data.email,
       phone: data.mobile,
       college: data.college,
+      city: data.city,
       department: data.department,
       year_of_study: data.year,
       gender: data.gender,
@@ -871,6 +894,7 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         deleteGalleryMedia,
         updateSettings,
         logAction,
+        pushNotification,
         markNotificationRead,
         clearNotifications,
       }}

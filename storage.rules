@@ -33,6 +33,28 @@ service firebase.storage {
       return isSignedIn() && eventId in getUserData().assigned_event_ids;
     }
 
+    // Roles that review and verify participant payments (Faculty Manager).
+    function isPaymentReviewer() {
+      return getUserRole() in [
+        'Super Admin',
+        'Admin',
+        'Registration Manager',
+        'Finance Manager'
+      ];
+    }
+
+    // Payment proofs: participants upload to their own folder and may read
+    // their own files. Admins and payment reviewers can read them to verify.
+    // Writes are restricted to the owning participant.
+    match /payment-proofs/{participantId}/{eventId}/{registrationId}/{fileName} {
+      allow read: if isSignedIn() && (
+        isAdmin()
+        || isPaymentReviewer()
+        || request.auth.uid == participantId
+      );
+      allow write: if isSignedIn() && request.auth.uid == participantId;
+    }
+
     // Structured event images: events/{eventId}/{hero|logo|about|gallery|...}/{file}
     // Publicly readable. Only admins and the coordinator assigned to that event
     // may upload, replace, or delete files inside their own event folder.

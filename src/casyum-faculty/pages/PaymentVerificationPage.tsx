@@ -10,21 +10,22 @@ import {
   X,
   Search,
   AlertCircle,
+  History,
 } from 'lucide-react';
+import { verifyPayment, rejectPayment, type PaymentRegistrationRow } from '../../services/registrationService';
 import {
-  subscribePaymentRegistrations,
-  verifyPayment,
-  rejectPayment,
-  type PaymentRegistrationRow,
-} from '../../../services/registrationService';
+  subscribePaymentReviewLogs,
+  writePaymentReviewLog,
+  type PaymentReviewLogEntry,
+} from '../../services/casyumFacultyService';
 import {
   isPaymentProofPdf,
   isPaymentProofImage,
   formatFileSize,
   paymentMethodLabel,
-} from '../../../services/paymentProofService';
-import { useRBAC } from '../../../rbac/context/RBACContext';
-import { useAdmin } from '../../context/AdminContext';
+} from '../../services/paymentProofService';
+import { useRBAC } from '../../rbac/context/RBACContext';
+import { useCasyumFaculty } from '../context/CasyumFacultyContext';
 
 type PaymentFilter = 'submitted' | 'verified' | 'rejected' | 'All';
 
@@ -34,11 +35,15 @@ const STATUS_META: Record<string, { label: string; cls: string }> = {
   rejected: { label: 'Rejected', cls: 'bg-rose-500/20 text-rose-300 border-rose-500/30' },
 };
 
-export const PaymentVerification: React.FC = () => {
+const LOG_ACTION_STYLES: Record<string, string> = {
+  verified: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
+  rejected: 'bg-rose-500/20 text-rose-300 border-rose-500/30',
+  resubmitted: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
+};
+
+export const PaymentVerificationPage: React.FC = () => {
   const rbac = useRBAC();
-  const { logAction, pushNotification } = useAdmin();
-  const [rows, setRows] = useState<PaymentRegistrationRow[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { registrations, registrationsLoading, addToast } = useCasyumFaculty();
   const [filter, setFilter] = useState<PaymentFilter>('submitted');
   const [query, setQuery] = useState('');
   const [proofTarget, setProofTarget] = useState<PaymentRegistrationRow | null>(null);
@@ -46,27 +51,29 @@ export const PaymentVerification: React.FC = () => {
   const [rejectTarget, setRejectTarget] = useState<PaymentRegistrationRow | null>(null);
   const [rejectReason, setRejectReason] = useState('');
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [logs, setLogs] = useState<PaymentReviewLogEntry[]>([]);
+  const [logsLoading, setLogsLoading] = useState(true);
+  const [showLogs, setShowLogs] = useState(false);
 
   const verifier = useMemo(
-    () => ({ userId: rbac.user?.id || '', name: rbac.user?.name || 'Faculty Manager' }),
+    () => ({ userId: rbac.user?.id || '', name: rbac.user?.name || 'CASYUM Faculty Manager' }),
     [rbac.user]
   );
 
   useEffect(() => {
-    setLoading(true);
-    const unsubscribe = subscribePaymentRegistrations(
+    const unsubscribe = subscribePaymentReviewLogs(
       (next) => {
-        setRows(next);
-        setLoading(false);
+        setLogs(next);
+        setLogsLoading(false);
       },
-      () => setLoading(false)
+      () => setLogsLoading(false)
     );
     return unsubscribe;
   }, []);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return rows
+    return registrations
       .filter((r) => {
         if (filter !== 'All' && r.paymentStatus !== filter) return false;
         if (
@@ -84,16 +91,16 @@ export const PaymentVerification: React.FC = () => {
         return true;
       })
       .sort((a, b) => b.registered_at.localeCompare(a.registered_at));
-  }, [rows, filter, query]);
+  }, [registrations, filter, query]);
 
   const counts = useMemo(
     () => ({
-      submitted: rows.filter((r) => r.paymentStatus === 'submitted').length,
-      verified: rows.filter((r) => r.paymentStatus === 'verified').length,
-      rejected: rows.filter((r) => r.paymentStatus === 'rejected').length,
-      total: rows.length,
+      submitted: registrations.filter((r) => r.paymentStatus === 'submitted').length,
+      verified: registrations.filter((r) => r.paymentStatus === 'verified').length,
+      rejected: registrations.filter((r) => r.paymentStatus === 'rejected').length,
+      total: registrations.length,
     }),
-    [rows]
+    [registrations]
   );
 
   const handleVerify = async () => {
@@ -101,12 +108,21 @@ export const PaymentVerification: React.FC = () => {
     setBusyId(verifyTarget.registration_id);
     try {
       const res = await verifyPayment(verifyTarget.registration_id, verifier);
-      logAction('Approved Payment', `Verified payment ₹${verifyTarget.registrationFee} for ${verifyTarget.user_full_name} (${verifyTarget.registration_id})`);
-      pushNotification('Payment Verified', `Payment for ${verifyTarget.user_full_name} has been verified.`, 'success');
+      await writePaymentReviewLog({
+        registration_id: verifyTarget.registration_id,
+        participant_id: verifyTarget.participant_id,
+        participant_name: verifyTarget.user_full_name,
+        event_id: verifyTarget.event_id,
+        event_name: verifyTarget.event_name || verifyTarget.event_id,
+        action: 'verified',
+        reviewer_id: verifier.userId,
+        reviewer_name: verifier.name,
+      });
+      addToast('Payment Verified', `Payment for ${verifyTarget.user_full_name} has been verified.`, 'success');
       setVerifyTarget(null);
       return res.message;
     } catch (err: any) {
-      pushNotification('Error', err?.message || 'Failed to verify payment', 'error');
+      addToast('Error', err?.message || 'Failed to verify payment', 'error');
       throw err;
     } finally {
       setBusyId(null);
@@ -116,18 +132,28 @@ export const PaymentVerification: React.FC = () => {
   const handleReject = async () => {
     if (!rejectTarget) return;
     if (!rejectReason.trim()) {
-      pushNotification('Reason Required', 'Please enter a reason for rejecting this payment.', 'warning');
+      addToast('Reason Required', 'Please enter a reason for rejecting this payment.', 'warning');
       return;
     }
     setBusyId(rejectTarget.registration_id);
     try {
       await rejectPayment(rejectTarget.registration_id, verifier, rejectReason.trim());
-      logAction('Rejected Payment', `Rejected payment for ${rejectTarget.user_full_name} (${rejectTarget.registration_id}): ${rejectReason.trim()}`);
-      pushNotification('Payment Rejected', `Payment for ${rejectTarget.user_full_name} was rejected.`, 'error');
+      await writePaymentReviewLog({
+        registration_id: rejectTarget.registration_id,
+        participant_id: rejectTarget.participant_id,
+        participant_name: rejectTarget.user_full_name,
+        event_id: rejectTarget.event_id,
+        event_name: rejectTarget.event_name || rejectTarget.event_id,
+        action: 'rejected',
+        reviewer_id: verifier.userId,
+        reviewer_name: verifier.name,
+        reason: rejectReason.trim(),
+      });
+      addToast('Payment Rejected', `Payment for ${rejectTarget.user_full_name} was rejected.`, 'error');
       setRejectTarget(null);
       setRejectReason('');
     } catch (err: any) {
-      pushNotification('Error', err?.message || 'Failed to reject payment', 'error');
+      addToast('Error', err?.message || 'Failed to reject payment', 'error');
     } finally {
       setBusyId(null);
     }
@@ -145,35 +171,50 @@ export const PaymentVerification: React.FC = () => {
     document.body.removeChild(a);
   };
 
-  const isPdf = (r: PaymentRegistrationRow) => isPaymentProofPdf(r.paymentProofFileType) || /\.pdf$/i.test(r.paymentProofFileName);
+  const isPdf = (r: PaymentRegistrationRow) =>
+    isPaymentProofPdf(r.paymentProofFileType) || /\.pdf$/i.test(r.paymentProofFileName);
 
   return (
-    <div className="flex flex-col gap-6 select-none pb-12">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex flex-col gap-6 select-none pb-16">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex flex-col">
           <span className="text-xs font-bold text-violet-400 uppercase tracking-widest">
-            Faculty Manager · Payment Review
+            CASYUM Faculty Manager · Payment Review
           </span>
           <h2 className="text-xl sm:text-2xl font-extrabold font-display text-white">
             Payment Verification Queue ({filtered.length})
           </h2>
+          <p className="text-[11px] text-white/50">
+            Only CASYUM Faculty Managers can verify or reject payments.
+          </p>
         </div>
 
-        <div className="flex items-center gap-2 bg-white/5 p-1 rounded-2xl border border-white/10 text-xs">
-          {(['submitted', 'verified', 'rejected', 'All'] as const).map((status) => (
-            <button
-              key={status}
-              onClick={() => setFilter(status)}
-              className={`px-3.5 py-1.5 rounded-xl font-semibold transition-all cursor-pointer ${
-                filter === status
-                  ? 'bg-violet-600 text-white shadow-md'
-                  : 'text-white/60 hover:text-white hover:bg-white/5'
-              }`}
-            >
-              {status === 'All' ? `All (${counts.total})` : `${STATUS_META[status]?.label || status} (${counts[status as 'submitted' | 'verified' | 'rejected'] || 0})`}
-            </button>
-          ))}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowLogs((v) => !v)}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white/70 hover:text-white text-xs font-bold transition-all cursor-pointer"
+          >
+            <History className="w-3.5 h-3.5" />
+            Review Activity
+          </button>
+          <div className="flex items-center gap-2 bg-white/5 p-1 rounded-2xl border border-white/10 text-xs">
+            {(['submitted', 'verified', 'rejected', 'All'] as const).map((status) => (
+              <button
+                key={status}
+                onClick={() => setFilter(status)}
+                className={`px-3.5 py-1.5 rounded-xl font-semibold transition-all cursor-pointer ${
+                  filter === status
+                    ? 'bg-violet-600 text-white shadow-md'
+                    : 'text-white/60 hover:text-white hover:bg-white/5'
+                }`}
+              >
+                {status === 'All'
+                  ? `All (${counts.total})`
+                  : `${STATUS_META[status]?.label || status} (${counts[status as 'submitted' | 'verified' | 'rejected'] || 0})`}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -210,7 +251,7 @@ export const PaymentVerification: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
-              {loading ? (
+              {registrationsLoading ? (
                 <tr>
                   <td colSpan={10} className="p-12 text-center text-xs text-white/40">
                     <Loader2 className="w-5 h-5 animate-spin mx-auto text-violet-400" />
@@ -351,6 +392,51 @@ export const PaymentVerification: React.FC = () => {
           </table>
         </div>
       </div>
+
+      {/* Review Activity Panel */}
+      {showLogs && (
+        <div className="rounded-3xl bg-zinc-950/60 border border-white/10 backdrop-blur-md overflow-hidden">
+          <div className="px-5 py-4 border-b border-white/10 flex items-center justify-between">
+            <div className="flex flex-col">
+              <span className="text-xs font-bold text-white">Payment Review Activity</span>
+              <span className="text-[10px] text-white/40">Every verify / reject / resubmit action by faculty managers</span>
+            </div>
+            <button
+              onClick={() => setShowLogs(false)}
+              className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-white/50 hover:text-white cursor-pointer"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+          <div className="flex flex-col divide-y divide-white/5 max-h-[480px] overflow-y-auto">
+            {logsLoading ? (
+              <div className="flex items-center justify-center gap-2 p-10 text-white/40 text-xs">
+                <Loader2 className="w-4 h-4 animate-spin" /> Loading activity...
+              </div>
+            ) : logs.length === 0 ? (
+              <div className="p-10 text-center text-xs text-white/40">No payment review activity recorded yet.</div>
+            ) : (
+              logs.map((log) => (
+                <div key={log.id} className="px-5 py-3.5 flex flex-col gap-1.5">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold border ${LOG_ACTION_STYLES[log.action] || 'bg-white/10 text-white/70 border-white/15'}`}>
+                      {log.action.charAt(0).toUpperCase() + log.action.slice(1)}
+                    </span>
+                    <span className="text-[9px] text-white/35">{new Date(log.timestamp).toLocaleString()}</span>
+                  </div>
+                  <p className="text-xs text-white/70">
+                    <span className="font-bold text-white">{log.participant_name}</span> · {log.event_name}
+                  </p>
+                  {log.reason && <p className="text-[10px] text-rose-300/80">Reason: {log.reason}</p>}
+                  <p className="text-[10px] text-white/40">
+                    Reviewed by <span className="text-white/60">{log.reviewer_name}</span> · {log.registration_id}
+                  </p>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Proof Viewer Modal */}
       {proofTarget && (

@@ -42,6 +42,7 @@ export interface LoginUser {
   coordinator_id?: string;
   coordinator_type?: string;
   college?: string;
+  city?: string;
   year_of_study?: string;
   profile_picture?: string;
   profile_completed?: number;
@@ -97,6 +98,7 @@ export interface ParticipantRecord {
   email: string;
   phone?: string;
   college?: string;
+  city?: string;
   department?: string;
   year_of_study?: string;
   gender?: string;
@@ -272,6 +274,7 @@ export async function googleLoginPopup(): Promise<LoginResult> {
       phone: record?.phone,
       department: record?.department,
       college: record?.college,
+      city: record?.city,
       year_of_study: record?.year_of_study,
       profile_picture: record?.profile_picture || result.user.photoURL || '',
       profile_completed: record?.profile_completed === true ? 1 : 0,
@@ -316,6 +319,7 @@ export async function googleLogin(credential: string): Promise<LoginResult> {
       phone: record?.phone,
       department: record?.department,
       college: record?.college,
+      city: record?.city,
       year_of_study: record?.year_of_study,
       profile_picture: record?.profile_picture || result.user.photoURL || '',
       profile_completed: record?.profile_completed === true ? 1 : 0,

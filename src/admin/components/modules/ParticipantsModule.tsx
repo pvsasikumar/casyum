@@ -25,7 +25,7 @@ export const ParticipantsModule: React.FC = () => {
 
   const filtered = useMemo(() => {
     return participants.filter((p) => {
-      const matchesSearch = p.name.toLowerCase().includes(search.toLowerCase()) || p.email.toLowerCase().includes(search.toLowerCase()) || p.registerNumber.toLowerCase().includes(search.toLowerCase());
+      const matchesSearch = p.name.toLowerCase().includes(search.toLowerCase()) || p.email.toLowerCase().includes(search.toLowerCase()) || p.registerNumber.toLowerCase().includes(search.toLowerCase()) || p.city.toLowerCase().includes(search.toLowerCase());
       const matchesCollege = collegeFilter === 'All' || p.college === collegeFilter;
       return matchesSearch && matchesCollege;
     });
@@ -39,6 +39,7 @@ export const ParticipantsModule: React.FC = () => {
       ID: p.id,
       Name: p.name,
       College: p.college,
+      City: p.city,
       Department: p.department,
       Year: p.year,
       RegNo: p.registerNumber,
@@ -95,6 +96,7 @@ export const ParticipantsModule: React.FC = () => {
               <tr>
                 <th className="p-4">Participant</th>
                 <th className="p-4">College</th>
+                <th className="p-4">City</th>
                 <th className="p-4">Department</th>
                 <th className="p-4">Year</th>
                 <th className="p-4">Reg No.</th>
@@ -104,7 +106,7 @@ export const ParticipantsModule: React.FC = () => {
             </thead>
             <tbody className="divide-y divide-white/5">
               {paginated.length === 0 ? (
-                <tr><td colSpan={7} className="p-12 text-center text-xs text-white/40">No participants found.</td></tr>
+                <tr><td colSpan={8} className="p-12 text-center text-xs text-white/40">No participants found.</td></tr>
               ) : (
                 paginated.map((p) => (
                   <tr key={p.id} className="hover:bg-violet-500/5 transition-all">
@@ -118,6 +120,7 @@ export const ParticipantsModule: React.FC = () => {
                       </div>
                     </td>
                     <td className="p-4 text-white/80 truncate max-w-[140px]">{p.college}</td>
+                    <td className="p-4 text-white/60">{p.city || '—'}</td>
                     <td className="p-4 text-white/60">{p.department}</td>
                     <td className="p-4 text-white/60">{p.year}</td>
                     <td className="p-4 font-mono text-[11px] text-white/60">{p.registerNumber}</td>

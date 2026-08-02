@@ -47,6 +47,22 @@ export async function listAttendanceByEvent(eventId: string): Promise<Attendance
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as any);
 }
 
+// Firestore real-time listener for all attendance records (CASYUM Faculty
+// Manager overview).
+export function subscribeAllAttendance(
+  onNext: (rows: AttendanceRecordRow[]) => void,
+  onError?: (error: Error) => void
+): () => void {
+  const db = getDb();
+  return onSnapshot(
+    collection(db, 'attendance'),
+    (snapshot: QuerySnapshot<DocumentData>) => {
+      onNext(snapshot.docs.map((d) => ({ id: d.id, ...d.data() }) as any));
+    },
+    onError
+  );
+}
+
 // Firestore real-time listener for a single event's attendance records.
 export function subscribeAttendanceByEvent(
   eventId: string,

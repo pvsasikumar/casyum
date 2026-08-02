@@ -31,6 +31,10 @@ service cloud.firestore {
       return getUserRole() in ['Registration Team'];
     }
 
+    function isCasyumFacultyManager() {
+      return getUserRole() in ['casyum_faculty_manager'];
+    }
+
     function isAssignedEvent(eventId) {
       return isSignedIn() && eventId in getUserData().assigned_event_ids;
     }
@@ -48,12 +52,88 @@ service cloud.firestore {
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly(fields);
     }
 
+    // Roles that review and verify participant payments. Only the CASYUM
+    // Faculty Manager and the Super Admin may approve or reject payments.
+    function isPaymentReviewer() {
+      return getUserRole() in [
+        'Super Admin',
+        'casyum_faculty_manager'
+      ];
+    }
+
+    // The Registration Desk may only verify a participant in person once their
+    // payment has already been verified (or no payment is required).
+    function isPaymentAlreadyVerified() {
+      return resource.data.paymentStatus in ['verified', 'not_required']
+        || resource.data.payment_status in ['verified', 'not_required'];
+    }
+
+    // Fields the Registration Desk may update on a registration after the
+    // participant is verified/rejected in person.
+    function isDeskVerificationUpdate() {
+      return onlyChanges([
+        'registrationVerificationStatus',
+        'registration_verification_status',
+        'registrationVerifiedBy',
+        'registration_verified_by',
+        'registrationVerifiedByName',
+        'registration_verified_by_name',
+        'registrationVerifiedAt',
+        'registration_verified_at',
+        'attendanceEligibility',
+        'attendance_eligibility',
+        'updatedAt',
+        'updated_at'
+      ]);
+    }
+
+    // Fields a participant may update when resubmitting a rejected payment.
+    function isParticipantPaymentUpdate() {
+      return onlyChanges([
+        'paymentMethod',
+        'payment_method',
+        'transactionId',
+        'transaction_id',
+        'transactionIdNormalized',
+        'paymentProofUrl',
+        'payment_screenshot_url',
+        'paymentProofFileName',
+        'payment_proof_file_name',
+        'paymentProofFileType',
+        'payment_proof_file_type',
+        'paymentProofFileSize',
+        'payment_proof_file_size',
+        'paymentProofUploadedAt',
+        'payment_uploaded_time',
+        'paymentStatus',
+        'payment_status',
+        'paymentResubmittedAt',
+        'payment_resubmitted_at',
+        'paymentResubmissionCount',
+        'payment_resubmission_count',
+        'paymentRejectedBy',
+        'payment_rejected_by',
+        'paymentRejectedByName',
+        'payment_rejected_by_name',
+        'paymentRejectedAt',
+        'payment_rejected_at',
+        'paymentRejectionReason',
+        'payment_rejection_reason',
+        'paymentVerifiedBy',
+        'payment_verified_by',
+        'paymentVerifiedByName',
+        'payment_verified_by_name',
+        'paymentVerifiedAt',
+        'payment_verified_at',
+        'updatedAt',
+        'updated_at'
+      ]);
+    }
+
     match /users/{userId} {
       allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
       allow write: if isAdmin();
-    }
-
-    match /events/{eventId} {
+    }    match /events/{eventId} {
       // Public event pages and the public bento grid read the published
       // summary fields stored on the event document. Drafts live in the
       // separate event_drafts collection and are never exposed here.
@@ -80,11 +160,12 @@ service cloud.firestore {
     }
 
     // Participants must be able to read and update their own profile, and
-    // create their own record on first Google sign-in. Registration Desk
-    // staff read participants to verify them and may only touch the
-    // verification fields.
+    // create their own record on first Google sign-in. Profile fields such as
+    // phone, college, city, department and year_of_study are self-serviced by
+    // the participant. Registration Desk staff read participants to verify
+    // them and may only touch the verification fields.
     match /participants/{participantId} {
-      allow read: if isSignedIn() && (isAdmin() || isCoordinator() || isRegistrationTeam() || request.auth.uid == participantId);
+      allow read: if isSignedIn() && (isAdmin() || isCoordinator() || isRegistrationTeam() || isPaymentReviewer() || request.auth.uid == participantId);
       allow create: if isSignedIn() && request.auth.uid == participantId;
       allow update: if isSignedIn() && (
         isAdmin()
@@ -108,10 +189,12 @@ service cloud.firestore {
     }
 
     // Registrations: participants may read and create their own; coordinators
-    // read registrations for their assigned events; admins have full access.
+    // read registrations for their assigned events; admins and payment
+    // reviewers have full access.
     match /registrations/{registrationId} {
       allow read: if isSignedIn() && (
         isAdmin()
+        || isPaymentReviewer()
         || (isCoordinator() && isAssignedEvent(resource.data.event_id))
         || request.auth.uid == resource.data.participant_id
         || request.auth.uid == resource.data.participant_user_id
@@ -119,15 +202,41 @@ service cloud.firestore {
       allow create: if isSignedIn()
         && request.resource.data.participant_id == request.auth.uid
         && request.resource.data.event_id != null;
-      allow update: if isAdmin() || (isCoordinator() && isAssignedEvent(resource.data.event_id));
+      allow update: if isAdmin() || isPaymentReviewer() || (isCoordinator() && isAssignedEvent(resource.data.event_id));
+      allow delete: if isAdmin();
+    }
+
+    // Canonical event registrations with payment details: participants create
+    // and read their own; payment reviewers (Faculty Manager) verify/reject
+    // payments; the Registration Desk marks desk verification; coordinators
+    // read registrations for their assigned events.
+    match /eventRegistrations/{registrationId} {
+      allow read: if isSignedIn() && (
+        isAdmin()
+        || isPaymentReviewer()
+        || (isCoordinator() && isAssignedEvent(resource.data.event_id))
+        || request.auth.uid == resource.data.participant_id
+        || request.auth.uid == resource.data.participant_user_id
+      );
+      allow create: if isSignedIn()
+        && request.resource.data.participant_id == request.auth.uid
+        && request.resource.data.event_id != null;
+      allow update: if isSignedIn() && (
+        isAdmin()
+        || isPaymentReviewer()
+        || (isCoordinator() && isAssignedEvent(resource.data.event_id))
+        || (isRegistrationTeam() && isDeskVerificationUpdate() && isPaymentAlreadyVerified())
+        || (request.auth.uid == resource.data.participant_id && isParticipantPaymentUpdate())
+      );
       allow delete: if isAdmin();
     }
 
     // Attendance: a coordinator can only create/update/delete attendance for
     // their assigned event, and only for participants whose verification is
-    // complete at the Registration Desk. Admins have full access.
+    // complete at the Registration Desk. Admins and payment reviewers have
+    // full read access.
     match /attendance/{attendanceId} {
-      allow read: if isSignedIn() && (isAdmin() || isCoordinator() && isAssignedEvent(resource.data.event_id));
+      allow read: if isSignedIn() && (isAdmin() || isPaymentReviewer() || isCoordinator() && isAssignedEvent(resource.data.event_id));
       allow create: if isSignedIn() && (isAdmin() || (isCoordinator() && isAssignedEvent(request.resource.data.event_id) && isVerifiedParticipant(request.resource.data.participant_id)));
       allow update: if isSignedIn() && (isAdmin() || (isCoordinator() && isAssignedEvent(resource.data.event_id) && isAssignedEvent(request.resource.data.event_id) && isVerifiedParticipant(request.resource.data.participant_id)));
       allow delete: if isSignedIn() && (isAdmin() || isCoordinator() && isAssignedEvent(resource.data.event_id));
@@ -135,18 +244,30 @@ service cloud.firestore {
 
     // Registration Desk verification records and audit logs.
     match /verification_logs/{logId} {
-      allow read: if isSignedIn() && (isAdmin() || isRegistrationTeam());
+      allow read: if isSignedIn() && (isAdmin() || isRegistrationTeam() || isPaymentReviewer());
       allow write: if isAdmin() || isRegistrationTeam();
     }
 
     match /participant_verifications/{recordId} {
-      allow read: if isSignedIn() && (isAdmin() || isRegistrationTeam());
+      allow read: if isSignedIn() && (isAdmin() || isRegistrationTeam() || isPaymentReviewer());
       allow write: if isAdmin() || isRegistrationTeam();
     }
 
     match /registration_team_logs/{logId} {
       allow read: if isSignedIn() && (isAdmin() || isRegistrationTeam());
       allow write: if isAdmin() || isRegistrationTeam();
+    }
+
+    // CASYUM Faculty Manager account logs: only admins may read/write.
+    match /casyum_faculty_logs/{logId} {
+      allow read: if isSignedIn() && isAdmin();
+      allow write: if isSignedIn() && isAdmin();
+    }
+
+    // Payment review audit trail written by the CASYUM Faculty portal.
+    match /payment_verification_logs/{logId} {
+      allow read: if isSignedIn() && (isAdmin() || isPaymentReviewer());
+      allow write: if isSignedIn() && (isAdmin() || isPaymentReviewer());
     }
 
     // Sequence counters are read and incremented when participants register.

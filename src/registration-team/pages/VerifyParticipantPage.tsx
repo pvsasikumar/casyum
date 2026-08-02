@@ -14,6 +14,7 @@ import {
   Mail,
   Phone,
   GraduationCap,
+  MapPin,
   CreditCard,
   IdCard,
   RotateCcw,
@@ -31,6 +32,7 @@ import {
   VERIFICATION_REJECT_REASONS,
   type VerificationParticipantRow,
 } from '../../services/verificationService';
+import { syncRegistrationDeskVerification } from '../../services/registrationService';
 
 const PAGE_SIZE = 10;
 
@@ -41,9 +43,9 @@ const VERIFICATION_BADGE: Record<string, { label: string; cls: string; icon: Rea
 };
 
 const paymentClass = (status: string) =>
-  status === 'Approved'
+  status === 'verified'
     ? 'text-emerald-400'
-    : status === 'Rejected'
+    : status === 'rejected'
       ? 'text-rose-400'
       : 'text-amber-400';
 
@@ -172,6 +174,7 @@ export const VerifyParticipantPage: React.FC = () => {
   const filtered = useMemo(() => {
     const q = debouncedQuery;
     return participants
+      .filter((p) => p.payment_verified === true)
       .filter((p) => {
         if (
           q &&
@@ -179,6 +182,7 @@ export const VerifyParticipantPage: React.FC = () => {
             p.full_name.toLowerCase().includes(q) ||
             p.email.toLowerCase().includes(q) ||
             p.phone.toLowerCase().includes(q) ||
+            p.city.toLowerCase().includes(q) ||
             p.register_number.toLowerCase().includes(q) ||
             p.registrationId.toLowerCase().includes(q) ||
             p.participant_id.toLowerCase().includes(q) ||
@@ -199,10 +203,11 @@ export const VerifyParticipantPage: React.FC = () => {
 
   const counts = useMemo(
     () => ({
-      total: participants.length,
-      verified: participants.filter((p) => p.verificationStatus === 'Verified').length,
-      pending: participants.filter((p) => p.verificationStatus === 'Pending').length,
-      rejected: participants.filter((p) => p.verificationStatus === 'Rejected').length,
+      total: participants.filter((p) => p.payment_verified === true).length,
+      verified: participants.filter((p) => p.payment_verified === true && p.verificationStatus === 'Verified').length,
+      pending: participants.filter((p) => p.payment_verified === true && p.verificationStatus === 'Pending').length,
+      rejected: participants.filter((p) => p.payment_verified === true && p.verificationStatus === 'Rejected').length,
+      blocked: participants.length - participants.filter((p) => p.payment_verified === true).length,
     }),
     [participants]
   );
@@ -226,6 +231,7 @@ export const VerifyParticipantPage: React.FC = () => {
     setBusyId(p.id);
     try {
       const res = await verifyParticipant(p.id, verifier);
+      await syncRegistrationDeskVerification(p.id, 'verified', verifier);
       addToast('Verified', res.message, 'success');
       syncSelected(p.id);
     } catch (err: any) {
@@ -240,6 +246,7 @@ export const VerifyParticipantPage: React.FC = () => {
     setBusyId(rejectTarget.id);
     try {
       const res = await rejectParticipant(rejectTarget.id, verifier, rejectReason);
+      await syncRegistrationDeskVerification(rejectTarget.id, 'rejected', verifier);
       addToast('Rejected', res.message, 'warning');
       syncSelected(rejectTarget.id);
     } catch (err: any) {
@@ -254,6 +261,7 @@ export const VerifyParticipantPage: React.FC = () => {
     setBusyId(p.id);
     try {
       await resetVerification(p.id);
+      await syncRegistrationDeskVerification(p.id, 'locked');
       addToast('Undo', 'Verification reset to Pending.', 'info');
       syncSelected(p.id);
     } catch {
@@ -300,12 +308,26 @@ export const VerifyParticipantPage: React.FC = () => {
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <MiniStat label="Total Participants" value={counts.total} cls="text-blue-400" />
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+          <MiniStat label="Payment Verified" value={counts.total} cls="text-blue-400" />
           <MiniStat label="Pending Verification" value={counts.pending} cls="text-amber-400" />
           <MiniStat label="Verified" value={counts.verified} cls="text-emerald-400" />
           <MiniStat label="Rejected" value={counts.rejected} cls="text-rose-400" />
+          <MiniStat label="Payment Not Verified" value={counts.blocked} cls="text-white/40" />
         </div>
+
+        {/* Payment eligibility notice */}
+        {counts.blocked > 0 && (
+          <div className="flex items-start gap-2.5 p-3.5 rounded-2xl bg-amber-500/5 border border-amber-500/20">
+            <Clock className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
+            <p className="text-[11px] text-amber-200/90 leading-relaxed">
+              Only participants whose payments were <span className="font-bold text-emerald-300">verified</span> by the
+              Faculty Manager are shown at the Registration Desk. {counts.blocked} participant
+              {counts.blocked === 1 ? '' : 's'} with unverified/rejected payments will be hidden until their payment
+              is verified.
+            </p>
+          </div>
+        )}
 
         {/* Search + Filters */}
         <div className="rounded-3xl bg-zinc-950/60 border border-white/10 backdrop-blur-md p-4 flex flex-col gap-3">
@@ -373,6 +395,7 @@ export const VerifyParticipantPage: React.FC = () => {
                       <th className="px-5 py-3 text-[9px] font-bold uppercase tracking-widest text-white/40">Participant</th>
                       <th className="px-5 py-3 text-[9px] font-bold uppercase tracking-widest text-white/40">Registration</th>
                       <th className="px-5 py-3 text-[9px] font-bold uppercase tracking-widest text-white/40">College</th>
+                      <th className="px-5 py-3 text-[9px] font-bold uppercase tracking-widest text-white/40">City</th>
                       <th className="px-5 py-3 text-[9px] font-bold uppercase tracking-widest text-white/40">Department</th>
                       <th className="px-5 py-3 text-[9px] font-bold uppercase tracking-widest text-white/40">Events</th>
                       <th className="px-5 py-3 text-[9px] font-bold uppercase tracking-widest text-white/40">Payment</th>
@@ -408,6 +431,9 @@ export const VerifyParticipantPage: React.FC = () => {
                           </td>
                           <td className="px-5 py-3">
                             <span className="text-[11px] text-white/70 truncate block max-w-[140px]">{p.college || '—'}</span>
+                          </td>
+                          <td className="px-5 py-3">
+                            <span className="text-[11px] text-white/70 truncate block max-w-[140px]">{p.city || '—'}</span>
                           </td>
                           <td className="px-5 py-3">
                             <div className="flex flex-col min-w-0">
@@ -528,6 +554,7 @@ export const VerifyParticipantPage: React.FC = () => {
 
               <div className="flex flex-col gap-3">
                 <InfoRow icon={GraduationCap} label="College" value={selected.college || '—'} />
+                <InfoRow icon={MapPin} label="City" value={selected.city || '—'} />
                 <InfoRow icon={IdCard} label="Register Number" value={selected.register_number || '—'} />
                 <InfoRow icon={CreditCard} label="Registration ID" value={selected.registrationId || '—'} />
                 <InfoRow icon={Mail} label="Email" value={selected.email || '—'} />

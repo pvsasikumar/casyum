@@ -27,13 +27,16 @@ function toParticipant(r: RegistrationRow): EventParticipant {
     participantId,
     participantName: r.user_full_name || 'Participant',
     college: r.college || '',
+    city: r.city || '',
     department: r.user_department || '',
     phoneNumber: r.user_phone || '',
     email: r.participant_email || '',
     registrationStatus: r.status === 'Confirmed' ? 'Confirmed' : (r.status || 'Pending'),
-    paymentStatus: r.payment_status || 'Pending',
+    paymentStatus: r.payment_status || 'submitted',
     verificationStatus: 'Pending',
     verifiedBy: '',
+    registrationVerificationStatus: r.registration_verification_status || 'locked',
+    attendanceEligibility: r.attendance_eligibility === true,
   } as EventParticipant;
 }
 

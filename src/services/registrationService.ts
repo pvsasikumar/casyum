@@ -11,11 +11,24 @@ import {
   arrayRemove,
   arrayUnion,
   increment,
+  onSnapshot,
+  serverTimestamp,
 } from 'firebase/firestore';
 import { getDb } from '../firebase/firestore';
 import { nextSequence, now } from './helpers';
 import type { RegistrationRow } from './eventService';
 import { mapRegDoc } from './eventService';
+import { normalizeTransactionId, validateTransactionId } from './paymentProofService';
+
+export interface PaymentInfoInput {
+  payment_method: string;
+  transaction_id: string;
+  payment_proof_url: string;
+  payment_proof_file_name: string;
+  payment_proof_file_type: string;
+  payment_proof_file_size: number;
+  payment_proof_uploaded_at: string;
+}
 
 export interface CreateRegistrationInput {
   event_id: string;
@@ -25,17 +38,190 @@ export interface CreateRegistrationInput {
   user_department?: string;
   user_phone?: string;
   college?: string;
+  city?: string;
   department?: string;
   year_of_study?: string;
   gender?: string;
   register_number?: string;
   status?: string;
-  payment_status?: string;
+  payment_info?: PaymentInfoInput;
   payment_amount?: number;
-  transaction_id?: string;
-  payment_screenshot_url?: string;
-  payment_uploaded_time?: string;
-  payment_remarks?: string;
+  registration_id?: string;
+}
+
+/**
+ * A full per-registration record (the canonical document stored in the
+ * `eventRegistrations` collection). Covers payment submission, Faculty
+ * Manager review, Registration Desk verification and attendance eligibility.
+ */
+export interface PaymentRegistrationRow extends RegistrationRow {
+  paymentRequired: boolean;
+  registrationFee: number;
+  paymentMethod: string;
+  transactionId: string;
+  paymentProofUrl: string;
+  paymentProofFileName: string;
+  paymentProofFileType: string;
+  paymentProofFileSize: number;
+  paymentProofUploadedAt: string;
+  paymentStatus: string;
+  paymentVerifiedBy: string;
+  paymentVerifiedByName: string;
+  paymentVerifiedAt: string;
+  paymentRejectedBy: string;
+  paymentRejectedByName: string;
+  paymentRejectedAt: string;
+  paymentRejectionReason: string;
+  paymentResubmittedAt: string;
+  paymentResubmissionCount: number;
+  registrationVerificationStatus: string;
+  registrationVerifiedBy: string;
+  registrationVerifiedByName: string;
+  registrationVerifiedAt: string;
+  attendanceEligibility: boolean;
+  attendanceStatus: string;
+  event_name?: string;
+  event_date?: string;
+  event_time?: string;
+  event_venue?: string;
+}
+
+function mapPaymentRegDoc(docId: string, data: Record<string, any>): PaymentRegistrationRow {
+  const legacy = mapRegDoc(docId, data);
+  return {
+    ...legacy,
+    paymentRequired: data.paymentRequired === true || data.payment_required === true,
+    registrationFee: Number(data.registrationFee ?? data.payment_amount) || 0,
+    paymentMethod: data.paymentMethod || data.payment_method || '',
+    transactionId: data.transactionId || data.transaction_id || '',
+    paymentProofUrl: data.paymentProofUrl || data.payment_screenshot_url || '',
+    paymentProofFileName: data.paymentProofFileName || data.payment_proof_file_name || '',
+    paymentProofFileType: data.paymentProofFileType || data.payment_proof_file_type || '',
+    paymentProofFileSize: Number(data.paymentProofFileSize ?? data.payment_proof_file_size) || 0,
+    paymentProofUploadedAt: data.paymentProofUploadedAt || data.payment_uploaded_time || '',
+    paymentStatus: data.paymentStatus || data.payment_status || 'submitted',
+    paymentVerifiedBy: data.paymentVerifiedBy || data.payment_verified_by || '',
+    paymentVerifiedByName: data.paymentVerifiedByName || data.payment_verified_by_name || data.paymentVerifiedBy || '',
+    paymentVerifiedAt: data.paymentVerifiedAt || data.payment_verified_at || '',
+    paymentRejectedBy: data.paymentRejectedBy || data.payment_rejected_by || '',
+    paymentRejectedByName: data.paymentRejectedByName || data.payment_rejected_by_name || data.paymentRejectedBy || '',
+    paymentRejectedAt: data.paymentRejectedAt || data.payment_rejected_at || '',
+    paymentRejectionReason: data.paymentRejectionReason || data.payment_rejection_reason || '',
+    paymentResubmittedAt: data.paymentResubmittedAt || data.payment_resubmitted_at || '',
+    paymentResubmissionCount: Number(data.paymentResubmissionCount ?? data.payment_resubmission_count) || 0,
+    registrationVerificationStatus:
+      data.registrationVerificationStatus || data.registration_verification_status || 'locked',
+    registrationVerifiedBy: data.registrationVerifiedBy || data.registration_verified_by || '',
+    registrationVerifiedByName:
+      data.registrationVerifiedByName || data.registration_verified_by_name || data.registrationVerifiedBy || '',
+    registrationVerifiedAt: data.registrationVerifiedAt || data.registration_verified_at || '',
+    attendanceEligibility: data.attendanceEligibility === true || data.attendance_eligibility === true,
+    attendanceStatus: data.attendanceStatus || data.attendance_status || 'not_marked',
+    event_name: data.event_name || '',
+    event_date: data.event_date || '',
+    event_time: data.event_time || '',
+    event_venue: data.event_venue || '',
+  };
+}
+
+/** Build the full canonical + legacy payload for a registration document. */
+function buildRegistrationPayload(
+  regId: string,
+  input: CreateRegistrationInput,
+  eventName?: string
+): { canonical: Record<string, any>; legacy: Record<string, any> } {
+  const payment = input.payment_info;
+  const timestamp = now();
+  const canonical: Record<string, any> = {
+    registrationId: regId,
+    registration_id: regId,
+    event_id: input.event_id,
+    event_name: eventName || '',
+    participant_id: input.participant_id,
+    participant_user_id: input.participant_id,
+    participant_email: input.participant_email || '',
+    user_full_name: input.user_full_name || 'Participant',
+    user_department: input.user_department || input.department || '',
+    user_phone: input.user_phone || '',
+    college: input.college || '',
+    city: input.city || '',
+    department: input.department || '',
+    year_of_study: input.year_of_study || '',
+    gender: input.gender || 'Other',
+    register_number: input.register_number || '',
+    status: input.status || 'Confirmed',
+    registered_at: timestamp,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+
+    registrationFee: Number(input.payment_amount) || 0,
+    paymentRequired: true,
+    paymentMethod: payment?.payment_method || '',
+    transactionId: payment?.transaction_id || '',
+    transactionIdNormalized: normalizeTransactionId(payment?.transaction_id || ''),
+    paymentProofUrl: payment?.payment_proof_url || '',
+    paymentProofFileName: payment?.payment_proof_file_name || '',
+    paymentProofFileType: payment?.payment_proof_file_type || '',
+    paymentProofFileSize: Number(payment?.payment_proof_file_size) || 0,
+    paymentProofUploadedAt: payment?.payment_proof_uploaded_at || '',
+
+    paymentStatus: 'submitted',
+    paymentVerifiedBy: '',
+    paymentVerifiedByName: '',
+    paymentVerifiedAt: '',
+    paymentRejectedBy: '',
+    paymentRejectedByName: '',
+    paymentRejectedAt: '',
+    paymentRejectionReason: '',
+    paymentResubmittedAt: '',
+    paymentResubmissionCount: 0,
+
+    registrationVerificationStatus: 'locked',
+    registrationVerifiedBy: '',
+    registrationVerifiedByName: '',
+    registrationVerifiedAt: '',
+    attendanceEligibility: false,
+    attendanceStatus: 'not_marked',
+  };
+
+  const legacy: Record<string, any> = {
+    registration_id: regId,
+    event_id: input.event_id,
+    participant_id: input.participant_id,
+    participant_user_id: input.participant_id,
+    participant_email: input.participant_email || '',
+    user_full_name: input.user_full_name || 'Participant',
+    user_department: input.user_department || input.department || '',
+    user_phone: input.user_phone || '',
+    college: input.college || '',
+    city: input.city || '',
+    department: input.department || '',
+    year_of_study: input.year_of_study || '',
+    gender: input.gender || 'Other',
+    register_number: input.register_number || '',
+    status: input.status || 'Confirmed',
+    registered_at: timestamp,
+    created_at: timestamp,
+    payment_status: 'submitted',
+    payment_amount: Number(input.payment_amount) || 0,
+    transaction_id: payment?.transaction_id || '',
+    transactionIdNormalized: normalizeTransactionId(payment?.transaction_id || ''),
+    payment_screenshot_url: payment?.payment_proof_url || '',
+    payment_uploaded_time: payment?.payment_proof_uploaded_at || '',
+    payment_remarks: '',
+    // Mirror the canonical payment/verification fields so legacy readers
+    // (coordinator attendance, registration team) work without changes.
+    paymentRequired: true,
+    payment_method: payment?.payment_method || '',
+    payment_proof_file_name: payment?.payment_proof_file_name || '',
+    payment_proof_file_type: payment?.payment_proof_file_type || '',
+    payment_proof_file_size: Number(payment?.payment_proof_file_size) || 0,
+    registrationVerificationStatus: 'locked',
+    attendanceEligibility: false,
+    attendanceStatus: 'not_marked',
+  };
+
+  return { canonical, legacy };
 }
 
 export async function listRegistrationsByEvent(eventId: string): Promise<RegistrationRow[]> {
@@ -58,6 +244,35 @@ export async function listRegistrationsByParticipant(participantId: string): Pro
     .sort((a, b) => b.registered_at.localeCompare(a.registered_at));
 }
 
+/**
+ * Check whether a transaction ID has already been submitted for another
+ * registration. Optionally ignores the current registration (for resubmits).
+ */
+export async function checkDuplicateTransaction(
+  transactionId: string,
+  excludeRegistrationId?: string
+): Promise<boolean> {
+  const normalized = normalizeTransactionId(transactionId);
+  if (!normalized) return false;
+  const db = getDb();
+  const snap = await getDocs(
+    query(
+      collection(db, 'eventRegistrations'),
+      where('transactionIdNormalized', '==', normalized)
+    )
+  );
+  return snap.docs.some(
+    (d) => d.id !== excludeRegistrationId && String(d.data().paymentStatus || '') !== 'rejected'
+  );
+}
+
+export async function getRegistration(registrationId: string): Promise<PaymentRegistrationRow | null> {
+  const db = getDb();
+  const snap = await getDoc(doc(db, 'eventRegistrations', registrationId));
+  if (!snap.exists()) return null;
+  return mapPaymentRegDoc(snap.id, snap.data());
+}
+
 export async function createRegistration(input: CreateRegistrationInput): Promise<RegistrationRow> {
   const db = getDb();
   const eventId = input.event_id;
@@ -66,32 +281,28 @@ export async function createRegistration(input: CreateRegistrationInput): Promis
   if (!eventSnap.exists()) {
     throw new Error('Event not found.');
   }
+  const eventData = eventSnap.data();
 
-  const regId = `reg-${String(await nextSequence('registrations'))}`;
-  const row: RegistrationRow = {
-    registration_id: regId,
-    event_id: eventId,
-    participant_id: input.participant_id,
-    participant_user_id: input.participant_id,
-    participant_email: input.participant_email || '',
-    user_full_name: input.user_full_name || 'Participant',
-    user_department: input.user_department || input.department || '',
-    user_phone: input.user_phone || '',
-    college: input.college || '',
-    department: input.department || '',
-    year_of_study: input.year_of_study || '',
-    gender: input.gender || 'Other',
-    register_number: input.register_number || '',
-    status: input.status || 'Confirmed',
-    registered_at: now(),
-    payment_status: input.payment_status || 'Pending',
-    payment_amount: Number(input.payment_amount) || 0,
-    transaction_id: input.transaction_id || '',
-    payment_screenshot_url: input.payment_screenshot_url || '',
-    payment_uploaded_time: input.payment_uploaded_time || '',
-    payment_remarks: input.payment_remarks || '',
-  };
-  await setDoc(doc(db, 'registrations', regId), row);
+  const regId = input.registration_id || `reg-${String(await nextSequence('registrations'))}`;
+
+  if (input.payment_info) {
+    const txnError = validateTransactionId(input.payment_info.transaction_id);
+    if (txnError) throw new Error(txnError);
+    const duplicate = await checkDuplicateTransaction(input.payment_info.transaction_id, regId);
+    if (duplicate) {
+      throw new Error(
+        'This Transaction ID has already been submitted. Please verify the payment details.'
+      );
+    }
+    if (!input.payment_info.payment_proof_url) {
+      throw new Error('Please upload your payment proof before registering.');
+    }
+  }
+
+  const { canonical, legacy } = buildRegistrationPayload(regId, input, eventData.name || '');
+
+  await setDoc(doc(db, 'eventRegistrations', regId), canonical);
+  await setDoc(doc(db, 'registrations', regId), legacy);
 
   await updateDoc(doc(db, 'events', eventId), {
     registered_count: increment(1),
@@ -99,33 +310,284 @@ export async function createRegistration(input: CreateRegistrationInput): Promis
   });
   await updateDoc(doc(db, 'participants', input.participant_id), {
     event_ids: arrayUnion(eventId),
+    updated_at: now(),
   });
 
-  await syncPaymentDoc(input.participant_id, row);
-
-  return row;
+  return mapRegDoc(regId, canonical);
 }
 
-async function syncPaymentDoc(participantId: string, reg: RegistrationRow): Promise<void> {
+/** Throws an error that keeps a payment review list read-only for non-reviewers. */
+export async function listPaymentRegistrations(): Promise<PaymentRegistrationRow[]> {
   const db = getDb();
-  if (!reg.payment_amount && !reg.transaction_id && reg.payment_status !== 'Approved') return;
-  const ref = doc(db, 'payments', reg.registration_id);
-  await setDoc(
-    ref,
-    {
-      payment_id: reg.registration_id,
-      participant_id: participantId,
-      participant_name: reg.user_full_name,
-      event_id: reg.event_id,
-      amount: reg.payment_amount,
-      status: reg.payment_status,
-      transaction_id: reg.transaction_id,
-      screenshot_url: reg.payment_screenshot_url,
-      remarks: reg.payment_remarks,
-      updated_at: now(),
-      created_at: now(),
+  const snap = await getDocs(collection(db, 'eventRegistrations'));
+  return snap.docs
+    .map((d) => mapPaymentRegDoc(d.id, d.data()))
+    .sort((a, b) => b.registered_at.localeCompare(a.registered_at));
+}
+
+export function subscribePaymentRegistrations(
+  onNext: (rows: PaymentRegistrationRow[]) => void,
+  onError?: (error: Error) => void
+): () => void {
+  const db = getDb();
+  return onSnapshot(
+    collection(db, 'eventRegistrations'),
+    (snapshot) => {
+      const rows = snapshot.docs.map((d) => mapPaymentRegDoc(d.id, d.data()));
+      rows.sort((a, b) => b.registered_at.localeCompare(a.registered_at));
+      onNext(rows);
     },
-    { merge: true }
+    onError
+  );
+}
+
+export interface PaymentVerifier {
+  userId: string;
+  name: string;
+}
+
+function paymentPatchForStatus(
+  status: 'verified' | 'rejected',
+  verifier: PaymentVerifier,
+  reason: string
+): Record<string, any> {
+  const timestamp = now();
+  const patch: Record<string, any> = {
+    paymentStatus: status,
+    updatedAt: serverTimestamp(),
+  };
+  if (status === 'verified') {
+    patch.paymentVerifiedBy = verifier.userId;
+    patch.paymentVerifiedByName = verifier.name;
+    patch.paymentVerifiedAt = timestamp;
+    patch.paymentRejectedBy = '';
+    patch.paymentRejectedByName = '';
+    patch.paymentRejectedAt = '';
+    patch.paymentRejectionReason = '';
+  } else {
+    patch.paymentRejectedBy = verifier.userId;
+    patch.paymentRejectedByName = verifier.name;
+    patch.paymentRejectedAt = timestamp;
+    patch.paymentRejectionReason = reason;
+    patch.paymentVerifiedBy = '';
+    patch.paymentVerifiedByName = '';
+    patch.paymentVerifiedAt = '';
+  }
+  return patch;
+}
+
+function legacyPatchForStatus(
+  status: 'verified' | 'rejected',
+  verifier: PaymentVerifier,
+  reason: string
+): Record<string, any> {
+  const timestamp = now();
+  const patch: Record<string, any> = {
+    payment_status: status,
+    updated_at: now(),
+  };
+  if (status === 'verified') {
+    patch.payment_verified_by = verifier.userId;
+    patch.payment_verified_by_name = verifier.name;
+    patch.payment_verified_at = timestamp;
+    patch.payment_rejected_by = '';
+    patch.payment_rejected_by_name = '';
+    patch.payment_rejected_at = '';
+    patch.payment_rejection_reason = '';
+    patch.payment_remarks = '';
+  } else {
+    patch.payment_rejected_by = verifier.userId;
+    patch.payment_rejected_by_name = verifier.name;
+    patch.payment_rejected_at = timestamp;
+    patch.payment_rejection_reason = reason;
+    patch.payment_remarks = reason;
+    patch.payment_verified_by = '';
+    patch.payment_verified_by_name = '';
+    patch.payment_verified_at = '';
+  }
+  return patch;
+}
+
+export async function verifyPayment(
+  registrationId: string,
+  verifier: PaymentVerifier
+): Promise<{ message: string }> {
+  const db = getDb();
+  const reg = await getRegistration(registrationId);
+  if (!reg) {
+    throw new Error('Registration not found.');
+  }
+  if (reg.paymentStatus === 'verified') {
+    return { message: 'Payment is already verified.' };
+  }
+  await updateDoc(
+    doc(db, 'eventRegistrations', registrationId),
+    paymentPatchForStatus('verified', verifier, '')
+  );
+  await updateDoc(
+    doc(db, 'registrations', registrationId),
+    legacyPatchForStatus('verified', verifier, '')
+  );
+  return { message: 'Payment verified successfully.' };
+}
+
+export async function rejectPayment(
+  registrationId: string,
+  verifier: PaymentVerifier,
+  reason: string
+): Promise<{ message: string }> {
+  const db = getDb();
+  const trimmed = String(reason || '').trim();
+  if (!trimmed) {
+    throw new Error('A rejection reason is required.');
+  }
+  const reg = await getRegistration(registrationId);
+  if (!reg) {
+    throw new Error('Registration not found.');
+  }
+  await updateDoc(
+    doc(db, 'eventRegistrations', registrationId),
+    paymentPatchForStatus('rejected', verifier, trimmed)
+  );
+  await updateDoc(
+    doc(db, 'registrations', registrationId),
+    legacyPatchForStatus('rejected', verifier, trimmed)
+  );
+  return { message: 'Payment rejected.' };
+}
+
+/**
+ * Record a resubmitted payment after a rejection. Payment details and proof
+ * are replaced, status resets to `submitted`, and the resubmission counters
+ * are bumped for audit history.
+ */
+export async function resubmitPayment(
+  registrationId: string,
+  payment: PaymentInfoInput,
+  verifier?: PaymentVerifier
+): Promise<{ message: string }> {
+  const db = getDb();
+  const reg = await getRegistration(registrationId);
+  if (!reg) {
+    throw new Error('Registration not found.');
+  }
+  const txnError = validateTransactionId(payment.transaction_id);
+  if (txnError) throw new Error(txnError);
+  const duplicate = await checkDuplicateTransaction(payment.transaction_id, registrationId);
+  if (duplicate) {
+    throw new Error(
+      'This Transaction ID has already been submitted. Please verify the payment details.'
+    );
+  }
+  if (!payment.payment_proof_url) {
+    throw new Error('Please upload your payment proof before resubmitting.');
+  }
+  const timestamp = now();
+  const resubmissionCount = Number(reg.paymentResubmissionCount) + 1;
+
+  const canonicalPatch: Record<string, any> = {
+    paymentMethod: payment.payment_method,
+    transactionId: payment.transaction_id,
+    transactionIdNormalized: normalizeTransactionId(payment.transaction_id),
+    paymentProofUrl: payment.payment_proof_url,
+    paymentProofFileName: payment.payment_proof_file_name,
+    paymentProofFileType: payment.payment_proof_file_type,
+    paymentProofFileSize: Number(payment.payment_proof_file_size) || 0,
+    paymentProofUploadedAt: payment.payment_proof_uploaded_at,
+    paymentStatus: 'submitted',
+    paymentResubmittedAt: timestamp,
+    paymentResubmissionCount: resubmissionCount,
+    paymentVerifiedBy: '',
+    paymentVerifiedByName: '',
+    paymentVerifiedAt: '',
+    paymentRejectedBy: '',
+    paymentRejectedByName: '',
+    paymentRejectedAt: '',
+    paymentRejectionReason: '',
+    updatedAt: serverTimestamp(),
+  };
+
+  const legacyPatch: Record<string, any> = {
+    payment_status: 'submitted',
+    transaction_id: payment.transaction_id,
+    transactionIdNormalized: normalizeTransactionId(payment.transaction_id),
+    payment_screenshot_url: payment.payment_proof_url,
+    payment_uploaded_time: payment.payment_proof_uploaded_at,
+    payment_method: payment.payment_method,
+    payment_proof_file_name: payment.payment_proof_file_name,
+    payment_proof_file_type: payment.payment_proof_file_type,
+    payment_proof_file_size: Number(payment.payment_proof_file_size) || 0,
+    payment_remarks: '',
+    payment_resubmitted_at: timestamp,
+    payment_resubmission_count: resubmissionCount,
+    payment_rejected_by: '',
+    payment_rejected_by_name: '',
+    payment_rejected_at: '',
+    payment_rejection_reason: '',
+    updated_at: now(),
+  };
+
+  if (verifier) {
+    canonicalPatch.paymentRejectedBy = verifier.userId;
+    canonicalPatch.paymentRejectedByName = verifier.name;
+    legacyPatch.payment_rejected_by = verifier.userId;
+    legacyPatch.payment_rejected_by_name = verifier.name;
+  }
+
+  await updateDoc(doc(db, 'eventRegistrations', registrationId), canonicalPatch);
+  await updateDoc(doc(db, 'registrations', registrationId), legacyPatch);
+  return { message: 'Payment resubmitted. It will be reviewed again.' };
+}
+
+/**
+ * Called by the Registration Desk when a participant is verified/rejected so
+ * the per-registration verification state and attendance eligibility stay in
+ * sync with the participant-level verification record.
+ */
+export async function syncRegistrationDeskVerification(
+  participantId: string,
+  status: 'verified' | 'rejected' | 'locked',
+  verifier?: PaymentVerifier
+): Promise<void> {
+  const db = getDb();
+  const regs = await listRegistrationsByParticipant(participantId);
+  if (regs.length === 0) return;
+
+  const timestamp = now();
+  const canonicalPatch: Record<string, any> = {
+    registrationVerificationStatus: status,
+    attendanceEligibility: status === 'verified',
+    updatedAt: serverTimestamp(),
+  };
+  const legacyPatch: Record<string, any> = {
+    registrationVerificationStatus: status,
+    attendanceEligibility: status === 'verified',
+    updated_at: now(),
+  };
+
+  if (status === 'verified' && verifier) {
+    canonicalPatch.registrationVerifiedBy = verifier.userId;
+    canonicalPatch.registrationVerifiedByName = verifier.name;
+    canonicalPatch.registrationVerifiedAt = timestamp;
+    legacyPatch.registration_verified_by = verifier.userId;
+    legacyPatch.registration_verified_by_name = verifier.name;
+    legacyPatch.registration_verified_at = timestamp;
+  } else if (status !== 'verified') {
+    canonicalPatch.registrationVerifiedBy = '';
+    canonicalPatch.registrationVerifiedByName = '';
+    canonicalPatch.registrationVerifiedAt = '';
+    legacyPatch.registration_verified_by = '';
+    legacyPatch.registration_verified_by_name = '';
+    legacyPatch.registration_verified_at = '';
+  }
+
+  await Promise.all(
+    regs.map((r) =>
+      Promise.all([
+        updateDoc(doc(db, 'eventRegistrations', r.registration_id), canonicalPatch),
+        updateDoc(doc(db, 'registrations', r.registration_id), legacyPatch),
+      ])
+    )
   );
 }
 
@@ -138,6 +600,7 @@ export async function removeRegistration(registrationId: string): Promise<void> 
   const eventId = String(data.event_id || '');
   const participantId = String(data.participant_id || '');
 
+  await deleteDoc(doc(db, 'eventRegistrations', registrationId));
   await deleteDoc(ref);
   if (eventId) {
     await updateDoc(doc(db, 'events', eventId), {
@@ -156,3 +619,6 @@ export async function removeRegistrationsByParticipant(participantId: string): P
   const regs = await listRegistrationsByParticipant(participantId);
   await Promise.all(regs.map((r) => removeRegistration(r.registration_id)));
 }
+
+/** Upload a payment proof and return the metadata needed for registration. */
+export { uploadPaymentProof, type PaymentProofUploadResult } from './paymentProofService';

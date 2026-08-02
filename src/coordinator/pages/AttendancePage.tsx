@@ -11,13 +11,18 @@ import type {
   EventAttendanceStats,
   EventParticipant,
   CoordinatorAttendanceRecord,
-  VerificationStatus,
 } from '../types';
 import type { ParticipantVerificationInfo } from '../services/ParticipantService';
 
 interface AttendancePageProps {
   eventId: string;
   eventName: string;
+}
+
+/** Attendance is only unlocked when the payment is verified by the Faculty
+ * Manager AND the participant is verified at the Registration Desk. */
+function isAttendanceEligible(p?: Partial<EventParticipant> | null): boolean {
+  return !!p && p.attendanceEligibility === true && p.paymentStatus === 'verified' && p.registrationVerificationStatus === 'verified';
 }
 
 export const AttendancePage: React.FC<AttendancePageProps> = ({ eventId, eventName }) => {
@@ -162,24 +167,22 @@ export const AttendancePage: React.FC<AttendancePageProps> = ({ eventId, eventNa
   }, [baseParticipants, dbAttendance, pendingAttendance, clearedOverride, verificationMap]);
 
   const unverifiedCount = useMemo(
-    () => viewParticipants.filter((p) => p.verificationStatus !== 'Verified').length,
+    () => viewParticipants.filter((p) => !isAttendanceEligible(p)).length,
     [viewParticipants]
   );
 
   const isVerified = useCallback(
     (participantId: string): boolean => {
-      const verification = verificationMap[participantId];
-      if (!verification) return false;
-      const status: VerificationStatus = verification.verificationStatus || 'Pending';
-      return status === 'Verified';
+      const participant = viewParticipants.find((p) => p.participantId === participantId);
+      return isAttendanceEligible(participant);
     },
-    [verificationMap]
+    [viewParticipants]
   );
 
   const lockedToast = useCallback(() => {
     addToast(
       'Attendance Locked',
-      'Verify this participant at the Registration Desk before marking attendance.',
+      'Both the payment and registration desk verification must be completed before marking attendance.',
       'warning'
     );
   }, [addToast]);
@@ -187,7 +190,7 @@ export const AttendancePage: React.FC<AttendancePageProps> = ({ eventId, eventNa
   // All summary values derive from the same rendered participants state.
   const stats = useMemo<EventAttendanceStats>(() => {
     const totalRegistered = viewParticipants.length;
-    const verified = viewParticipants.filter((p) => p.paymentStatus === 'Approved').length;
+    const verified = viewParticipants.filter((p) => isAttendanceEligible(p)).length;
     const present = viewParticipants.filter(
       (p) => AttendanceService.normalizeAttendanceStatus(p.attendanceStatus) === 'Present'
     ).length;
@@ -270,19 +273,19 @@ export const AttendancePage: React.FC<AttendancePageProps> = ({ eventId, eventNa
   const handleMarkAllPresent = useCallback(async () => {
     if (!user || viewParticipants.length === 0) return;
 
-    // Attendance stays locked for unverified participants: only verified
-    // participants can be marked in bulk.
-    const verifiedParticipants = viewParticipants.filter((p) => p.verificationStatus === 'Verified');
-    if (verifiedParticipants.length === 0) {
+    // Attendance stays locked for ineligible participants: only participants
+    // with verified payment + desk verification can be marked in bulk.
+    const eligibleParticipants = viewParticipants.filter((p) => isAttendanceEligible(p));
+    if (eligibleParticipants.length === 0) {
       lockedToast();
       setMarkAllDialogOpen(false);
       return;
     }
-    const participantIds = verifiedParticipants.map((p) => p.participantId);
+    const participantIds = eligibleParticipants.map((p) => p.participantId);
 
     setPendingAttendance((prev) => {
       const next = { ...prev };
-      verifiedParticipants.forEach((p) => {
+      eligibleParticipants.forEach((p) => {
         const existing = prev[p.participantId] || dbAttendance[p.participantId];
         next[p.participantId] = AttendanceService.createRecord(
           eventId,
@@ -299,12 +302,12 @@ export const AttendancePage: React.FC<AttendancePageProps> = ({ eventId, eventNa
 
     try {
       await AttendanceService.markAllPresent(eventId, user.id, participantIds);
-      const skipped = viewParticipants.length - verifiedParticipants.length;
+      const skipped = viewParticipants.length - eligibleParticipants.length;
       addToast(
         'All Marked',
         skipped > 0
-          ? `${verifiedParticipants.length} verified participants marked Present (${skipped} locked)`
-          : 'All verified participants marked as Present',
+          ? `${eligibleParticipants.length} eligible participants marked Present (${skipped} locked)`
+          : 'All eligible participants marked as Present',
         'success'
       );
     } catch (error) {
@@ -347,7 +350,7 @@ export const AttendancePage: React.FC<AttendancePageProps> = ({ eventId, eventNa
     setSaveDialogOpen(false);
     if (!user) return;
     const records = viewParticipants
-      .filter((p) => p.verificationStatus === 'Verified')
+      .filter((p) => isAttendanceEligible(p))
       .filter((p) => AttendanceService.normalizeAttendanceStatus(p.attendanceStatus) !== 'Not Marked')
       .map((p) => ({
         participantId: p.participantId,
@@ -383,8 +386,8 @@ export const AttendancePage: React.FC<AttendancePageProps> = ({ eventId, eventNa
       setQrError('Participant not found in this event');
       return;
     }
-    if (participant.verificationStatus !== 'Verified') {
-      setQrError('Attendance locked: participant has not been verified yet');
+    if (participant.verificationStatus !== 'Verified' || !isVerified(data.participantId)) {
+      setQrError('Attendance locked: payment and registration desk verification are required');
       return;
     }
 
@@ -401,7 +404,7 @@ export const AttendancePage: React.FC<AttendancePageProps> = ({ eventId, eventNa
       setQrError('');
       addToast('QR Check-In', 'Participant checked in successfully', 'success');
     }
-  }, [qrInput, eventId, user, updateAttendance, pendingAttendance, dbAttendance, viewParticipants, addToast]);
+  }, [qrInput, eventId, user, updateAttendance, pendingAttendance, dbAttendance, viewParticipants, addToast, isVerified]);
 
   const generateQRForParticipant = (participantId: string) => {
     return AttendanceService.generateQRData(participantId, eventId);
@@ -454,7 +457,7 @@ export const AttendancePage: React.FC<AttendancePageProps> = ({ eventId, eventNa
                 Attendance locked for {unverifiedCount} participant{unverifiedCount === 1 ? '' : 's'}
               </p>
               <p className="text-[11px] text-amber-200/60 mt-0.5">
-                Participants must be verified at the Registration Desk before their attendance can be marked. Attendance unlocks automatically once verified.
+                Attendance unlocks only after the participant's payment is verified by the Faculty Manager AND their registration is verified at the desk. Unlocks automatically once both are complete.
               </p>
             </div>
             <ShieldCheck className="w-4 h-4 text-amber-400/50 shrink-0 hidden sm:block" />

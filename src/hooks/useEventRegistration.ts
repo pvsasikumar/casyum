@@ -1,14 +1,21 @@
 import { useCallback, useEffect, useState } from 'react';
 import { getCurrentUser, readParticipantRecord, type ParticipantRecord } from '../services/authService';
-import { completeProfile, registerEvent } from '../services/participantService';
+import { completeProfile, registerEvent, type RegisterPaymentInput } from '../services/participantService';
 import { listRegistrationsByParticipant } from '../services/registrationService';
 import { useGoogleParticipantLogin } from './useGoogleParticipantLogin';
 
 export interface ProfileFormData {
   phone: string;
   college: string;
+  city: string;
   department: string;
   year_of_study: string;
+}
+
+export interface PaymentFormData {
+  payment_method: string;
+  transaction_id: string;
+  file: File;
 }
 
 export function useEventRegistration(eventId: string, slug: string) {
@@ -18,10 +25,12 @@ export function useEventRegistration(eventId: string, slug: string) {
   const [alreadyRegistered, setAlreadyRegistered] = useState(false);
   const [isRegistering, setIsRegistering] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
+  const [showPaymentForm, setShowPaymentForm] = useState(false);
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileError, setProfileError] = useState('');
   const [registerMessage, setRegisterMessage] = useState<string | null>(null);
   const [registerError, setRegisterError] = useState('');
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
 
   const refreshStatus = useCallback(async () => {
     const current = getCurrentUser();
@@ -60,22 +69,35 @@ export function useEventRegistration(eventId: string, slug: string) {
     };
   }, [refreshStatus]);
 
-  const doRegister = useCallback(async () => {
-    setIsRegistering(true);
-    setRegisterError('');
-    setRegisterMessage(null);
-    try {
-      const result = await registerEvent(eventId);
-      setRegisterMessage(result.message);
-      setAlreadyRegistered(true);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Registration failed. Please try again.';
-      setRegisterError(message);
-      if (message.includes('already registered')) setAlreadyRegistered(true);
-    } finally {
-      setIsRegistering(false);
-    }
-  }, [eventId]);
+  const doRegister = useCallback(
+    async (payment: PaymentFormData): Promise<boolean> => {
+      setIsRegistering(true);
+      setRegisterError('');
+      setRegisterMessage(null);
+      setUploadProgress(0);
+      try {
+        const input: RegisterPaymentInput = {
+          payment_method: payment.payment_method,
+          transaction_id: payment.transaction_id,
+          file: payment.file,
+          onProgress: (pct) => setUploadProgress(pct),
+        };
+        const result = await registerEvent(eventId, input);
+        setRegisterMessage(result.message);
+        setAlreadyRegistered(true);
+        return true;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Registration failed. Please try again.';
+        setRegisterError(message);
+        if (message.includes('already registered')) setAlreadyRegistered(true);
+        return false;
+      } finally {
+        setIsRegistering(false);
+        setUploadProgress(null);
+      }
+    },
+    [eventId]
+  );
 
   const handleRegister = useCallback(async () => {
     setRegisterError('');
@@ -88,7 +110,7 @@ export function useEventRegistration(eventId: string, slug: string) {
         setShowProfileModal(true);
         return;
       }
-      await doRegister();
+      setShowPaymentForm(true);
       return;
     }
     let record = profile;
@@ -100,8 +122,8 @@ export function useEventRegistration(eventId: string, slug: string) {
       setShowProfileModal(true);
       return;
     }
-    await doRegister();
-  }, [profile, signIn, slug, doRegister]);
+    setShowPaymentForm(true);
+  }, [profile, signIn, slug]);
 
   const handleProfileComplete = useCallback(
     async (data: ProfileFormData) => {
@@ -111,15 +133,22 @@ export function useEventRegistration(eventId: string, slug: string) {
         await completeProfile(data);
         setShowProfileModal(false);
         await refreshStatus();
-        await doRegister();
+        setShowPaymentForm(true);
       } catch (err) {
         setProfileError(err instanceof Error ? err.message : 'Failed to save your profile. Please try again.');
       } finally {
         setProfileSaving(false);
       }
     },
-    [refreshStatus, doRegister]
+    [refreshStatus]
   );
+
+  const cancelPaymentForm = useCallback(() => {
+    setShowPaymentForm(false);
+    setRegisterError('');
+    setRegisterMessage(null);
+    setUploadProgress(null);
+  }, []);
 
   return {
     isChecking,
@@ -130,11 +159,15 @@ export function useEventRegistration(eventId: string, slug: string) {
     isRegistering,
     showProfileModal,
     setShowProfileModal,
+    showPaymentForm,
+    cancelPaymentForm,
     profileSaving,
     profileError,
     registerMessage,
     registerError,
+    uploadProgress,
     handleRegister,
     handleProfileComplete,
+    doRegister,
   };
 }

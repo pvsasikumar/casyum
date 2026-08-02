@@ -19,6 +19,7 @@ function mapParticipantRow(row: any): Participant {
     name: row.full_name || '',
     photo: row.photo || '',
     college: row.college || '',
+    city: row.city || '',
     department: row.department || '',
     year: row.year_of_study || '',
     registerNumber: row.register_number || '',
@@ -119,6 +120,7 @@ export class EventExportService {
       'Email': p.email,
       'Phone': p.mobile,
       'College': p.college,
+      'City': p.city,
       'Department': p.department,
       'Year': p.year,
       'Gender': p.gender,
@@ -137,12 +139,12 @@ export class EventExportService {
     const eventName = participants[0].eventName;
     const headers = [
       'Registration ID', 'Participant Name', 'Email', 'Phone',
-      'College', 'Department', 'Year', 'Gender', 'Event Name',
+      'College', 'City', 'Department', 'Year', 'Gender', 'Event Name',
       'Registration Date', 'Payment Status', 'Attendance Status', 'Coordinator(s)',
     ];
     const rows = participants.map((p) => [
       p.registrationId, p.name, p.email, p.mobile,
-      p.college, p.department, p.year, p.gender, p.eventName,
+      p.college, p.city, p.department, p.year, p.gender, p.eventName,
       p.registrationDate, p.paymentStatus, p.attendanceStatus, p.coordinators,
     ]);
     downloadExcel(headers, rows, this.getExportFilename(eventName, 'xlsx'));
@@ -153,12 +155,12 @@ export class EventExportService {
     if (!participants.length) throw new Error('No data available to export.');
     const eventName = participants[0].eventName;
     const headers = [
-      'Reg ID', 'Name', 'Email', 'Phone', 'College', 'Department',
+      'Reg ID', 'Name', 'Email', 'Phone', 'College', 'City', 'Department',
       'Year', 'Gender', 'Event', 'Reg Date', 'Payment', 'Attendance', 'Coordinator(s)',
     ];
     const rows = participants.map((p) => [
       p.registrationId, p.name, p.email, p.mobile,
-      p.college, p.department, p.year, p.gender, p.eventName,
+      p.college, p.city, p.department, p.year, p.gender, p.eventName,
       p.registrationDate, p.paymentStatus, p.attendanceStatus, p.coordinators,
     ]);
     downloadPDF(`${eventName} - Participants`, headers, rows);

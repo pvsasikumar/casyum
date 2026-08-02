@@ -23,6 +23,7 @@ export const ProfileCompletionModal: React.FC<ProfileCompletionModalProps> = ({
   const [form, setForm] = useState<ProfileFormData>({
     phone: '',
     college: '',
+    city: '',
     department: '',
     year_of_study: '',
   });
@@ -38,6 +39,8 @@ export const ProfileCompletionModal: React.FC<ProfileCompletionModalProps> = ({
     const errors: Record<string, string> = {};
     if (!form.phone.trim()) errors.phone = 'Phone number is required.';
     if (!form.college.trim()) errors.college = 'College name is required.';
+    if (!form.city.trim()) errors.city = 'City is required.';
+    else if (!/^[A-Za-z\s'-]{2,100}$/.test(form.city.trim())) errors.city = 'Please enter a valid city name.';
     if (!form.department.trim()) errors.department = 'Department is required.';
     if (!form.year_of_study) errors.year_of_study = 'Year of study is required.';
     setFieldErrors(errors);
@@ -123,6 +126,19 @@ export const ProfileCompletionModal: React.FC<ProfileCompletionModalProps> = ({
               <option value="Other" className="bg-black">Other</option>
             </select>
             {fieldErrors.year_of_study && <span className="text-[11px] text-rose-400">{fieldErrors.year_of_study}</span>}
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label className={labelClass}>City</label>
+            <input
+              type="text"
+              value={form.city}
+              onChange={(e) => update('city', e.target.value)}
+              placeholder="e.g. Chennai"
+              className={inputClass}
+              maxLength={100}
+            />
+            {fieldErrors.city && <span className="text-[11px] text-rose-400">{fieldErrors.city}</span>}
           </div>
 
           {error && <p className="text-xs text-rose-400">{error}</p>}

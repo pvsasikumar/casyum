@@ -147,6 +147,7 @@ export const ExportCenter: React.FC = () => {
             'Phone Number': p.mobile,
             'Gender': p.gender,
             'College': p.college,
+            'City': p.city,
             'Department': p.department,
             'Year': p.year,
             'Registration Date': p.registrationDate,
@@ -158,15 +159,15 @@ export const ExportCenter: React.FC = () => {
       onExcel: () =>
         wrapExport(() => {
           const filtered = applyFilters(participants);
-          const headers = ['Participant ID', 'Full Name', 'Email', 'Phone Number', 'Gender', 'College', 'Department', 'Year', 'Registration Date', 'Payment Status', 'Total Registered Events'];
-          const rows = filtered.map((p) => [p.id, p.name, p.email, p.mobile, p.gender, p.college, p.department, p.year, p.registrationDate, p.paymentStatus, p.registeredEvents?.length || 0]);
+          const headers = ['Participant ID', 'Full Name', 'Email', 'Phone Number', 'Gender', 'College', 'City', 'Department', 'Year', 'Registration Date', 'Payment Status', 'Total Registered Events'];
+          const rows = filtered.map((p) => [p.id, p.name, p.email, p.mobile, p.gender, p.college, p.city, p.department, p.year, p.registrationDate, p.paymentStatus, p.registeredEvents?.length || 0]);
           downloadExcel(headers, rows, `participants_${ts}.xlsx`);
         }, 'All Participants Excel'),
       onPDF: () =>
         wrapExport(() => {
           const filtered = applyFilters(participants);
-          const headers = ['Participant ID', 'Full Name', 'Email', 'Phone', 'College', 'Department', 'Year', 'Reg Date', 'Payment', 'Events'];
-          const rows = filtered.map((p) => [p.id, p.name, p.email, p.mobile, p.college, p.department, p.year, p.registrationDate, p.paymentStatus, p.registeredEvents?.length || 0]);
+          const headers = ['Participant ID', 'Full Name', 'Email', 'Phone', 'College', 'City', 'Department', 'Year', 'Reg Date', 'Payment', 'Events'];
+          const rows = filtered.map((p) => [p.id, p.name, p.email, p.mobile, p.college, p.city, p.department, p.year, p.registrationDate, p.paymentStatus, p.registeredEvents?.length || 0]);
           downloadPDF('All Participants Report', headers, rows, `participants_${ts}`);
         }, 'All Participants PDF'),
     },
@@ -191,6 +192,7 @@ export const ExportCenter: React.FC = () => {
               'Event Name': evt.name,
               'Participant Name': p.name,
               'College': p.college,
+              'City': p.city,
               'Department': p.department,
               'Phone': p.mobile,
               'Email': p.email,
@@ -210,10 +212,10 @@ export const ExportCenter: React.FC = () => {
         }
         return wrapExport(() => {
           const filtered = applyFilters(participants).filter((p) => p.registeredEvents?.includes(evt.id));
-          const headers = ['Event Name', 'Participant Name', 'College', 'Department', 'Phone', 'Email', 'Registration Date', 'Attendance Status', 'Payment Status'];
+          const headers = ['Event Name', 'Participant Name', 'College', 'City', 'Department', 'Phone', 'Email', 'Registration Date', 'Attendance Status', 'Payment Status'];
           const rows = filtered.map((p) => {
             const att = attendance.find((a) => a.participantId === p.id && a.eventId === evt.id);
-            return [evt.name, p.name, p.college, p.department, p.mobile, p.email, p.registrationDate, att?.status || 'Not Marked', p.paymentStatus];
+            return [evt.name, p.name, p.college, p.city, p.department, p.mobile, p.email, p.registrationDate, att?.status || 'Not Marked', p.paymentStatus];
           });
           downloadExcel(headers, rows, `event_${sanitizeFilename(evt.name)}_${ys}.xlsx`);
         }, 'Event-wise Participants Excel');
@@ -226,10 +228,10 @@ export const ExportCenter: React.FC = () => {
         }
         return wrapExport(() => {
           const filtered = applyFilters(participants).filter((p) => p.registeredEvents?.includes(evt.id));
-          const headers = ['Participant', 'College', 'Department', 'Phone', 'Email', 'Reg Date', 'Attendance', 'Payment'];
+          const headers = ['Participant', 'College', 'City', 'Department', 'Phone', 'Email', 'Reg Date', 'Attendance', 'Payment'];
           const rows = filtered.map((p) => {
             const att = attendance.find((a) => a.participantId === p.id && a.eventId === evt.id);
-            return [p.name, p.college, p.department, p.mobile, p.email, p.registrationDate, att?.status || 'Not Marked', p.paymentStatus];
+            return [p.name, p.college, p.city, p.department, p.mobile, p.email, p.registrationDate, att?.status || 'Not Marked', p.paymentStatus];
           });
           downloadPDF(`${evt.name} - Participants`, headers, rows, `event_${sanitizeFilename(evt.name)}_${ys}`);
         }, 'Event-wise Participants PDF');

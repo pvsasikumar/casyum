@@ -20,6 +20,7 @@ import { DEFAULT_EVENT_IMAGE, isValidStoredImage } from '../../services/eventSlu
 import { useEventRegistration } from '../../hooks/useEventRegistration';
 import { PublicEventRenderer } from './PublicEventRenderer';
 import { ProfileCompletionModal } from './ProfileCompletionModal';
+import { PaymentDetailsSection } from './PaymentDetailsSection';
 import { SmartImage } from '../ui/SmartImage';
 
 const skeletonBlock = 'animate-pulse rounded-2xl bg-white/[0.04]';
@@ -77,12 +78,16 @@ export const EventDetailsPage: React.FC = () => {
     isRegistering,
     showProfileModal,
     setShowProfileModal,
+    showPaymentForm,
+    cancelPaymentForm,
     profileSaving,
     profileError,
     registerMessage,
     registerError,
+    uploadProgress,
     handleRegister,
     handleProfileComplete,
+    doRegister,
   } = useEventRegistration(event?.eventId || '', event?.slug || '');
 
   if (loading) {
@@ -189,6 +194,16 @@ export const EventDetailsPage: React.FC = () => {
           <CheckCircle2 className="w-4 h-4" />
           You are already registered for this event.
         </div>
+      ) : showPaymentForm ? (
+        <PaymentDetailsSection
+          eventName={event.name}
+          fee={event.fee}
+          isSubmitting={isRegistering}
+          uploadProgress={uploadProgress}
+          error={registerError}
+          onCancel={cancelPaymentForm}
+          onSubmit={(payment) => void doRegister(payment)}
+        />
       ) : (
         <button
           onClick={() => void handleRegister()}

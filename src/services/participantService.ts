@@ -17,8 +17,11 @@ import {
 import {
   listRegistrationsByParticipant,
   createRegistration,
+  getRegistration,
+  resubmitPayment as resubmitPaymentRow,
   removeRegistrationsByParticipant,
 } from './registrationService';
+import { uploadPaymentProof } from './paymentProofService';
 import { mapEventDoc } from './eventService';
 import { nextSequence, now } from './helpers';
 
@@ -34,6 +37,7 @@ function mapParticipantRow(
     email: record.email || '',
     phone: record.phone || '',
     college: record.college || '',
+    city: record.city || '',
     department: record.department || '',
     year_of_study: record.year_of_study || '',
     gender: record.gender || 'Other',
@@ -63,6 +67,17 @@ function mapParticipantRow(
       registered_at: r.registered_at,
       payment_status: r.payment_status,
       payment_amount: r.payment_amount,
+      payment_method: r.payment_method || '',
+      transaction_id: r.transaction_id || '',
+      payment_screenshot_url: r.payment_screenshot_url || '',
+      payment_uploaded_time: r.payment_uploaded_time || '',
+      payment_proof_file_name: r.payment_proof_file_name || '',
+      payment_proof_file_type: r.payment_proof_file_type || '',
+      payment_rejection_reason: r.payment_rejection_reason || '',
+      payment_resubmission_count: r.payment_resubmission_count || 0,
+      registration_verification_status: r.registration_verification_status || 'locked',
+      attendance_eligibility: r.attendance_eligibility === true,
+      attendance_status: r.attendance_status || 'not_marked',
       event_name: events[r.event_id]?.name || '',
       event_date: events[r.event_id]?.event_date || '',
       event_time: events[r.event_id]?.time || '',
@@ -108,6 +123,7 @@ export async function me(): Promise<{ participant: any }> {
 export async function completeProfile(data: {
   phone: string;
   college: string;
+  city: string;
   department: string;
   year_of_study: string;
 }): Promise<{ message: string; participant: any }> {
@@ -120,6 +136,7 @@ export async function completeProfile(data: {
   const patch: Record<string, any> = {
     phone: data.phone,
     college: data.college,
+    city: data.city,
     department: data.department,
     year_of_study: data.year_of_study,
     profile_completed: true,
@@ -151,7 +168,17 @@ export async function myEvents(): Promise<{ events: any[] }> {
   };
 }
 
-export async function registerEvent(eventId: string | number): Promise<{ message: string; event: any }> {
+export interface RegisterPaymentInput {
+  payment_method: string;
+  transaction_id: string;
+  file: File;
+  onProgress?: (percent: number) => void;
+}
+
+export async function registerEvent(
+  eventId: string | number,
+  payment?: RegisterPaymentInput
+): Promise<{ message: string; event: any }> {
   const user = await ensureSignedIn();
   if (!user) {
     throw new Error('You must be signed in to register.');
@@ -181,6 +208,16 @@ export async function registerEvent(eventId: string | number): Promise<{ message
     throw new Error('You have already registered for this event.');
   }
 
+  if (!payment || !payment.file) {
+    throw new Error('Payment proof is required to register for this event.');
+  }
+
+  const regId = `reg-${String(await nextSequence('registrations'))}`;
+
+  const proof = await uploadPaymentProof(user.uid, id, regId, payment.file, {
+    onProgress: payment.onProgress,
+  });
+
   await createRegistration({
     event_id: id,
     participant_id: user.uid,
@@ -189,15 +226,69 @@ export async function registerEvent(eventId: string | number): Promise<{ message
     user_department: record.department,
     user_phone: record.phone,
     college: record.college,
+    city: record.city,
     department: record.department,
     year_of_study: record.year_of_study,
     gender: record.gender,
     register_number: record.register_number,
     status: 'Confirmed',
-    payment_status: 'Pending',
+    payment_amount: event.fee,
+    registration_id: regId,
+    payment_info: {
+      payment_method: payment.payment_method,
+      transaction_id: payment.transaction_id,
+      payment_proof_url: proof.url,
+      payment_proof_file_name: proof.name,
+      payment_proof_file_type: proof.contentType,
+      payment_proof_file_size: proof.size,
+      payment_proof_uploaded_at: proof.uploadedAt,
+    },
   });
 
-  return { message: 'You have been registered for the event.', event: { id, name: event.name } };
+  return {
+    message: 'You have been registered for the event. Your payment will be reviewed by the CASYUM team.',
+    event: { id, name: event.name },
+  };
+}
+
+/**
+ * Resubmit a rejected payment for one of the participant's registrations with
+ * a new transaction ID and proof. The proof is uploaded to the same structured
+ * storage path and the registration returns to the `submitted` state.
+ */
+export async function resubmitRegistrationPayment(
+  registrationId: string,
+  payment: RegisterPaymentInput
+): Promise<{ message: string }> {
+  const user = await ensureSignedIn();
+  if (!user) {
+    throw new Error('You must be signed in to resubmit a payment.');
+  }
+  const reg = await getRegistration(registrationId);
+  if (!reg) {
+    throw new Error('Registration not found.');
+  }
+  if (reg.participant_id !== user.uid) {
+    throw new Error('You can only resubmit your own payment.');
+  }
+  if (!payment.file) {
+    throw new Error('Please upload your new payment proof.');
+  }
+
+  const proof = await uploadPaymentProof(user.uid, reg.event_id, registrationId, payment.file, {
+    onProgress: payment.onProgress,
+  });
+
+  const res = await resubmitPaymentRow(registrationId, {
+    payment_method: payment.payment_method,
+    transaction_id: payment.transaction_id,
+    payment_proof_url: proof.url,
+    payment_proof_file_name: proof.name,
+    payment_proof_file_type: proof.contentType,
+    payment_proof_file_size: proof.size,
+    payment_proof_uploaded_at: proof.uploadedAt,
+  });
+  return res;
 }
 
 export async function register(data: {
@@ -205,6 +296,7 @@ export async function register(data: {
   email: string;
   phone: string;
   college: string;
+  city: string;
   department: string;
   year_of_study: string;
   register_number?: string;
@@ -222,6 +314,7 @@ export async function register(data: {
     email: data.email,
     phone: data.phone,
     college: data.college,
+    city: data.city,
     department: data.department,
     year_of_study: data.year_of_study,
     gender: data.gender || 'Other',
@@ -246,12 +339,12 @@ export async function register(data: {
       user_department: data.department,
       user_phone: data.phone,
       college: data.college,
+      city: data.city,
       department: data.department,
       year_of_study: data.year_of_study,
       gender: data.gender,
       register_number: data.register_number,
       status: 'Confirmed',
-      payment_status: 'Pending',
     });
   }
 
@@ -317,6 +410,7 @@ export async function update(
     email: string;
     phone: string;
     college: string;
+    city: string;
     department: string;
     year_of_study: string;
     register_number: string;

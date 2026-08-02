@@ -42,7 +42,8 @@ export const AttendanceModule: React.FC = () => {
       const matchesSearch = !search ||
         p.name.toLowerCase().includes(search.toLowerCase()) ||
         p.registerNumber.toLowerCase().includes(search.toLowerCase()) ||
-        p.college.toLowerCase().includes(search.toLowerCase());
+        p.college.toLowerCase().includes(search.toLowerCase()) ||
+        p.city.toLowerCase().includes(search.toLowerCase());
       const matchesCollege = !collegeFilter || p.college === collegeFilter;
       return matchesSearch && matchesCollege;
     }
@@ -62,6 +63,7 @@ export const AttendanceModule: React.FC = () => {
         ID: p.id,
         Name: p.name,
         College: p.college,
+        City: p.city,
         Department: p.department,
         RegNo: p.registerNumber,
         Status: rec ? rec.status : 'Absent',
@@ -80,6 +82,7 @@ export const AttendanceModule: React.FC = () => {
         p.id,
         p.name,
         p.college,
+        p.city,
         p.registerNumber,
         rec ? rec.status : 'Absent',
         rec ? rec.timestamp : 'N/A',
@@ -87,7 +90,7 @@ export const AttendanceModule: React.FC = () => {
     });
     exportToPrintableReport(
       `Attendance Log - ${currentEvent?.name || 'Event'}`,
-      ['ID', 'Name', 'College', 'Reg No', 'Status', 'Time'],
+      ['ID', 'Name', 'College', 'City', 'Reg No', 'Status', 'Time'],
       rows
     );
   };
@@ -244,6 +247,7 @@ export const AttendanceModule: React.FC = () => {
               <tr>
                 <th className="p-4">Participant</th>
                 <th className="p-4">College</th>
+                <th className="p-4">City</th>
                 <th className="p-4">Department</th>
                 <th className="p-4">Reg Number</th>
                 <th className="p-4">Status</th>
@@ -254,7 +258,7 @@ export const AttendanceModule: React.FC = () => {
             <tbody className="divide-y divide-white/5">
               {filteredParticipants.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="p-12 text-center text-xs text-white/40">
+                  <td colSpan={8} className="p-12 text-center text-xs text-white/40">
                     No participants registered for this event yet.
                   </td>
                 </tr>
@@ -275,6 +279,7 @@ export const AttendanceModule: React.FC = () => {
                         </div>
                       </td>
                       <td className="p-4 text-white/70">{p.college}</td>
+                      <td className="p-4 text-white/70">{p.city || '—'}</td>
                       <td className="p-4 text-white/70">{p.department}</td>
                       <td className="p-4 font-mono text-white/70">{p.registerNumber}</td>
                       <td className="p-4">

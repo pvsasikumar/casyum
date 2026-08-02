@@ -17,11 +17,16 @@ import {
   ChevronDown,
   CircleCheckBig,
   CircleDollarSign,
+  Lock,
+  XCircle,
+  UploadCloud,
 } from 'lucide-react';
 import { useRBAC } from '../rbac/context/RBACContext';
 import { api } from '../services/api';
 import { EventOverviewCms } from '../components/cms/EventOverviewCms';
 import { ParticipantQRCard } from './ParticipantQRCard';
+import { PaymentDetailsSection } from '../components/events/PaymentDetailsSection';
+import { registerEvent, resubmitRegistrationPayment } from '../services/participantService';
 
 const YEARS = ['1st Year', '2nd Year', '3rd Year', '4th Year', 'Other'];
 
@@ -37,11 +42,18 @@ export const ParticipantDashboard: React.FC = () => {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
 
-  const [profile, setProfile] = useState({ phone: '', college: '', department: '', year_of_study: '' });
+  const [profile, setProfile] = useState({ phone: '', college: '', city: '', department: '', year_of_study: '' });
   const [profileErrors, setProfileErrors] = useState<Record<string, string>>({});
   const [savingProfile, setSavingProfile] = useState(false);
-  const [registeringId, setRegisteringId] = useState<string | number | null>(null);
   const [viewingEvent, setViewingEvent] = useState<any>(null);
+  const [resubmitTarget, setResubmitTarget] = useState<any>(null);
+  const [resubmitProgress, setResubmitProgress] = useState<number | null>(null);
+  const [resubmitError, setResubmitError] = useState('');
+  const [resubmittingNow, setResubmittingNow] = useState(false);
+  const [registerTarget, setRegisterTarget] = useState<any>(null);
+  const [registerProgress, setRegisterProgress] = useState<number | null>(null);
+  const [registerError, setRegisterError] = useState('');
+  const [registeringNow, setRegisteringNow] = useState(false);
 
   const loadAll = useCallback(async () => {
     try {
@@ -55,6 +67,7 @@ export const ParticipantDashboard: React.FC = () => {
         setProfile({
           phone: meRes.participant.phone || '',
           college: meRes.participant.college || '',
+          city: meRes.participant.city || '',
           department: meRes.participant.department || '',
           year_of_study: meRes.participant.year_of_study || '',
         });
@@ -88,6 +101,8 @@ export const ParticipantDashboard: React.FC = () => {
     const errors: Record<string, string> = {};
     if (!profile.phone.trim()) errors.phone = 'Phone number is required.';
     if (!profile.college.trim()) errors.college = 'College name is required.';
+    if (!profile.city.trim()) errors.city = 'City is required.';
+    else if (!/^[A-Za-z\s'-]{2,100}$/.test(profile.city.trim())) errors.city = 'Please enter a valid city name.';
     if (!profile.department.trim()) errors.department = 'Department is required.';
     if (!profile.year_of_study) errors.year_of_study = 'Year of study is required.';
     setProfileErrors(errors);
@@ -104,6 +119,7 @@ export const ParticipantDashboard: React.FC = () => {
       await api.participant.completeProfile({
         phone: profile.phone.trim(),
         college: profile.college.trim(),
+        city: profile.city.trim(),
         department: profile.department.trim(),
         year_of_study: profile.year_of_study,
       });
@@ -118,15 +134,59 @@ export const ParticipantDashboard: React.FC = () => {
   const handleRegister = async (eventId: string | number) => {
     setError('');
     setNotice('');
-    setRegisteringId(eventId);
+    const ev = openEvents.find((e) => String(e.id) === String(eventId));
+    if (!ev) return;
+    setRegisterError('');
+    setRegisterTarget(ev);
+  };
+
+  const handleRegisterSubmit = async (payment: { payment_method: string; transaction_id: string; file: File }) => {
+    if (!registerTarget) return;
+    setError('');
+    setNotice('');
+    setRegisteringNow(true);
+    setRegisterProgress(0);
+    setRegisterError('');
     try {
-      const res = await api.participant.registerEvent(eventId);
-      setNotice(res.message || 'You have been registered for the event.');
+      const res = await registerEvent(registerTarget.id, {
+        payment_method: payment.payment_method,
+        transaction_id: payment.transaction_id,
+        file: payment.file,
+        onProgress: (pct) => setRegisterProgress(pct),
+      });
+      setNotice(res.message);
+      setRegisterTarget(null);
       await loadAll();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to register for the event.');
+      setRegisterError(err instanceof Error ? err.message : 'Failed to register for the event.');
     } finally {
-      setRegisteringId(null);
+      setRegisteringNow(false);
+      setRegisterProgress(null);
+    }
+  };
+
+  const handleResubmit = async (payment: { payment_method: string; transaction_id: string; file: File }) => {
+    if (!resubmitTarget) return;
+    setError('');
+    setNotice('');
+    setResubmittingNow(true);
+    setResubmitProgress(0);
+    setResubmitError('');
+    try {
+      const res = await resubmitRegistrationPayment(resubmitTarget.registration_id, {
+        payment_method: payment.payment_method,
+        transaction_id: payment.transaction_id,
+        file: payment.file,
+        onProgress: (pct) => setResubmitProgress(pct),
+      });
+      setNotice(res.message);
+      setResubmitTarget(null);
+      await loadAll();
+    } catch (err) {
+      setResubmitError(err instanceof Error ? err.message : 'Failed to resubmit payment.');
+    } finally {
+      setResubmittingNow(false);
+      setResubmitProgress(null);
     }
   };
 
@@ -325,19 +385,14 @@ export const ParticipantDashboard: React.FC = () => {
 
                         <button
                           onClick={() => handleRegister(ev.id)}
-                          disabled={isRegistered || isFull || registeringId === ev.id}
+                          disabled={isRegistered || isFull}
                           className={`w-full py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all cursor-pointer flex items-center justify-center gap-2 disabled:cursor-not-allowed ${
                             isRegistered
                               ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-300'
                               : 'bg-gradient-to-r from-violet-500 to-indigo-600 hover:from-violet-600 hover:to-indigo-700 text-white shadow-lg shadow-violet-500/20'
                           } ${isFull && !isRegistered ? 'opacity-50' : ''}`}
                         >
-                          {registeringId === ev.id ? (
-                            <>
-                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                              Registering...
-                            </>
-                          ) : isRegistered ? (
+                          {isRegistered ? (
                             <>
                               <CheckCircle2 className="w-3.5 h-3.5" />
                               Registered
@@ -383,43 +438,217 @@ export const ParticipantDashboard: React.FC = () => {
                 </div>
               ) : (
                 <div className="flex flex-col gap-3">
-                  {myRegistrations.map((reg: any) => (
-                    <div key={reg.registration_id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.03] px-5 py-4">
-                      <div className="flex flex-col gap-0.5">
-                        <span className="text-sm font-bold">{reg.event_name}</span>
-                        <span className="text-[11px] text-white/40">
-                          {reg.event_date}{reg.event_time ? ` · ${reg.event_time}` : ''} · {reg.venue || 'TBA'}
-                        </span>
+                  {myRegistrations.map((reg: any) => {
+                    const paymentStatus = reg.payment_status || 'submitted';
+                    const isRejected = paymentStatus === 'rejected';
+                    const paymentVerified = paymentStatus === 'verified';
+                    const deskVerified = (reg.registration_verification_status || 'locked') === 'verified';
+                    const attendanceEnabled = reg.attendance_eligibility === true;
+                    return (
+                      <div
+                        key={reg.registration_id}
+                        className="rounded-2xl border border-white/10 bg-white/[0.03] px-5 py-4 flex flex-col gap-4"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <div className="flex flex-col gap-0.5">
+                            <span className="text-sm font-bold">{reg.event_name}</span>
+                            <span className="text-[11px] text-white/40">
+                              {reg.event_date}{reg.event_time ? ` · ${reg.event_time}` : ''} · {reg.venue || 'TBA'}
+                            </span>
+                            <span className="text-[10px] text-white/30 font-mono">{reg.registration_id}</span>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <span className="text-xs text-white/50">Fee: ₹{Number(reg.fee) || 0}</span>
+                            <span
+                              className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border ${
+                                paymentVerified
+                                  ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300'
+                                  : isRejected
+                                    ? 'bg-rose-500/15 border-rose-500/30 text-rose-300'
+                                    : 'bg-amber-500/15 border-amber-500/30 text-amber-300'
+                              }`}
+                            >
+                              {paymentVerified ? 'Payment Verified' : isRejected ? 'Payment Rejected' : 'Payment Pending'}
+                            </span>
+                          </div>
+                        </div>
+
+                        <RegistrationStatusTracker
+                          paymentStatus={paymentStatus}
+                          deskVerified={deskVerified}
+                          attendanceEnabled={attendanceEnabled}
+                          attendanceStatus={reg.attendance_status || 'not_marked'}
+                        />
+
+                        {isRejected && (
+                          <div className="flex flex-col gap-2">
+                            <div className="flex items-start gap-2 px-3 py-2.5 rounded-xl bg-rose-500/10 border border-rose-500/25 text-rose-300 text-xs">
+                              <XCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                              <span>
+                                Payment rejected: {reg.payment_rejection_reason || 'Please verify your payment details.'}
+                                {reg.payment_resubmission_count > 0
+                                  ? ` (Resubmission #${reg.payment_resubmission_count})`
+                                  : ''}
+                              </span>
+                            </div>
+                            <button
+                              onClick={() => {
+                                setResubmitError('');
+                                setResubmitTarget(reg);
+                              }}
+                              className="self-start flex items-center gap-2 px-4 py-2.5 rounded-xl bg-violet-600/20 hover:bg-violet-600/30 border border-violet-500/30 text-violet-300 text-xs font-bold cursor-pointer transition-all"
+                            >
+                              <UploadCloud className="w-3.5 h-3.5" />
+                              Resubmit Payment
+                            </button>
+                          </div>
+                        )}
                       </div>
-                      <div className="flex items-center gap-3">
-                        <span className="text-xs text-white/50">Fee: ₹{Number(reg.fee) || 0}</span>
-                        <span className="px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-[10px] font-bold uppercase tracking-wider text-cyan-300">
-                          {participant.payment_status || 'Pending'}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                  {Number(participant.payment_amount) > 0 && (
-                    <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs">
-                      <CircleDollarSign className="w-4 h-4 flex-shrink-0" />
-                      <span>
-                        A payment of ₹{Number(participant.payment_amount)} is required for your registrations. Payment status: {participant.payment_status}.
-                      </span>
-                    </div>
-                  )}
+                    );
+                  })}
                 </div>
               )}
             </section>
           </>
         )}
       </main>
+
+      {resubmitTarget && (
+        <div className="fixed inset-0 z-[9999] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="w-full max-w-lg bg-zinc-950 border border-white/20 rounded-3xl p-6 shadow-2xl">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex flex-col gap-0.5">
+                <span className="text-[10px] font-bold uppercase tracking-widest text-violet-400">Resubmit Payment</span>
+                <h3 className="text-base font-bold font-display text-white">{resubmitTarget.event_name}</h3>
+              </div>
+              <button
+                onClick={() => setResubmitTarget(null)}
+                disabled={resubmittingNow}
+                className="p-2 rounded-xl text-white/50 hover:text-white bg-white/5 hover:bg-white/10 cursor-pointer disabled:opacity-40"
+              >
+                <XCircle className="w-4 h-4" />
+              </button>
+            </div>
+            <PaymentDetailsSection
+              eventName={resubmitTarget.event_name}
+              fee={Number(resubmitTarget.fee) || 0}
+              isSubmitting={resubmittingNow}
+              uploadProgress={resubmitProgress}
+              error={resubmitError}
+              onCancel={() => setResubmitTarget(null)}
+              onSubmit={(payment) => void handleResubmit(payment)}
+            />
+          </div>
+        </div>
+      )}
+
+      {registerTarget && (
+        <div className="fixed inset-0 z-[9999] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="w-full max-w-lg bg-zinc-950 border border-white/20 rounded-3xl p-6 shadow-2xl">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex flex-col gap-0.5">
+                <span className="text-[10px] font-bold uppercase tracking-widest text-violet-400">Register for Event</span>
+                <h3 className="text-base font-bold font-display text-white">{registerTarget.name}</h3>
+              </div>
+              <button
+                onClick={() => setRegisterTarget(null)}
+                disabled={registeringNow}
+                className="p-2 rounded-xl text-white/50 hover:text-white bg-white/5 hover:bg-white/10 cursor-pointer disabled:opacity-40"
+              >
+                <XCircle className="w-4 h-4" />
+              </button>
+            </div>
+            <PaymentDetailsSection
+              eventName={registerTarget.name}
+              fee={Number(registerTarget.fee) || 0}
+              isSubmitting={registeringNow}
+              uploadProgress={registerProgress}
+              error={registerError}
+              onCancel={() => setRegisterTarget(null)}
+              onSubmit={(payment) => void handleRegisterSubmit(payment)}
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+interface RegistrationStatusTrackerProps {
+  paymentStatus: string;
+  deskVerified: boolean;
+  attendanceEnabled: boolean;
+  attendanceStatus: string;
+}
+
+const RegistrationStatusTracker: React.FC<RegistrationStatusTrackerProps> = ({
+  paymentStatus,
+  deskVerified,
+  attendanceEnabled,
+  attendanceStatus,
+}) => {
+  const attendanceMarked = !!attendanceStatus && attendanceStatus !== 'not_marked';
+  const steps = [
+    { label: 'Registration Submitted', state: 'done' as const },
+    {
+      label: paymentStatus === 'verified' ? 'Payment Verified' : paymentStatus === 'rejected' ? 'Payment Rejected' : 'Payment Verification Pending',
+      state: (paymentStatus === 'verified' ? 'done' : paymentStatus === 'rejected' ? 'rejected' : 'pending') as 'done' | 'pending' | 'rejected' | 'locked',
+    },
+    {
+      label: deskVerified ? 'Registration Desk Verified' : 'Registration Desk Verification Locked',
+      state: (deskVerified ? 'done' : 'locked') as 'done' | 'pending' | 'rejected' | 'locked',
+    },
+    {
+      label: attendanceEnabled ? 'Attendance Eligible' : 'Attendance Eligibility Locked',
+      state: (attendanceEnabled ? 'done' : 'locked') as 'done' | 'pending' | 'rejected' | 'locked',
+    },
+    {
+      label: attendanceMarked ? `Attendance Marked (${attendanceStatus})` : attendanceEnabled ? 'Attendance Not Yet Marked' : 'Attendance Not Marked',
+      state: (attendanceMarked ? 'done' : attendanceEnabled ? 'pending' : 'locked') as 'done' | 'pending' | 'rejected' | 'locked',
+    },
+  ];
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      {steps.map((step, idx) => {
+        const isLast = idx === steps.length - 1;
+        return (
+          <div key={step.label} className="flex items-start gap-2.5">
+            <div className="flex flex-col items-center">
+              {step.state === 'done' ? (
+                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+              ) : step.state === 'rejected' ? (
+                <XCircle className="w-4 h-4 text-rose-400" />
+              ) : step.state === 'pending' ? (
+                <Clock className="w-4 h-4 text-amber-400" />
+              ) : (
+                <Lock className="w-4 h-4 text-white/30" />
+              )}
+              {!isLast && <div className="w-px flex-1 min-h-4 bg-white/10 mt-1" />}
+            </div>
+            <span
+              className={`text-[11px] pb-1.5 ${
+                step.state === 'done'
+                  ? 'text-emerald-300'
+                  : step.state === 'rejected'
+                    ? 'text-rose-300'
+                    : step.state === 'pending'
+                      ? 'text-amber-300'
+                      : 'text-white/40'
+              }`}
+            >
+              {step.label}
+            </span>
+          </div>
+        );
+      })}
     </div>
   );
 };
 
 interface ProfileCompletionFormProps {
-  profile: { phone: string; college: string; department: string; year_of_study: string };
-  setProfile: React.Dispatch<React.SetStateAction<{ phone: string; college: string; department: string; year_of_study: string }>>;
+  profile: { phone: string; college: string; city: string; department: string; year_of_study: string };
+  setProfile: React.Dispatch<React.SetStateAction<{ phone: string; college: string; city: string; department: string; year_of_study: string }>>;
   errors: Record<string, string>;
   setErrors: React.Dispatch<React.SetStateAction<Record<string, string>>>;
   saving: boolean;
@@ -494,6 +723,21 @@ const ProfileCompletionForm: React.FC<ProfileCompletionFormProps> = ({ profile, 
               ))}
             </select>
             {errors.year_of_study && <span className="text-[10px] text-rose-400 px-1">{errors.year_of_study}</span>}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="flex flex-col gap-1">
+            <input
+              type="text"
+              placeholder="City"
+              value={profile.city}
+              onChange={(e) => { setField('city', e.target.value); if (errors.city) setErrors((f) => ({ ...f, city: '' })); }}
+              className={`${inputClass} ${errors.city ? 'border-rose-500/60' : ''}`}
+              autoComplete="address-level2"
+              maxLength={100}
+            />
+            {errors.city && <span className="text-[10px] text-rose-400 px-1">{errors.city}</span>}
           </div>
         </div>
 

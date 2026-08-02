@@ -41,6 +41,7 @@ export const ParticipantDrawer: React.FC<ParticipantDrawerProps> = ({ participan
         ['Register ID', participant.id],
         ['Full Name', participant.name],
         ['College', participant.college],
+        ['City', participant.city],
         ['Department', participant.department],
         ['Year of Study', participant.year],
         ['Register Number', participant.registerNumber],
@@ -82,7 +83,7 @@ export const ParticipantDrawer: React.FC<ParticipantDrawerProps> = ({ participan
                   {participant.paymentStatus}
                 </span>
               </h2>
-              <span className="text-xs text-white/50">{participant.id} · {participant.college}</span>
+              <span className="text-xs text-white/50">{participant.id} · {participant.college} · {participant.city}</span>
             </div>
           </div>
 

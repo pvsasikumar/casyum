@@ -9,7 +9,8 @@ export type UserRole =
   | 'Registration Team'
   | 'Certificate Manager'
   | 'Finance Manager'
-  | 'Participant';
+  | 'Participant'
+  | 'casyum_faculty_manager';
 
 export type PermissionAction = 'view' | 'create' | 'edit' | 'delete' | 'export' | 'approve' | 'reject' | 'verify' | 'refund' | 'assign' | 'generate' | 'reissue' | 'manage';
 
@@ -28,6 +29,7 @@ export type PermissionDomain =
   | 'employees'
   | 'coordinators'
   | 'registration_team'
+  | 'casyum_faculty_managers'
   | 'verification'
   | 'announcements'
   | 'gallery'

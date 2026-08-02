@@ -20,6 +20,7 @@ import {
   Briefcase,
   Mail,
   Trophy,
+  GraduationCap,
 } from 'lucide-react';
 import type { ActiveTabModule } from '../../types';
 import { useAdmin } from '../../context/AdminContext';
@@ -50,6 +51,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onCloseMobile, onExitAdmin }) 
     { name: 'Event Export', icon: FileDown, permission: 'events.export' },
     { name: 'Coordinators', icon: UserCheck, permission: 'coordinators.view' },
     { name: 'Registration Team', icon: UserCheck, permission: 'registration_team.view' },
+    { name: 'CASYUM Faculty Managers', icon: GraduationCap, permission: 'casyum_faculty_managers.view' },
     { name: 'Participants', icon: Users, permission: 'participants.view', badge: participants.length },
     { name: 'Registrations', icon: ClipboardList, permission: 'registrations.view' },
     { name: 'Payments', icon: CreditCard, permission: 'payments.view' },

@@ -45,6 +45,7 @@ export interface RegistrationRow {
   user_department: string;
   user_phone: string;
   college: string;
+  city: string;
   department: string;
   year_of_study: string;
   gender: string;
@@ -57,6 +58,26 @@ export interface RegistrationRow {
   payment_screenshot_url: string;
   payment_uploaded_time: string;
   payment_remarks: string;
+  payment_required?: boolean;
+  payment_method?: string;
+  payment_proof_file_name?: string;
+  payment_proof_file_type?: string;
+  payment_proof_file_size?: number;
+  payment_verified_by?: string;
+  payment_verified_by_name?: string;
+  payment_verified_at?: string;
+  payment_rejected_by?: string;
+  payment_rejected_by_name?: string;
+  payment_rejected_at?: string;
+  payment_rejection_reason?: string;
+  payment_resubmitted_at?: string;
+  payment_resubmission_count?: number;
+  registration_verification_status?: string;
+  registration_verified_by?: string;
+  registration_verified_by_name?: string;
+  registration_verified_at?: string;
+  attendance_eligibility?: boolean;
+  attendance_status?: string;
 }
 
 export function mapEventDoc(docId: string, data: Record<string, any>): EventRow {
@@ -89,24 +110,45 @@ function mapRegDoc(docId: string, data: Record<string, any>): RegistrationRow {
     registration_id: docId,
     event_id: data.event_id || '',
     participant_id: data.participant_id || '',
-    participant_user_id: data.participant_id || data.participant_email || docId,
+    participant_user_id: data.participant_user_id || data.participant_id || data.participant_email || docId,
     participant_email: data.participant_email || '',
     user_full_name: data.user_full_name || data.participant_name || 'Participant',
     user_department: data.user_department || data.department || '',
     user_phone: data.user_phone || data.phone || '',
     college: data.college || '',
+    city: data.city || '',
     department: data.department || '',
     year_of_study: data.year_of_study || '',
     gender: data.gender || 'Other',
     register_number: data.register_number || '',
     status: data.status || 'Confirmed',
-    registered_at: data.registered_at || '',
-    payment_status: data.payment_status || 'Pending',
-    payment_amount: Number(data.payment_amount) || 0,
-    transaction_id: data.transaction_id || '',
-    payment_screenshot_url: data.payment_screenshot_url || '',
-    payment_uploaded_time: data.payment_uploaded_time || '',
-    payment_remarks: data.payment_remarks || '',
+    registered_at: data.registered_at || data.created_at || '',
+    payment_status: data.payment_status || 'submitted',
+    payment_amount: Number(data.payment_amount ?? data.registrationFee) || 0,
+    transaction_id: data.transaction_id || data.transactionId || '',
+    payment_screenshot_url: data.payment_screenshot_url || data.paymentProofUrl || '',
+    payment_uploaded_time: data.payment_uploaded_time || data.paymentProofUploadedAt || '',
+    payment_remarks: data.payment_remarks || data.paymentRejectionReason || '',
+    payment_required: data.paymentRequired === true || data.payment_required === true,
+    payment_method: data.payment_method || data.paymentMethod || '',
+    payment_proof_file_name: data.payment_proof_file_name || data.paymentProofFileName || '',
+    payment_proof_file_type: data.payment_proof_file_type || data.paymentProofFileType || '',
+    payment_proof_file_size: Number(data.payment_proof_file_size ?? data.paymentProofFileSize) || 0,
+    payment_verified_by: data.payment_verified_by || data.paymentVerifiedBy || '',
+    payment_verified_by_name: data.payment_verified_by_name || data.paymentVerifiedByName || data.paymentVerifiedBy || '',
+    payment_verified_at: data.payment_verified_at || data.paymentVerifiedAt || '',
+    payment_rejected_by: data.payment_rejected_by || data.paymentRejectedBy || '',
+    payment_rejected_by_name: data.payment_rejected_by_name || data.paymentRejectedByName || data.paymentRejectedBy || '',
+    payment_rejected_at: data.payment_rejected_at || data.paymentRejectedAt || '',
+    payment_rejection_reason: data.payment_rejection_reason || data.paymentRejectionReason || '',
+    payment_resubmitted_at: data.payment_resubmitted_at || data.paymentResubmittedAt || '',
+    payment_resubmission_count: Number(data.payment_resubmission_count ?? data.paymentResubmissionCount) || 0,
+    registration_verification_status: data.registration_verification_status || data.registrationVerificationStatus || 'locked',
+    registration_verified_by: data.registration_verified_by || data.registrationVerifiedBy || '',
+    registration_verified_by_name: data.registration_verified_by_name || data.registrationVerifiedByName || data.registrationVerifiedBy || '',
+    registration_verified_at: data.registration_verified_at || data.registrationVerifiedAt || '',
+    attendance_eligibility: data.attendanceEligibility === true || data.attendance_eligibility === true,
+    attendance_status: data.attendance_status || data.attendanceStatus || 'not_marked',
   };
 }
 

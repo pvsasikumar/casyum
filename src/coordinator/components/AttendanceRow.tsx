@@ -43,6 +43,7 @@ export const AttendanceRow: React.FC<AttendanceRowProps> = ({
         <span className="font-bold text-white text-xs">{participant.participantName}</span>
       </td>
       <td className="p-3 text-[11px] text-white/70">{participant.college}</td>
+      <td className="p-3 text-[11px] text-white/70">{participant.city || '—'}</td>
       <td className="p-3 text-[11px] text-white/70">{participant.department}</td>
       <td className="p-3 font-mono text-[11px] text-white/60">{participant.phoneNumber}</td>
       <td className="p-3">

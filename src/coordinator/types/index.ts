@@ -27,6 +27,7 @@ export interface EventParticipant {
   participantId: string;
   participantName: string;
   college: string;
+  city: string;
   department: string;
   phoneNumber: string;
   email: string;
@@ -34,6 +35,8 @@ export interface EventParticipant {
   paymentStatus: string;
   verificationStatus: VerificationStatus;
   verifiedBy?: string;
+  registrationVerificationStatus: string;
+  attendanceEligibility: boolean;
 }
 
 export interface ParticipantAttendanceView extends EventParticipant {

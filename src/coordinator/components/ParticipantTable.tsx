@@ -145,6 +145,7 @@ export const ParticipantTable: React.FC<ParticipantTableProps> = ({ participants
               <th className="p-3">Participant</th>
               <th className="p-3">Registration ID</th>
               <th className="p-3">College</th>
+              <th className="p-3">City</th>
               <th className="p-3">Department</th>
               <th className="p-3">Phone</th>
               <th className="p-3">Email</th>
@@ -154,7 +155,7 @@ export const ParticipantTable: React.FC<ParticipantTableProps> = ({ participants
           <tbody className="divide-y divide-white/5">
             {paginated.length === 0 ? (
               <tr>
-                <td colSpan={7} className="p-8 text-center text-xs text-white/40">
+                <td colSpan={8} className="p-8 text-center text-xs text-white/40">
                   No matching participants found
                 </td>
               </tr>
@@ -173,6 +174,7 @@ export const ParticipantTable: React.FC<ParticipantTableProps> = ({ participants
                     {p.registrationId}
                   </td>
                   <td className="p-3 text-[11px] text-white/70">{p.college}</td>
+                  <td className="p-3 text-[11px] text-white/70">{p.city || '—'}</td>
                   <td className="p-3 text-[11px] text-white/70">{p.department}</td>
                   <td className="p-3 font-mono text-[11px] text-white/60">{p.phoneNumber}</td>
                   <td className="p-3 text-[11px] text-white/70">{p.email || '—'}</td>

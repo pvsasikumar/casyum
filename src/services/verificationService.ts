@@ -338,10 +338,12 @@ export interface VerificationParticipantRow {
   email: string;
   phone: string;
   college: string;
+  city: string;
   department: string;
   year_of_study: string;
   register_number: string;
   payment_status: string;
+  payment_verified: boolean;
   event_ids: string[];
   registrationId: string;
   eventNames: string[];
@@ -370,6 +372,12 @@ function mapVerificationParticipant(
   const eventNames = Array.from(
     new Set(regs.map((r) => events[r.event_id]?.name || '').filter(Boolean))
   );
+  const regPaymentStatuses = regs
+    .map((r) => r.paymentStatus || r.payment_status || '')
+    .filter((s) => s !== '')
+    .map((s) => String(s).toLowerCase());
+  const paymentVerified =
+    regs.length > 0 && regPaymentStatuses.length > 0 && regPaymentStatuses.every((s) => s === 'verified');
   return {
     id,
     participant_id: id,
@@ -377,10 +385,12 @@ function mapVerificationParticipant(
     email: data.email || '',
     phone: data.phone || '',
     college: data.college || '',
+    city: data.city || '',
     department: data.department || '',
     year_of_study: data.year_of_study || '',
     register_number: data.register_number || '',
-    payment_status: data.payment_status || 'Pending',
+    payment_status: regPaymentStatuses[0] || data.payment_status || 'submitted',
+    payment_verified: paymentVerified,
     event_ids: eventIds,
     registrationId: registration?.registration_id || data.registration_id || '',
     eventNames,

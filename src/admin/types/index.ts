@@ -1,4 +1,4 @@
-export type UserRole = 'Super Admin' | 'Admin' | 'Event Coordinator' | 'Registration Manager' | 'Registration Team' | 'Certificate Manager' | 'Finance Manager' | 'Participant' | 'Faculty Coordinator' | 'Student Coordinator';
+export type UserRole = 'Super Admin' | 'Admin' | 'Event Coordinator' | 'Registration Manager' | 'Registration Team' | 'Certificate Manager' | 'Finance Manager' | 'Participant' | 'Faculty Coordinator' | 'Student Coordinator' | 'casyum_faculty_manager';
 
 export type PaymentStatus = 'Approved' | 'Pending' | 'Rejected';
 export type AttendanceStatus = 'Present' | 'Absent' | 'Late';
@@ -10,6 +10,7 @@ export interface Participant {
   name: string;
   photo: string;
   college: string;
+  city: string;
   department: string;
   year: string;
   registerNumber: string;
@@ -184,6 +185,7 @@ export type ActiveTabModule =
   | 'Certificates'
   | 'Coordinators'
   | 'Registration Team'
+  | 'CASYUM Faculty Managers'
   | 'Participants'
   | 'Settings'
   | 'Audit Logs'
