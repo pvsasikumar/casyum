@@ -84,7 +84,6 @@ export const EventDetailsPage: React.FC = () => {
     profileError,
     registerMessage,
     registerError,
-    uploadProgress,
     handleRegister,
     handleProfileComplete,
     doRegister,
@@ -199,7 +198,6 @@ export const EventDetailsPage: React.FC = () => {
           eventName={event.name}
           fee={event.fee}
           isSubmitting={isRegistering}
-          uploadProgress={uploadProgress}
           error={registerError}
           onCancel={cancelPaymentForm}
           onSubmit={(payment) => void doRegister(payment)}

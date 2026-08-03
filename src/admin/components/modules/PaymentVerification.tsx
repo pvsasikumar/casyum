@@ -3,9 +3,6 @@ import {
   CheckCircle2,
   XCircle,
   ShieldCheck,
-  Eye,
-  Download,
-  FileText,
   Loader2,
   X,
   Search,
@@ -17,12 +14,7 @@ import {
   rejectPayment,
   type PaymentRegistrationRow,
 } from '../../../services/registrationService';
-import {
-  isPaymentProofPdf,
-  isPaymentProofImage,
-  formatFileSize,
-  paymentMethodLabel,
-} from '../../../services/paymentProofService';
+import { paymentMethodLabel } from '../../../services/paymentProofService';
 import { useRBAC } from '../../../rbac/context/RBACContext';
 import { useAdmin } from '../../context/AdminContext';
 
@@ -41,14 +33,13 @@ export const PaymentVerification: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<PaymentFilter>('submitted');
   const [query, setQuery] = useState('');
-  const [proofTarget, setProofTarget] = useState<PaymentRegistrationRow | null>(null);
   const [verifyTarget, setVerifyTarget] = useState<PaymentRegistrationRow | null>(null);
   const [rejectTarget, setRejectTarget] = useState<PaymentRegistrationRow | null>(null);
   const [rejectReason, setRejectReason] = useState('');
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const verifier = useMemo(
-    () => ({ userId: rbac.user?.id || '', name: rbac.user?.name || 'Faculty Manager' }),
+    () => ({ userId: rbac.user?.id || '', name: rbac.user?.name || 'Faculty Coordinator' }),
     [rbac.user]
   );
 
@@ -133,27 +124,13 @@ export const PaymentVerification: React.FC = () => {
     }
   };
 
-  const downloadProof = (r: PaymentRegistrationRow) => {
-    if (!r.paymentProofUrl) return;
-    const a = document.createElement('a');
-    a.href = r.paymentProofUrl;
-    a.download = r.paymentProofFileName || 'payment-proof';
-    a.target = '_blank';
-    a.rel = 'noopener noreferrer';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-  };
-
-  const isPdf = (r: PaymentRegistrationRow) => isPaymentProofPdf(r.paymentProofFileType) || /\.pdf$/i.test(r.paymentProofFileName);
-
   return (
     <div className="flex flex-col gap-6 select-none pb-12">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex flex-col">
           <span className="text-xs font-bold text-violet-400 uppercase tracking-widest">
-            Faculty Manager · Payment Review
+            Faculty Coordinator · Payment Review
           </span>
           <h2 className="text-xl sm:text-2xl font-extrabold font-display text-white">
             Payment Verification Queue ({filtered.length})
@@ -203,7 +180,7 @@ export const PaymentVerification: React.FC = () => {
                 <th className="p-4">Fee</th>
                 <th className="p-4">Payment Method</th>
                 <th className="p-4">Transaction ID</th>
-                <th className="p-4">Payment Proof</th>
+                <th className="p-4">Payment Date</th>
                 <th className="p-4">Payment Status</th>
                 <th className="p-4">Submitted Date</th>
                 <th className="p-4 text-right">Actions</th>
@@ -225,7 +202,6 @@ export const PaymentVerification: React.FC = () => {
               ) : (
                 filtered.map((r) => {
                   const meta = STATUS_META[r.paymentStatus] || STATUS_META.submitted;
-                  const pdf = isPdf(r);
                   const busy = busyId === r.registration_id;
                   return (
                     <tr key={r.registration_id} className="hover:bg-white/[0.02] transition-colors align-top">
@@ -247,45 +223,8 @@ export const PaymentVerification: React.FC = () => {
                           {r.transactionId || '—'}
                         </span>
                       </td>
-                      <td className="p-4">
-                        {r.paymentProofUrl ? (
-                          <div className="flex flex-col gap-1.5">
-                            <div className="flex items-center gap-2">
-                              {pdf ? (
-                                <div className="w-9 h-9 rounded-lg bg-rose-500/10 border border-rose-500/25 flex items-center justify-center shrink-0">
-                                  <FileText className="w-4 h-4 text-rose-400" />
-                                </div>
-                              ) : (
-                                <img
-                                  src={r.paymentProofUrl}
-                                  alt="Payment proof"
-                                  className="w-9 h-9 rounded-lg object-cover border border-white/10 shrink-0"
-                                />
-                              )}
-                              <span className="text-[10px] text-white/50 truncate max-w-[90px]">
-                                {r.paymentProofFileName || 'proof'}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-1.5">
-                              <button
-                                onClick={() => setProofTarget(r)}
-                                className="flex items-center gap-1 px-2 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-white/60 hover:text-white text-[10px] font-bold cursor-pointer"
-                              >
-                                <Eye className="w-3 h-3" />
-                                {pdf ? 'Open PDF' : 'View Proof'}
-                              </button>
-                              <button
-                                onClick={() => downloadProof(r)}
-                                className="flex items-center gap-1 px-2 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-white/60 hover:text-white text-[10px] font-bold cursor-pointer"
-                              >
-                                <Download className="w-3 h-3" />
-                                Download
-                              </button>
-                            </div>
-                          </div>
-                        ) : (
-                          <span className="text-[10px] text-white/30">No proof</span>
-                        )}
+                      <td className="p-4 text-white/60 text-[11px]">
+                        {r.paymentDate ? new Date(r.paymentDate).toLocaleDateString() : '—'}
                       </td>
                       <td className="p-4">
                         <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold border whitespace-nowrap ${meta.cls}`}>
@@ -314,13 +253,6 @@ export const PaymentVerification: React.FC = () => {
                       </td>
                       <td className="p-4 text-right">
                         <div className="flex items-center justify-end gap-1.5">
-                          <button
-                            title="View proof"
-                            onClick={() => setProofTarget(r)}
-                            className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-white/60 hover:text-white cursor-pointer"
-                          >
-                            <Eye className="w-3.5 h-3.5" />
-                          </button>
                           {r.paymentStatus !== 'verified' && (
                             <button
                               title="Verify payment"
@@ -351,62 +283,6 @@ export const PaymentVerification: React.FC = () => {
           </table>
         </div>
       </div>
-
-      {/* Proof Viewer Modal */}
-      {proofTarget && (
-        <div
-          className="fixed inset-0 z-50 bg-black/90 backdrop-blur-xl flex items-center justify-center p-6"
-          onClick={() => setProofTarget(null)}
-        >
-          <div className="relative max-w-3xl w-full max-h-[85vh] rounded-3xl overflow-hidden border border-white/20 bg-zinc-950 flex flex-col">
-            <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-white/10">
-              <div className="flex flex-col min-w-0">
-                <span className="text-xs font-bold text-white truncate">
-                  {proofTarget.paymentProofFileName || 'Payment Proof'}
-                </span>
-                <span className="text-[10px] text-white/40">
-                  {proofTarget.user_full_name} · {proofTarget.registration_id} · {formatFileSize(proofTarget.paymentProofFileSize)}
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => downloadProof(proofTarget)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-[10px] font-bold cursor-pointer"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  Download
-                </button>
-                <button
-                  onClick={() => setProofTarget(null)}
-                  className="p-2 rounded-full bg-black/80 text-white border border-white/20 cursor-pointer"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-            </div>
-            <div className="flex-1 overflow-auto bg-black min-h-[300px]">
-              {isPdf(proofTarget) ? (
-                <iframe
-                  src={proofTarget.paymentProofUrl}
-                  title="Payment Proof PDF"
-                  className="w-full h-[60vh] border-0"
-                />
-              ) : isPaymentProofImage(proofTarget.paymentProofFileType) ? (
-                <img
-                  src={proofTarget.paymentProofUrl}
-                  alt="Payment proof"
-                  className="w-full h-auto object-contain"
-                />
-              ) : (
-                <div className="flex flex-col items-center justify-center gap-3 h-full text-white/50">
-                  <FileText className="w-8 h-8 text-rose-400" />
-                  <span className="text-xs">Preview not available. Download the proof to view it.</span>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Verify Confirmation Modal */}
       {verifyTarget && (
@@ -442,7 +318,7 @@ export const PaymentVerification: React.FC = () => {
               </div>
             </div>
             <p className="text-xs text-white/60">
-              Confirm that the payment proof matches the transaction details above. This will mark the payment as verified and allow Registration Desk verification to proceed.
+              Confirm that the payment details above are correct. This will mark the payment as verified and allow Registration Desk verification to proceed.
             </p>
             <div className="flex items-center justify-end gap-3">
               <button onClick={() => setVerifyTarget(null)} className="px-4 py-2 rounded-xl text-white/60 hover:text-white bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-bold cursor-pointer">

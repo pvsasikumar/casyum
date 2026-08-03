@@ -17,13 +17,40 @@ import {
 import {
   listRegistrationsByParticipant,
   createRegistration,
+  createBundleRegistration,
   getRegistration,
   resubmitPayment as resubmitPaymentRow,
   removeRegistrationsByParticipant,
 } from './registrationService';
-import { uploadPaymentProof } from './paymentProofService';
 import { mapEventDoc } from './eventService';
 import { nextSequence, now } from './helpers';
+import {
+  isGamingEvent,
+  calculateRegistrationFee,
+  validateEventSelection,
+  type SelectedEventRef,
+  type SelectedGamingRef,
+} from './eventSelection';
+
+function registrationEventIds(reg: any): string[] {
+  if (Array.isArray(reg.event_ids) && reg.event_ids.length > 0) {
+    return reg.event_ids.map(String);
+  }
+  return [String(reg.event_id || '')].filter(Boolean);
+}
+
+function registrationEventNames(reg: any): string[] {
+  const names: string[] = [];
+  const sel = reg.selectedEvents;
+  if (sel?.regular && Array.isArray(sel.regular)) {
+    sel.regular.forEach((r: any) => {
+      if (r?.eventName) names.push(String(r.eventName));
+    });
+  }
+  if (sel?.gaming?.eventName) names.push(String(sel.gaming.eventName));
+  if (names.length > 0) return names;
+  return [String(reg.event_name || '')].filter(Boolean);
+}
 
 function mapParticipantRow(
   record: ParticipantRecord,
@@ -63,33 +90,32 @@ function mapParticipantRow(
     registered_events: regs.map((r) => ({
       registration_id: r.registration_id,
       event_id: r.event_id,
+      event_ids: registrationEventIds(r),
+      event_name: registrationEventNames(r).join(', ') || events[r.event_id]?.name || '',
+      selectedEvents: r.selectedEvents || null,
       status: r.status,
       registered_at: r.registered_at,
       payment_status: r.payment_status,
       payment_amount: r.payment_amount,
       payment_method: r.payment_method || '',
       transaction_id: r.transaction_id || '',
-      payment_screenshot_url: r.payment_screenshot_url || '',
-      payment_uploaded_time: r.payment_uploaded_time || '',
-      payment_proof_file_name: r.payment_proof_file_name || '',
-      payment_proof_file_type: r.payment_proof_file_type || '',
+      payment_date: r.payment_date || '',
       payment_rejection_reason: r.payment_rejection_reason || '',
       payment_resubmission_count: r.payment_resubmission_count || 0,
       registration_verification_status: r.registration_verification_status || 'locked',
       attendance_eligibility: r.attendance_eligibility === true,
       attendance_status: r.attendance_status || 'not_marked',
-      event_name: events[r.event_id]?.name || '',
       event_date: events[r.event_id]?.event_date || '',
       event_time: events[r.event_id]?.time || '',
       venue: events[r.event_id]?.venue || '',
-      fee: events[r.event_id]?.fee || 0,
+      fee: r.payment_amount || events[r.event_id]?.fee || 0,
     })),
   };
 }
 
 async function fetchEvents(regs: any[]): Promise<Record<string, any>> {
   const db = getDb();
-  const ids = [...new Set(regs.map((r) => r.event_id).filter(Boolean))];
+  const ids = [...new Set(regs.flatMap((r) => registrationEventIds(r)).filter(Boolean))];
   const map: Record<string, any> = {};
   await Promise.all(
     ids.map(async (id) => {
@@ -171,8 +197,7 @@ export async function myEvents(): Promise<{ events: any[] }> {
 export interface RegisterPaymentInput {
   payment_method: string;
   transaction_id: string;
-  file: File;
-  onProgress?: (percent: number) => void;
+  payment_date?: string;
 }
 
 export async function registerEvent(
@@ -208,15 +233,13 @@ export async function registerEvent(
     throw new Error('You have already registered for this event.');
   }
 
-  if (!payment || !payment.file) {
-    throw new Error('Payment proof is required to register for this event.');
+  if (!payment) {
+    throw new Error('Payment details are required to register for this event.');
   }
 
   const regId = `reg-${String(await nextSequence('registrations'))}`;
 
-  const proof = await uploadPaymentProof(user.uid, id, regId, payment.file, {
-    onProgress: payment.onProgress,
-  });
+  const singleFee = calculateRegistrationFee([event]);
 
   await createRegistration({
     event_id: id,
@@ -232,16 +255,14 @@ export async function registerEvent(
     gender: record.gender,
     register_number: record.register_number,
     status: 'Confirmed',
-    payment_amount: event.fee,
+    payment_amount: singleFee.total,
+    regular_fee: singleFee.regularFee,
+    gaming_fee: singleFee.gamingFee,
     registration_id: regId,
     payment_info: {
       payment_method: payment.payment_method,
       transaction_id: payment.transaction_id,
-      payment_proof_url: proof.url,
-      payment_proof_file_name: proof.name,
-      payment_proof_file_type: proof.contentType,
-      payment_proof_file_size: proof.size,
-      payment_proof_uploaded_at: proof.uploadedAt,
+      payment_date: payment.payment_date || '',
     },
   });
 
@@ -251,10 +272,149 @@ export async function registerEvent(
   };
 }
 
+export interface RegisterEventBundleInput {
+  regularEventIds: Array<string | number>;
+  gamingEventId?: string | number | null;
+}
+
+export interface RegisterEventBundleResult {
+  message: string;
+  fee: number;
+  regularFee: number;
+  gamingFee: number;
+  regular: SelectedEventRef[];
+  gaming: SelectedGamingRef | null;
+}
+
+/**
+ * Registers a participant for a bundled selection (up to 3 regular events plus
+ * one gaming event) with a single payment. The fee is recomputed server-side
+ * from the event documents and never trusted from the caller.
+ */
+export async function registerEventBundle(
+  data: RegisterEventBundleInput,
+  payment: RegisterPaymentInput
+): Promise<RegisterEventBundleResult> {
+  const user = await ensureSignedIn();
+  if (!user) {
+    throw new Error('You must be signed in to register.');
+  }
+  const record = await readParticipantRecord(user.uid);
+  if (!record) {
+    throw new Error('Participant profile not found. Please complete your profile first.');
+  }
+  if (!record.profile_completed) {
+    throw new Error('Please complete your profile before registering for events.');
+  }
+
+  const regularEventIds = (data.regularEventIds || []).map(String).filter(Boolean);
+  const gamingEventId = data.gamingEventId == null || String(data.gamingEventId) === ''
+    ? null
+    : String(data.gamingEventId);
+
+  if (regularEventIds.length === 0 && !gamingEventId) {
+    throw new Error('Please select at least one event to register.');
+  }
+  if (regularEventIds.length > 3) {
+    throw new Error('You can select a maximum of 3 regular events.');
+  }
+  if (gamingEventId && regularEventIds.includes(gamingEventId)) {
+    throw new Error('Only one gaming event can be selected. Please choose either Free Fire or BGMI.');
+  }
+
+  const db = getDb();
+  const eventDocs = new Map<string, any>();
+  for (const eventId of [...regularEventIds, ...(gamingEventId ? [gamingEventId] : [])]) {
+    const snap = await getDoc(doc(db, 'events', eventId));
+    if (!snap.exists()) {
+      throw new Error('One or more selected events could not be found.');
+    }
+    eventDocs.set(eventId, { id: eventId, ...snap.data() });
+  }
+
+  const regular: SelectedEventRef[] = [];
+  for (const eventId of regularEventIds) {
+    const ev = eventDocs.get(eventId);
+    if (!ev) continue;
+    if (isGamingEvent(ev)) {
+      throw new Error('Only one gaming event can be selected. Please choose either Free Fire or BGMI.');
+    }
+    const event = mapEventDoc(eventId, ev);
+    if (event.status === 'Closed') {
+      throw new Error(`"${event.name}" is no longer accepting registrations.`);
+    }
+    if (Number(event.max_participants) > 0 && Number(event.registered_count) >= Number(event.max_participants)) {
+      throw new Error(`"${event.name}" has reached its maximum capacity.`);
+    }
+    if ((record.event_ids || []).includes(eventId)) {
+      throw new Error(`You have already registered for "${event.name}".`);
+    }
+    regular.push({ eventId, eventName: event.name });
+  }
+
+  let gaming: SelectedGamingRef | null = null;
+  if (gamingEventId) {
+    const ev = eventDocs.get(gamingEventId);
+    if (!ev) {
+      throw new Error('The selected gaming event could not be found.');
+    }
+    if (!isGamingEvent(ev)) {
+      throw new Error('Only one gaming event can be selected. Please choose either Free Fire or BGMI.');
+    }
+    const event = mapEventDoc(gamingEventId, ev);
+    if (event.status === 'Closed') {
+      throw new Error(`"${event.name}" is no longer accepting registrations.`);
+    }
+    if (Number(event.max_participants) > 0 && Number(event.registered_count) >= Number(event.max_participants)) {
+      throw new Error(`"${event.name}" has reached its maximum capacity.`);
+    }
+    if ((record.event_ids || []).includes(gamingEventId)) {
+      throw new Error(`You have already registered for "${event.name}".`);
+    }
+    gaming = { eventId: gamingEventId, eventName: event.name };
+  }
+
+  const selectionError = validateEventSelection(regular, gaming);
+  if (selectionError) {
+    throw new Error(selectionError);
+  }
+
+  const fee = calculateRegistrationFee([...regular, ...(gaming ? [gaming] : [])]);
+
+  await createBundleRegistration({
+    regular,
+    gaming,
+    participant_id: user.uid,
+    participant_email: record.email,
+    user_full_name: record.full_name,
+    user_department: record.department,
+    user_phone: record.phone,
+    college: record.college,
+    city: record.city,
+    department: record.department,
+    year_of_study: record.year_of_study,
+    gender: record.gender,
+    register_number: record.register_number,
+    payment_info: {
+      payment_method: payment.payment_method,
+      transaction_id: payment.transaction_id,
+      payment_date: payment.payment_date || '',
+    },
+  });
+
+  return {
+    message: 'You have been registered. Your payment will be reviewed by the CASYUM team.',
+    fee: fee.total,
+    regularFee: fee.regularFee,
+    gamingFee: fee.gamingFee,
+    regular,
+    gaming,
+  };
+}
+
 /**
  * Resubmit a rejected payment for one of the participant's registrations with
- * a new transaction ID and proof. The proof is uploaded to the same structured
- * storage path and the registration returns to the `submitted` state.
+ * a new transaction ID. The registration returns to the `submitted` state.
  */
 export async function resubmitRegistrationPayment(
   registrationId: string,
@@ -271,22 +431,11 @@ export async function resubmitRegistrationPayment(
   if (reg.participant_id !== user.uid) {
     throw new Error('You can only resubmit your own payment.');
   }
-  if (!payment.file) {
-    throw new Error('Please upload your new payment proof.');
-  }
-
-  const proof = await uploadPaymentProof(user.uid, reg.event_id, registrationId, payment.file, {
-    onProgress: payment.onProgress,
-  });
 
   const res = await resubmitPaymentRow(registrationId, {
     payment_method: payment.payment_method,
     transaction_id: payment.transaction_id,
-    payment_proof_url: proof.url,
-    payment_proof_file_name: proof.name,
-    payment_proof_file_type: proof.contentType,
-    payment_proof_file_size: proof.size,
-    payment_proof_uploaded_at: proof.uploadedAt,
+    payment_date: payment.payment_date || '',
   });
   return res;
 }

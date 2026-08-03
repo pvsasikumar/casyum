@@ -370,7 +370,26 @@ function mapVerificationParticipant(
   const registration = regs[0];
   const eventIds = (data.event_ids || []).map(String);
   const eventNames = Array.from(
-    new Set(regs.map((r) => events[r.event_id]?.name || '').filter(Boolean))
+    new Set(
+      regs.flatMap((r) => {
+        const names: string[] = [];
+        if (events[r.event_id]?.name) names.push(String(events[r.event_id].name));
+        if (r.selectedEvents) {
+          const sel = r.selectedEvents;
+          if (Array.isArray(sel.regular)) {
+            sel.regular.forEach((ev: any) => {
+              if (ev?.eventName) names.push(String(ev.eventName));
+            });
+          }
+          if (sel.gaming?.eventName) names.push(String(sel.gaming.eventName));
+        } else if (Array.isArray(r.event_ids)) {
+          r.event_ids.forEach((eid: string) => {
+            if (events[String(eid)]?.name) names.push(String(events[String(eid)].name));
+          });
+        }
+        return names;
+      })
+    )
   );
   const regPaymentStatuses = regs
     .map((r) => r.paymentStatus || r.payment_status || '')

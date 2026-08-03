@@ -21,6 +21,7 @@ import {
   Mail,
   Trophy,
   GraduationCap,
+  Wallet,
 } from 'lucide-react';
 import type { ActiveTabModule } from '../../types';
 import { useAdmin } from '../../context/AdminContext';
@@ -51,10 +52,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ onCloseMobile, onExitAdmin }) 
     { name: 'Event Export', icon: FileDown, permission: 'events.export' },
     { name: 'Coordinators', icon: UserCheck, permission: 'coordinators.view' },
     { name: 'Registration Team', icon: UserCheck, permission: 'registration_team.view' },
-    { name: 'CASYUM Faculty Managers', icon: GraduationCap, permission: 'casyum_faculty_managers.view' },
+    { name: 'CASYUM Faculty Coordinators', icon: GraduationCap, permission: 'casyum_faculty_coordinators.view' },
     { name: 'Participants', icon: Users, permission: 'participants.view', badge: participants.length },
     { name: 'Registrations', icon: ClipboardList, permission: 'registrations.view' },
     { name: 'Payments', icon: CreditCard, permission: 'payments.view' },
+    { name: 'Payment Settings', icon: Wallet, permission: 'settings.view' },
     { name: 'Attendance', icon: UserCheck, permission: 'attendance.view' },
     { name: 'Certificates', icon: Award, permission: 'certificates.view' },
     { name: 'Gallery', icon: Image, permission: 'gallery.view' },

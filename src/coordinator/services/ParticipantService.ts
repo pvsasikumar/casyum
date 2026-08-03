@@ -58,17 +58,37 @@ export const ParticipantService = {
     onError?: (error: Error) => void
   ): () => void {
     const db = getDb();
-    const q = query(collection(db, 'registrations'), where('event_id', '==', eventId));
-    return onSnapshot(
-      q,
-      (snapshot: QuerySnapshot<DocumentData>) => {
-        const registrations = snapshot.docs
-          .map((d) => mapRegDoc(d.id, d.data()))
-          .sort((a, b) => String(b.registered_at).localeCompare(String(a.registered_at)));
-        onNext(registrations.filter((r) => r.status !== 'Cancelled').map(toParticipant));
-      },
-      onError
-    );
+    const byEventId = query(collection(db, 'registrations'), where('event_id', '==', eventId));
+    const byEventIds = query(collection(db, 'registrations'), where('event_ids', 'array-contains', eventId));
+    const rows = new Map<string, RegistrationRow>();
+    const seen = new Set<string>();
+    let pending = 0;
+
+    const handleSnapshot = () => {
+      pending -= 1;
+      if (pending !== 0) return;
+      const sorted = Array.from(rows.values()).sort((a, b) =>
+        String(b.registered_at).localeCompare(String(a.registered_at))
+      );
+      onNext(sorted.filter((r) => r.status !== 'Cancelled').map(toParticipant));
+    };
+
+    const processSnapshot = (snapshot: QuerySnapshot<DocumentData>) => {
+      snapshot.docs.forEach((d) => {
+        if (seen.has(d.id)) return;
+        seen.add(d.id);
+        rows.set(d.id, mapRegDoc(d.id, d.data()));
+      });
+      handleSnapshot();
+    };
+
+    pending = 2;
+    const unsubscribers = [
+      onSnapshot(byEventId, processSnapshot, onError),
+      onSnapshot(byEventIds, processSnapshot, onError),
+    ];
+
+    return () => unsubscribers.forEach((u) => u());
   },
 
   subscribeParticipantVerifications(

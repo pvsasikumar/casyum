@@ -31,14 +31,14 @@ import { useRBAC } from '../../../rbac/context/RBACContext';
 import { useAdmin } from '../../context/AdminContext';
 import { ConfirmationDialog } from '../common/ConfirmationDialog';
 import {
-  listCasyumFacultyManagers,
-  createCasyumFacultyManager,
-  updateCasyumFacultyManager,
+  listCasyumFacultyCoordinators,
+  createCasyumFacultyCoordinator,
+  updateCasyumFacultyCoordinator,
   setCasyumFacultyStatus,
-  deleteCasyumFacultyManager,
+  deleteCasyumFacultyCoordinator,
   resetCasyumFacultyPassword,
   listCasyumFacultyActivity,
-  type CasyumFacultyManager,
+  type CasyumFacultyCoordinator,
   type CasyumFacultyActivity,
 } from '../../../services/casyumFacultyService';
 
@@ -70,11 +70,11 @@ const inputBase =
   'w-full px-3.5 py-2.5 rounded-xl bg-white/5 text-xs text-white placeholder-white/30 focus:outline-none transition-colors';
 
 const ACTIVITY_ACTION_STYLES: Record<string, string> = {
-  'Manager Created': 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
-  'Manager Updated': 'bg-sky-500/20 text-sky-300 border-sky-500/30',
-  'Manager Enabled': 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
-  'Manager Disabled': 'bg-amber-500/20 text-amber-300 border-amber-500/30',
-  'Manager Deleted': 'bg-rose-500/20 text-rose-300 border-rose-500/30',
+  'Coordinator Created': 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
+  'Coordinator Updated': 'bg-sky-500/20 text-sky-300 border-sky-500/30',
+  'Coordinator Enabled': 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
+  'Coordinator Disabled': 'bg-amber-500/20 text-amber-300 border-amber-500/30',
+  'Coordinator Deleted': 'bg-rose-500/20 text-rose-300 border-rose-500/30',
   'Password Reset': 'bg-violet-500/20 text-violet-300 border-violet-500/30',
 };
 
@@ -94,18 +94,18 @@ function formatDate(value: string | null | undefined): string {
   return date.toLocaleString();
 }
 
-export const CasyumFacultyManagerManagement: React.FC = () => {
+export const CasyumFacultyCoordinatorManagement: React.FC = () => {
   const rbac = useRBAC();
   const { addToast } = useAdmin();
   const [tab, setTab] = useState<'members' | 'activity'>('members');
-  const [members, setMembers] = useState<CasyumFacultyManager[]>([]);
+  const [members, setMembers] = useState<CasyumFacultyCoordinator[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('All');
   const [passwordFilter, setPasswordFilter] = useState<string>('All');
 
   const [showForm, setShowForm] = useState(false);
-  const [editing, setEditing] = useState<CasyumFacultyManager | null>(null);
+  const [editing, setEditing] = useState<CasyumFacultyCoordinator | null>(null);
   const [form, setForm] = useState<FormData>(emptyForm);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
@@ -113,17 +113,17 @@ export const CasyumFacultyManagerManagement: React.FC = () => {
   const [showTempPwd, setShowTempPwd] = useState(false);
   const [showConfirmTempPwd, setShowConfirmTempPwd] = useState(false);
   const [createdCredentials, setCreatedCredentials] = useState<{ email: string; password: string; username: string } | null>(null);
-  const [deleteConfirm, setDeleteConfirm] = useState<CasyumFacultyManager | null>(null);
-  const [statusTarget, setStatusTarget] = useState<CasyumFacultyManager | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<CasyumFacultyCoordinator | null>(null);
+  const [statusTarget, setStatusTarget] = useState<CasyumFacultyCoordinator | null>(null);
   const [statusLoading, setStatusLoading] = useState(false);
-  const [resetTarget, setResetTarget] = useState<CasyumFacultyManager | null>(null);
+  const [resetTarget, setResetTarget] = useState<CasyumFacultyCoordinator | null>(null);
   const [resetPassword, setResetPassword] = useState('');
   const [resetConfirm, setResetConfirm] = useState('');
   const [resetShow, setResetShow] = useState(false);
   const [resetShowConfirm, setResetShowConfirm] = useState(false);
   const [resetLoading, setResetLoading] = useState(false);
   const [resetErrors, setResetErrors] = useState<Record<string, string>>({});
-  const [viewTarget, setViewTarget] = useState<CasyumFacultyManager | null>(null);
+  const [viewTarget, setViewTarget] = useState<CasyumFacultyCoordinator | null>(null);
 
   const [activities, setActivities] = useState<CasyumFacultyActivity[]>([]);
   const [activitiesLoading, setActivitiesLoading] = useState(false);
@@ -136,7 +136,7 @@ export const CasyumFacultyManagerManagement: React.FC = () => {
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await listCasyumFacultyManagers();
+      const res = await listCasyumFacultyCoordinators();
       setMembers(res.members);
     } catch {
       setMembers([]);
@@ -194,7 +194,7 @@ export const CasyumFacultyManagerManagement: React.FC = () => {
     setShowForm(true);
   };
 
-  const openEdit = (m: CasyumFacultyManager) => {
+  const openEdit = (m: CasyumFacultyCoordinator) => {
     setEditing(m);
     setForm({
       full_name: m.full_name,
@@ -247,7 +247,7 @@ export const CasyumFacultyManagerManagement: React.FC = () => {
     setSubmitError('');
     try {
       if (editing) {
-        await updateCasyumFacultyManager(editing.id, {
+        await updateCasyumFacultyCoordinator(editing.id, {
           full_name: form.full_name,
           phone: form.phone,
           department: form.department,
@@ -258,9 +258,9 @@ export const CasyumFacultyManagerManagement: React.FC = () => {
         });
         closeModal();
         await refresh();
-        addToast('Manager Updated', `${form.full_name}'s details updated successfully.`, 'success');
+        addToast('Coordinator Updated', `${form.full_name}'s details updated successfully.`, 'success');
       } else {
-        const res = await createCasyumFacultyManager({
+        const res = await createCasyumFacultyCoordinator({
           full_name: form.full_name,
           email: form.email,
           phone: form.phone,
@@ -274,10 +274,10 @@ export const CasyumFacultyManagerManagement: React.FC = () => {
         setCreatedCredentials(res.credentials);
         setForm(emptyForm);
         await refresh();
-        addToast('Manager Added', `${form.full_name} added as a CASYUM Faculty Manager.`, 'success');
+        addToast('Coordinator Added', `${form.full_name} added as a CASYUM Faculty Coordinator.`, 'success');
       }
     } catch (err: any) {
-      const msg = err?.message || 'Failed to save manager';
+      const msg = err?.message || 'Failed to save coordinator';
       const errs: Record<string, string> = {};
       if (/email/i.test(msg)) errs.email = msg;
       else if (/phone/i.test(msg)) errs.phone = msg;
@@ -293,11 +293,11 @@ export const CasyumFacultyManagerManagement: React.FC = () => {
   const handleDelete = async () => {
     if (!deleteConfirm) return;
     try {
-      await deleteCasyumFacultyManager(deleteConfirm.id, performer());
+      await deleteCasyumFacultyCoordinator(deleteConfirm.id, performer());
       await refresh();
-      addToast('Manager Deleted', `${deleteConfirm.full_name} was deleted from CASYUM Faculty Managers.`, 'success');
+      addToast('Coordinator Deleted', `${deleteConfirm.full_name} was deleted from CASYUM Faculty Coordinators.`, 'success');
     } catch (err: any) {
-      addToast('Error', err?.message || 'Failed to delete manager.', 'error');
+      addToast('Error', err?.message || 'Failed to delete coordinator.', 'error');
     } finally {
       setDeleteConfirm(null);
     }
@@ -323,7 +323,7 @@ export const CasyumFacultyManagerManagement: React.FC = () => {
     }
   };
 
-  const openResetDialog = (m: CasyumFacultyManager) => {
+  const openResetDialog = (m: CasyumFacultyCoordinator) => {
     setResetTarget(m);
     setResetPassword('');
     setResetConfirm('');
@@ -347,7 +347,7 @@ export const CasyumFacultyManagerManagement: React.FC = () => {
       await resetCasyumFacultyPassword(resetTarget.id, performer(), resetPassword);
       await refresh();
       setResetTarget(null);
-      addToast('Password Reset', `Password reset email sent to ${resetTarget.email}. The manager must set a new password on next login.`, 'success');
+      addToast('Password Reset', `Password reset email sent to ${resetTarget.email}. The coordinator must set a new password on next login.`, 'success');
     } catch (err: any) {
       setResetErrors({ newPassword: err?.message || 'Failed to reset password.' });
       addToast('Error', err?.message || 'Failed to reset password.', 'error');
@@ -364,13 +364,13 @@ export const CasyumFacultyManagerManagement: React.FC = () => {
   const inactiveCount = members.filter((m) => m.status === 'Inactive').length;
   const tempPwdCount = members.filter((m) => m.mustChangePassword || m.passwordStatus === 'temporary').length;
 
-  const statusBadge = (m: CasyumFacultyManager) => (
+  const statusBadge = (m: CasyumFacultyCoordinator) => (
     <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold border ${m.status === 'Active' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : 'bg-rose-500/20 text-rose-300 border-rose-500/30'}`}>
       {m.status}
     </span>
   );
 
-  const passwordBadge = (m: CasyumFacultyManager) =>
+  const passwordBadge = (m: CasyumFacultyCoordinator) =>
     m.mustChangePassword || m.passwordStatus === 'temporary' ? (
       <span className="px-2 py-0.5 rounded-full text-[9px] font-bold border bg-amber-500/20 text-amber-300 border-amber-500/30">
         Temporary Password
@@ -387,11 +387,11 @@ export const CasyumFacultyManagerManagement: React.FC = () => {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex flex-col">
           <span className="text-xs font-bold text-violet-400 uppercase tracking-widest">Payment Verification Access</span>
-          <h2 className="text-xl sm:text-2xl font-extrabold font-display text-white">CASYUM Faculty Managers ({members.length})</h2>
+          <h2 className="text-xl sm:text-2xl font-extrabold font-display text-white">CASYUM Faculty Coordinators ({members.length})</h2>
         </div>
         <button onClick={openAdd} className="px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-700 text-white text-xs font-bold transition-all shadow-lg shadow-violet-500/25 cursor-pointer flex items-center gap-2">
           <Plus className="w-3.5 h-3.5" />
-          <span>Add CASYUM Faculty Manager</span>
+          <span>Add CASYUM Faculty Coordinator</span>
         </button>
       </div>
 
@@ -402,7 +402,7 @@ export const CasyumFacultyManagerManagement: React.FC = () => {
           className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${tab === 'members' ? 'bg-violet-600/30 text-white border border-violet-500/40' : 'text-white/50 hover:text-white border border-transparent'}`}
         >
           <Users className="w-3.5 h-3.5" />
-          Managers
+          Coordinators
         </button>
         <button
           onClick={() => setTab('activity')}
@@ -418,17 +418,17 @@ export const CasyumFacultyManagerManagement: React.FC = () => {
           {/* Summary Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="p-5 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex flex-col gap-2">
-              <span className="text-xs font-semibold text-emerald-300/70">Active Managers</span>
+              <span className="text-xs font-semibold text-emerald-300/70">Active Coordinators</span>
               <span className="text-2xl font-extrabold text-white font-display">{activeCount}</span>
               <span className="text-[10px] text-emerald-400">Currently verifying payments</span>
             </div>
             <div className="p-5 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex flex-col gap-2">
-              <span className="text-xs font-semibold text-amber-300/70">Inactive Managers</span>
+              <span className="text-xs font-semibold text-amber-300/70">Inactive Coordinators</span>
               <span className="text-2xl font-extrabold text-white font-display">{inactiveCount}</span>
               <span className="text-[10px] text-amber-400">Temporarily disabled</span>
             </div>
             <div className="p-5 rounded-2xl bg-violet-500/10 border border-violet-500/20 flex flex-col gap-2">
-              <span className="text-xs font-semibold text-violet-300/70">Total Managers</span>
+              <span className="text-xs font-semibold text-violet-300/70">Total Coordinators</span>
               <span className="text-2xl font-extrabold text-white font-display">{members.length}</span>
               <span className="text-[10px] text-violet-400">Faculty portal access</span>
             </div>
@@ -476,7 +476,7 @@ export const CasyumFacultyManagerManagement: React.FC = () => {
           {/* Members Table */}
           {loading ? (
             <div className="flex items-center justify-center gap-2 p-12 text-white/40 text-xs">
-              <Loader2 className="w-4 h-4 animate-spin" /> Loading managers...
+              <Loader2 className="w-4 h-4 animate-spin" /> Loading coordinators...
             </div>
           ) : (
             <div className="rounded-3xl bg-zinc-950/60 border border-white/10 backdrop-blur-md overflow-hidden">
@@ -500,7 +500,7 @@ export const CasyumFacultyManagerManagement: React.FC = () => {
                     {filtered.length === 0 ? (
                       <tr>
                         <td colSpan={10} className="px-5 py-12 text-center text-xs text-white/40">
-                          No CASYUM Faculty Managers found.
+                          No CASYUM Faculty Coordinators found.
                         </td>
                       </tr>
                     ) : (
@@ -520,7 +520,7 @@ export const CasyumFacultyManagerManagement: React.FC = () => {
                           <td className="px-5 py-3 text-xs text-white/60">{m.employee_id || '—'}</td>
                           <td className="px-5 py-3">
                             <span className="px-2 py-0.5 rounded-full text-[9px] font-bold border bg-violet-500/20 text-violet-300 border-violet-500/30">
-                              CASYUM Faculty Manager
+                              CASYUM Faculty Coordinator
                             </span>
                           </td>
                           <td className="px-5 py-3">{statusBadge(m)}</td>
@@ -528,7 +528,7 @@ export const CasyumFacultyManagerManagement: React.FC = () => {
                           <td className="px-5 py-3 text-[10px] text-white/40">{formatDate(m.created_at)}</td>
                           <td className="px-5 py-3">
                             <div className="flex items-center gap-1.5">
-                              <button onClick={() => setViewTarget(m)} className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-white/60 hover:text-white cursor-pointer" title="View Manager"><Eye className="w-3.5 h-3.5" /></button>
+                              <button onClick={() => setViewTarget(m)} className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-white/60 hover:text-white cursor-pointer" title="View Coordinator"><Eye className="w-3.5 h-3.5" /></button>
                               <button onClick={() => openEdit(m)} className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-white/70 hover:text-white cursor-pointer" title="Edit Details"><Edit className="w-3.5 h-3.5" /></button>
                               <button
                                 onClick={() => setStatusTarget(m)}
@@ -538,7 +538,7 @@ export const CasyumFacultyManagerManagement: React.FC = () => {
                                 {m.status === 'Active' ? <UserX className="w-3.5 h-3.5" /> : <RefreshCw className="w-3.5 h-3.5" />}
                               </button>
                               <button onClick={() => openResetDialog(m)} className="p-2 rounded-lg bg-white/5 hover:bg-amber-500/20 text-white/40 hover:text-amber-400 cursor-pointer" title="Reset Temporary Password"><KeyRound className="w-3.5 h-3.5" /></button>
-                              <button onClick={() => setDeleteConfirm(m)} className="p-2 rounded-lg bg-white/5 hover:bg-rose-500/20 text-white/40 hover:text-rose-400 cursor-pointer" title="Delete Manager"><Trash2 className="w-3.5 h-3.5" /></button>
+                              <button onClick={() => setDeleteConfirm(m)} className="p-2 rounded-lg bg-white/5 hover:bg-rose-500/20 text-white/40 hover:text-rose-400 cursor-pointer" title="Delete Coordinator"><Trash2 className="w-3.5 h-3.5" /></button>
                             </div>
                           </td>
                         </tr>
@@ -555,7 +555,7 @@ export const CasyumFacultyManagerManagement: React.FC = () => {
         <div className="rounded-3xl bg-zinc-950/60 border border-white/10 backdrop-blur-md overflow-hidden">
           <div className="px-5 py-4 border-b border-white/10 flex items-center justify-between">
             <div className="flex flex-col">
-              <span className="text-xs font-bold text-white">CASYUM Faculty Manager Activity</span>
+              <span className="text-xs font-bold text-white">CASYUM Faculty Coordinator Activity</span>
               <span className="text-[10px] text-white/40">Account actions performed by admins</span>
             </div>
             <button onClick={refreshActivities} className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-white/50 hover:text-white cursor-pointer" title="Refresh">
@@ -580,7 +580,7 @@ export const CasyumFacultyManagerManagement: React.FC = () => {
                   </div>
                   <p className="text-xs text-white/70">{a.details}</p>
                   <p className="text-[10px] text-white/40">
-                    Manager: <span className="text-white/60">{a.member_name}</span> · By: <span className="text-white/60">{a.performed_by_name}</span>
+                    Coordinator: <span className="text-white/60">{a.member_name}</span> · By: <span className="text-white/60">{a.performed_by_name}</span>
                   </p>
                 </div>
               ))
@@ -617,9 +617,9 @@ export const CasyumFacultyManagerManagement: React.FC = () => {
                     </div>
                   </div>
                   <div className="flex flex-col min-w-0">
-                    <h3 className="text-base font-bold font-display text-white tracking-tight truncate">{editing ? 'Edit Manager' : 'Add CASYUM Faculty Manager'}</h3>
+                    <h3 className="text-base font-bold font-display text-white tracking-tight truncate">{editing ? 'Edit Coordinator' : 'Add CASYUM Faculty Coordinator'}</h3>
                     <span className="text-[10px] text-white/40 tracking-widest uppercase">
-                      {editing ? 'Update manager details' : 'Create a payment verification account'}
+                      {editing ? 'Update coordinator details' : 'Create a payment verification account'}
                     </span>
                   </div>
                 </div>
@@ -636,8 +636,8 @@ export const CasyumFacultyManagerManagement: React.FC = () => {
                       <CheckCircle2 className="w-8 h-8 text-emerald-400" />
                     </div>
                     <div className="flex flex-col gap-1">
-                      <h4 className="text-lg font-bold font-display text-white">Manager added successfully!</h4>
-                      <p className="text-xs text-white/50">The temporary password set above is ready for this manager's first login.</p>
+                      <h4 className="text-lg font-bold font-display text-white">Coordinator added successfully!</h4>
+                      <p className="text-xs text-white/50">The temporary password set above is ready for this coordinator's first login.</p>
                     </div>
                     <div className="w-full max-w-sm rounded-2xl bg-white/[0.03] border border-white/10 p-4 flex flex-col gap-2 text-left">
                       <CredentialRow label="Email" value={createdCredentials.email} onCopy={copyToClipboard} />
@@ -654,7 +654,7 @@ export const CasyumFacultyManagerManagement: React.FC = () => {
                   </motion.div>
                 ) : (
                   <form id="cfm-member-form" onSubmit={handleSubmit} className="flex flex-col gap-5 text-xs">
-                    <FormSection icon={<User className="w-3.5 h-3.5" />} title="Personal Information" subtitle="Basic identity details of the manager">
+                    <FormSection icon={<User className="w-3.5 h-3.5" />} title="Personal Information" subtitle="Basic identity details of the coordinator">
                       <Field label="Full Name" required error={errors.full_name}>
                         <input
                           value={form.full_name}
@@ -691,7 +691,7 @@ export const CasyumFacultyManagerManagement: React.FC = () => {
                       </div>
                     </FormSection>
 
-                    <FormSection icon={<Building2 className="w-3.5 h-3.5" />} title="Department & Identity" subtitle="Where does this manager belong?">
+                    <FormSection icon={<Building2 className="w-3.5 h-3.5" />} title="Department & Identity" subtitle="Where does this coordinator belong?">
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <Field label="Department" required error={errors.department}>
                           <select
@@ -724,7 +724,7 @@ export const CasyumFacultyManagerManagement: React.FC = () => {
                         <Field label="Role">
                           <div className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-white/5 border border-white/10 text-white/70">
                             <ShieldCheck className="w-3.5 h-3.5 text-violet-400" />
-                            <span className="font-bold">CASYUM Faculty Manager</span>
+                            <span className="font-bold">CASYUM Faculty Coordinator</span>
                           </div>
                         </Field>
                         <Field label="Account Status">
@@ -821,9 +821,9 @@ export const CasyumFacultyManagerManagement: React.FC = () => {
                         <span>Saving...</span>
                       </>
                     ) : editing ? (
-                      'Update Manager'
+                      'Update Coordinator'
                     ) : (
-                      'Add Manager'
+                      'Add Coordinator'
                     )}
                   </button>
                 </div>
@@ -833,7 +833,7 @@ export const CasyumFacultyManagerManagement: React.FC = () => {
         )}
       </AnimatePresence>
 
-      {/* View Manager Modal */}
+      {/* View Coordinator Modal */}
       <AnimatePresence>
         {viewTarget && (
           <motion.div
@@ -859,7 +859,7 @@ export const CasyumFacultyManagerManagement: React.FC = () => {
                   </div>
                   <div className="flex flex-col">
                     <span className="text-base font-bold font-display text-white">{viewTarget.full_name}</span>
-                    <span className="text-[10px] text-white/40">Manager ID · {viewTarget.user_id || viewTarget.id}</span>
+                    <span className="text-[10px] text-white/40">Coordinator ID · {viewTarget.user_id || viewTarget.id}</span>
                   </div>
                 </div>
                 <button onClick={() => setViewTarget(null)} className="p-2 rounded-xl text-white/50 hover:text-white bg-white/5 hover:bg-white/10 border border-white/10 transition-all cursor-pointer">
@@ -871,7 +871,7 @@ export const CasyumFacultyManagerManagement: React.FC = () => {
                 <InfoRow icon={Phone} label="Phone Number" value={viewTarget.phone || '—'} />
                 <InfoRow icon={Building2} label="Department" value={viewTarget.department || '—'} />
                 <InfoRow icon={IdCard} label="Employee ID" value={viewTarget.employee_id || '—'} />
-                <InfoRow icon={ShieldCheck} label="Role" value="CASYUM Faculty Manager" />
+                <InfoRow icon={ShieldCheck} label="Role" value="CASYUM Faculty Coordinator" />
                 <InfoRow icon={User} label="Account Status" value={viewTarget.status} valueClass={viewTarget.status === 'Active' ? 'text-emerald-400' : 'text-rose-400'} />
                 <InfoRow icon={KeyRound} label="Password Status" value={viewTarget.mustChangePassword || viewTarget.passwordStatus === 'temporary' ? 'Temporary Password' : 'Password Updated'} valueClass={viewTarget.mustChangePassword || viewTarget.passwordStatus === 'temporary' ? 'text-amber-400' : 'text-emerald-400'} />
                 <InfoRow icon={CalendarDays} label="Created" value={formatDate(viewTarget.created_at)} />
@@ -882,7 +882,7 @@ export const CasyumFacultyManagerManagement: React.FC = () => {
                   onClick={() => { setViewTarget(null); openEdit(viewTarget); }}
                   className="px-4 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white/70 hover:text-white text-xs font-bold transition-colors cursor-pointer"
                 >
-                  Edit Manager
+                  Edit Coordinator
                 </button>
                 <button onClick={() => { setViewTarget(null); openResetDialog(viewTarget); }} className="px-4 py-2.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 text-xs font-bold transition-colors cursor-pointer">
                   Reset Temporary Password
@@ -926,9 +926,9 @@ export const CasyumFacultyManagerManagement: React.FC = () => {
               </div>
               <div className="p-6 flex flex-col gap-4 text-xs">
                 <p className="text-white/60 leading-relaxed">
-                  Enter a new temporary password for this manager. A secure password reset email will also be sent to{' '}
+                  Enter a new temporary password for this coordinator. A secure password reset email will also be sent to{' '}
                   <span className="text-white font-semibold">{resetTarget.email}</span> so they can set a new password on their next login.
-                  The manager will be required to change this password before accessing the CASYUM Faculty portal.
+                  The coordinator will be required to change this password before accessing the CASYUM Faculty portal.
                 </p>
                 <Field label="New Temporary Password" required error={resetErrors.newPassword}>
                   <div className="relative">
@@ -1000,13 +1000,13 @@ export const CasyumFacultyManagerManagement: React.FC = () => {
         open={!!deleteConfirm}
         onCancel={() => setDeleteConfirm(null)}
         onConfirm={handleDelete}
-        title="Delete CASYUM Faculty Manager?"
+        title="Delete CASYUM Faculty Coordinator?"
         message={
           deleteConfirm
             ? `This will permanently delete ${deleteConfirm.full_name}'s account and revoke access to the CASYUM Faculty portal. This action cannot be undone.`
             : ''
         }
-        confirmLabel="Delete Manager"
+        confirmLabel="Delete Coordinator"
         cancelLabel="Cancel"
         variant="danger"
       />
@@ -1017,7 +1017,7 @@ export const CasyumFacultyManagerManagement: React.FC = () => {
         onCancel={() => setStatusTarget(null)}
         onConfirm={handleToggleStatus}
         loading={statusLoading}
-        title={statusTarget?.status === 'Active' ? 'Deactivate Manager?' : 'Activate Manager?'}
+        title={statusTarget?.status === 'Active' ? 'Deactivate Coordinator?' : 'Activate Coordinator?'}
         message={
           statusTarget
             ? statusTarget.status === 'Active'

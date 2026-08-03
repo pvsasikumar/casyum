@@ -49,7 +49,7 @@ export const ReportsPage: React.FC = () => {
     const rows: string[][] = [
       ['Event', 'Registrations', 'Eligible', 'Present', 'Absent', 'Not Marked'],
       ...events.map((e) => {
-        const regs = registrations.filter((r) => r.event_id === e.id);
+        const regs = registrations.filter((r) => r.event_id === e.id || r.event_ids?.includes(String(e.id)));
         const eligible = regs.filter((r) => r.attendanceEligibility === true).length;
         const marked = regs.filter((r) => r.attendanceStatus && r.attendanceStatus !== 'not_marked');
         const present = marked.filter((r) => r.attendanceStatus === 'Present').length;
@@ -151,7 +151,7 @@ export const ReportsPage: React.FC = () => {
                     <tr><td colSpan={6} className="p-10 text-center text-white/40">No data available.</td></tr>
                   ) : (
                     events.map((e) => {
-                      const regs = registrations.filter((r) => r.event_id === e.id);
+                      const regs = registrations.filter((r) => r.event_id === e.id || r.event_ids?.includes(String(e.id)));
                       const verified = regs.filter((r) => r.paymentStatus === 'verified');
                       return (
                         <tr key={e.id} className="hover:bg-white/[0.02] transition-colors">
@@ -247,7 +247,7 @@ export const ReportsPage: React.FC = () => {
                     <tr><td colSpan={6} className="p-10 text-center text-white/40">No data available.</td></tr>
                   ) : (
                     events.map((e) => {
-                      const regs = registrations.filter((r) => r.event_id === e.id);
+                      const regs = registrations.filter((r) => r.event_id === e.id || r.event_ids?.includes(String(e.id)));
                       const eligible = regs.filter((r) => r.attendanceEligibility === true).length;
                       const marked = regs.filter((r) => r.attendanceStatus && r.attendanceStatus !== 'not_marked');
                       const present = marked.filter((r) => r.attendanceStatus === 'Present').length;

@@ -1,34 +1,47 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  UploadCloud,
   CheckCircle2,
-  X,
-  FileText,
-  Loader2,
   AlertCircle,
-  RefreshCw,
   CircleDollarSign,
+  Copy,
+  Wallet,
+  Landmark,
+  CalendarDays,
 } from 'lucide-react';
 import {
-  validatePaymentProofFile,
-  isPaymentProofImage,
-  isPaymentProofPdf,
-  formatFileSize,
   validateTransactionId,
   PAYMENT_METHODS,
 } from '../../services/paymentProofService';
+import {
+  subscribePaymentSettings,
+  type PaymentSettings,
+} from '../../services/paymentSettingsService';
+import { PAYMENT_CONFIG } from '../../config/paymentConfig';
+import {
+  calculateRegistrationFee,
+  type EventSelectionLike,
+} from '../../services/eventSelection';
 
 export interface PaymentFormData {
   payment_method: string;
   transaction_id: string;
-  file: File;
+  payment_date: string;
 }
 
 interface PaymentDetailsSectionProps {
   eventName: string;
   fee: number;
+  /** Optional fee breakdown for bundled selections (regular + gaming). */
+  regularFee?: number;
+  gamingFee?: number;
+  /**
+   * The currently selected events. When provided, the fee shown (registration
+   * fee, payment breakdown and QR "Amount to Pay") is always derived from the
+   * live selection through the shared `calculateRegistrationFee` utility so the
+   * amount can never go stale or fall back to ₹0.
+   */
+  selectedEvents?: EventSelectionLike[];
   isSubmitting: boolean;
-  uploadProgress: number | null;
   error: string;
   onCancel: () => void;
   onSubmit: (payment: PaymentFormData) => void;
@@ -46,80 +59,103 @@ const inputClass =
 export const PaymentDetailsSection: React.FC<PaymentDetailsSectionProps> = ({
   eventName,
   fee,
+  regularFee,
+  gamingFee,
+  selectedEvents,
   isSubmitting,
-  uploadProgress,
   error,
   onCancel,
   onSubmit,
 }) => {
   const [paymentMethod, setPaymentMethod] = useState<string>('upi');
   const [transactionId, setTransactionId] = useState('');
-  const [file, setFile] = useState<File | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [fieldErrors, setFieldErrors] = useState<{ method?: string; transactionId?: string; file?: string }>({});
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [paymentDate, setPaymentDate] = useState('');
+  const [fieldErrors, setFieldErrors] = useState<{ method?: string; transactionId?: string }>({});
+  const [paymentSettings, setPaymentSettings] = useState<PaymentSettings | null>(null);
+  const [copiedField, setCopiedField] = useState<string | null>(null);
+  const [qrImageFailed, setQrImageFailed] = useState(false);
 
-  const uploading = uploadProgress !== null;
+  const breakdown = useMemo(() => {
+    if (!selectedEvents || selectedEvents.length === 0) return null;
+    const b = calculateRegistrationFee(selectedEvents);
+    if (b.total === 0) {
+      console.error(
+        '[CASYUM Payment] Selected events exist but the computed registration fee is 0. Inspect the event category/type data:',
+        selectedEvents.map((e) => ({
+          id: e.id ?? e.eventId,
+          name: e.name ?? e.eventName,
+          category: e.category,
+          type: e.type,
+          event_type: e.event_type,
+          is_gaming: e.is_gaming,
+        }))
+      );
+    }
+    return b;
+  }, [selectedEvents]);
+
+  const displayFee = breakdown ? breakdown.total : Number(fee) || 0;
+  const displayRegularFee = breakdown ? breakdown.regularFee : Number(regularFee) || 0;
+  const displayGamingFee = breakdown ? breakdown.gamingFee : Number(gamingFee) || 0;
+  const hasBreakdown = displayRegularFee > 0 || displayGamingFee > 0;
 
   useEffect(() => {
-    return () => {
-      if (previewUrl) URL.revokeObjectURL(previewUrl);
-    };
-  }, [previewUrl]);
+    const unsubscribe = subscribePaymentSettings(
+      (settings) => setPaymentSettings(settings),
+      () => {
+        // Payment settings are optional; hide the instructions panel when unreadable.
+      }
+    );
+    return unsubscribe;
+  }, []);
 
-  const handleFileSelect = useCallback(
-    (selected: File | null) => {
-      if (previewUrl) URL.revokeObjectURL(previewUrl);
-      setFieldErrors((prev) => ({ ...prev, file: undefined }));
-      if (!selected) {
-        setFile(null);
-        setPreviewUrl(null);
-        return;
-      }
-      try {
-        validatePaymentProofFile(selected);
-        setFile(selected);
-        setPreviewUrl(URL.createObjectURL(selected));
-      } catch (err) {
-        setFile(null);
-        setPreviewUrl(null);
-        setFieldErrors((prev) => ({
-          ...prev,
-          file: err instanceof Error ? err.message : 'Invalid payment proof file.',
-        }));
-      }
-    },
-    [previewUrl]
+  const copyText = useCallback(async (value: string, label: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+    } catch {
+      const el = document.createElement('textarea');
+      el.value = value;
+      el.style.position = 'fixed';
+      el.style.opacity = '0';
+      document.body.appendChild(el);
+      el.select();
+      document.execCommand('copy');
+      document.body.removeChild(el);
+    }
+    setCopiedField(label);
+    window.setTimeout(() => setCopiedField(null), 1500);
+  }, []);
+
+  const hasInstructions = Boolean(paymentSettings?.paymentInstructions);
+  const hasUpiId = Boolean(paymentSettings?.upiId);
+  const hasBankDetails = Boolean(
+    paymentSettings &&
+      (paymentSettings.bankName ||
+        paymentSettings.accountName ||
+        paymentSettings.accountNumber ||
+        paymentSettings.ifsc)
   );
+  const showPaymentInfo = hasInstructions || hasBankDetails || paymentMethod === 'upi';
+
+  const handleQrImageError = () => {
+    setQrImageFailed(true);
+    console.error('Failed to load payment QR image:', PAYMENT_CONFIG.qrCodeImage);
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const errors: { method?: string; transactionId?: string; file?: string } = {};
+    const errors: { method?: string; transactionId?: string } = {};
     if (!paymentMethod) errors.method = 'Please select a payment method.';
     const txnError = validateTransactionId(transactionId);
     if (txnError) errors.transactionId = txnError;
-    try {
-      validatePaymentProofFile(file);
-    } catch (err) {
-      errors.file = err instanceof Error ? err.message : 'Please upload a payment proof.';
-    }
     setFieldErrors(errors);
-    if (Object.keys(errors).length > 0 || !file) return;
+    if (Object.keys(errors).length > 0) return;
     onSubmit({
       payment_method: paymentMethod,
       transaction_id: transactionId.trim(),
-      file,
+      payment_date: paymentDate.trim(),
     });
   };
-
-  const fileKind: 'image' | 'pdf' | 'none' =
-    file && previewUrl
-      ? isPaymentProofPdf(file.type) || file.type === '' && file.name.toLowerCase().endsWith('.pdf')
-        ? 'pdf'
-        : isPaymentProofImage(file.type)
-          ? 'image'
-          : 'none'
-      : 'none';
 
   return (
     <div className="rounded-3xl border border-violet-500/30 bg-gradient-to-br from-violet-500/[0.07] via-white/[0.02] to-cyan-500/[0.03] p-5 flex flex-col gap-4">
@@ -130,7 +166,7 @@ export const PaymentDetailsSection: React.FC<PaymentDetailsSectionProps> = ({
         </div>
         <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/25 text-emerald-300 text-xs font-bold">
           <CircleDollarSign className="w-3.5 h-3.5" />
-          ₹{Number(fee) || 0}
+          ₹{displayFee}
         </span>
       </div>
 
@@ -140,10 +176,146 @@ export const PaymentDetailsSection: React.FC<PaymentDetailsSectionProps> = ({
           <label className="text-[10px] font-bold uppercase tracking-widest text-white/50">Registration Fee</label>
           <div className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-emerald-300 font-bold flex items-center gap-2">
             <CircleDollarSign className="w-4 h-4 text-emerald-400" />
-            ₹{Number(fee) || 0}
+            ₹{displayFee}
             <span className="text-[10px] font-normal text-white/40 ml-auto">non-refundable</span>
           </div>
+          {hasBreakdown && (
+            <div className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5 flex flex-col gap-1.5">
+              <span className="text-[9px] font-bold uppercase tracking-widest text-white/40">Payment Breakdown</span>
+              {displayRegularFee > 0 && (
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="text-white/60">Regular Events (1–3)</span>
+                  <span className="text-emerald-300 font-bold">₹{displayRegularFee}</span>
+                </div>
+              )}
+              {displayGamingFee > 0 && (
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="text-white/60">Gaming Event</span>
+                  <span className="text-emerald-300 font-bold">₹{displayGamingFee}</span>
+                </div>
+              )}
+              <div className="h-px bg-white/10" />
+              <div className="flex items-center justify-between text-[11px]">
+                <span className="font-bold text-white">Total Amount</span>
+                <span className="font-extrabold text-emerald-300">₹{displayFee}</span>
+              </div>
+            </div>
+          )}
         </div>
+
+        {/* Payment instructions */}
+        {showPaymentInfo && (
+          <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 flex flex-col gap-3">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-400">
+                How to Pay
+              </span>
+              <div className="h-px flex-1 bg-white/10" />
+            </div>
+
+            {hasInstructions && (
+              <p className="text-xs text-white/70 leading-relaxed whitespace-pre-line">
+                {paymentSettings?.paymentInstructions}
+              </p>
+            )}
+
+            {paymentMethod === 'upi' && (
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-bold uppercase tracking-[0.25em] text-emerald-400">
+                    Scan to Pay
+                  </span>
+                  <div className="h-px flex-1 bg-white/10" />
+                </div>
+
+                {qrImageFailed ? (
+                  <div className="flex items-start gap-2 px-3 py-2.5 rounded-xl bg-rose-500/10 border border-rose-500/25 text-rose-300 text-xs">
+                    <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                    <span>Payment QR could not be loaded. Please contact the event administration.</span>
+                  </div>
+                ) : (
+                  <div className="flex justify-center">
+                    <div className="w-[min(90vw,360px)] max-w-full aspect-square sm:w-80 md:w-[380px] rounded-2xl bg-white p-6 border border-white/10 shadow-lg shadow-emerald-500/10 flex items-center justify-center">
+                      <img
+                        src={PAYMENT_CONFIG.qrCodeImage}
+                        alt="CASYUM Payment QR Code"
+                        loading="eager"
+                        onError={handleQrImageError}
+                        className="w-full h-full object-contain aspect-square"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex flex-col items-center gap-0.5 text-center">
+                  <p className="text-xs text-white/70">Scan the QR code to make payment</p>
+                  <p className="text-sm font-extrabold font-display text-emerald-300">
+                    Amount to Pay: ₹{displayFee}
+                  </p>
+                </div>
+
+                {hasUpiId && (
+                  <div className="flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5">
+                    <div className="flex flex-col gap-0.5 min-w-0">
+                      <span className="text-[9px] font-bold text-white/40 uppercase tracking-wider flex items-center gap-1.5">
+                        <Wallet className="w-3 h-3 text-emerald-400" />
+                        UPI ID
+                      </span>
+                      <span className="text-xs font-bold text-white truncate">{paymentSettings?.upiId}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => copyText(paymentSettings?.upiId || '', 'upi')}
+                      className="flex items-center gap-1 text-[10px] font-bold text-violet-400 hover:text-violet-300 transition-colors cursor-pointer"
+                    >
+                      {copiedField === 'upi' ? <CheckCircle2 className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                      {copiedField === 'upi' ? 'Copied!' : 'Copy'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {hasBankDetails && (
+              <div className="flex flex-col gap-1.5">
+                <span className="text-[10px] font-bold text-white/40 uppercase tracking-wider flex items-center gap-1.5">
+                  <Landmark className="w-3 h-3 text-sky-400" />
+                  Bank Transfer (NEFT / IMPS / RTGS)
+                </span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-xs">
+                  {paymentSettings?.bankName && (
+                    <span className="text-white/70">
+                      <span className="text-white/40">Bank:</span> {paymentSettings.bankName}
+                    </span>
+                  )}
+                  {paymentSettings?.accountName && (
+                    <span className="text-white/70">
+                      <span className="text-white/40">Account:</span> {paymentSettings.accountName}
+                    </span>
+                  )}
+                  {paymentSettings?.accountNumber && (
+                    <span className="text-white/70 flex items-center gap-1.5">
+                      <span className="text-white/40">A/c No:</span> {paymentSettings.accountNumber}
+                      <button
+                        type="button"
+                        onClick={() => copyText(paymentSettings?.accountNumber || '', 'acct')}
+                        className="text-violet-400 hover:text-violet-300 cursor-pointer"
+                        title="Copy account number"
+                      >
+                        {copiedField === 'acct' ? <CheckCircle2 className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                      </button>
+                    </span>
+                  )}
+                  {paymentSettings?.ifsc && (
+                    <span className="text-white/70">
+                      <span className="text-white/40">IFSC:</span> {paymentSettings.ifsc}
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Payment method */}
         <div className="flex flex-col gap-1">
@@ -171,7 +343,7 @@ export const PaymentDetailsSection: React.FC<PaymentDetailsSectionProps> = ({
         {/* Transaction ID */}
         <div className="flex flex-col gap-1">
           <label className="text-[10px] font-bold uppercase tracking-widest text-white/50">
-            Transaction ID / UTR
+            Transaction ID / UTR <span className="text-rose-400">*</span>
           </label>
           <input
             type="text"
@@ -189,93 +361,23 @@ export const PaymentDetailsSection: React.FC<PaymentDetailsSectionProps> = ({
           )}
         </div>
 
-        {/* Payment proof upload */}
+        {/* Payment Date (optional) */}
         <div className="flex flex-col gap-1">
-          <label className="text-[10px] font-bold uppercase tracking-widest text-white/50">Payment Proof</label>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/jpeg,image/png,image/webp,application/pdf,.jpg,.jpeg,.png,.webp,.pdf"
-            className="hidden"
-            onChange={(e) => handleFileSelect(e.target.files?.[0] || null)}
-          />
-
-          {file && previewUrl ? (
-            <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-3 flex items-center gap-3">
-              <div className="w-14 h-14 rounded-lg overflow-hidden bg-black flex items-center justify-center shrink-0">
-                {fileKind === 'pdf' ? (
-                  <FileText className="w-6 h-6 text-rose-400" />
-                ) : (
-                  <img src={previewUrl} alt="Payment proof preview" className="w-full h-full object-cover" />
-                )}
-              </div>
-              <div className="flex flex-col gap-0.5 min-w-0 flex-1">
-                <span className="text-xs font-bold text-white truncate">{file.name}</span>
-                <span className="text-[10px] text-white/50">{formatFileSize(file.size)}</span>
-                {fileKind === 'pdf' ? (
-                  <a
-                    href={previewUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-[10px] font-bold text-sky-400 hover:text-sky-300 w-fit"
-                  >
-                    Open PDF
-                  </a>
-                ) : (
-                  <span className="flex items-center gap-1 text-[10px] text-emerald-400 font-bold">
-                    <CheckCircle2 className="w-3 h-3" />
-                    Payment proof uploaded successfully
-                  </span>
-                )}
-              </div>
-              <div className="flex items-center gap-1.5 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  title="Replace file"
-                  className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-white/60 hover:text-white cursor-pointer"
-                >
-                  <RefreshCw className="w-3.5 h-3.5" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleFileSelect(null)}
-                  title="Remove file"
-                  className="p-2 rounded-lg bg-white/5 hover:bg-rose-500/20 text-white/60 hover:text-rose-400 cursor-pointer"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              className="w-full rounded-xl border-2 border-dashed border-white/15 hover:border-violet-500/50 bg-white/[0.02] p-6 flex flex-col items-center gap-2 text-white/50 hover:text-white transition-all cursor-pointer"
-            >
-              <UploadCloud className="w-6 h-6 text-violet-400" />
-              <span className="text-xs font-bold">Click to upload payment proof</span>
-              <span className="text-[10px] text-white/40">JPG, JPEG, PNG, WEBP or PDF · Max 5 MB</span>
-            </button>
-          )}
-          {fieldErrors.file && <span className="text-[10px] text-rose-400 px-1">{fieldErrors.file}</span>}
-        </div>
-
-        {/* Upload progress */}
-        {uploading && (
-          <div className="flex flex-col gap-1.5">
-            <div className="flex items-center gap-2 text-xs text-white/70">
-              <Loader2 className="w-3.5 h-3.5 animate-spin text-violet-400" />
-              <span>Uploading payment proof... {uploadProgress}%</span>
-            </div>
-            <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
-              <div
-                className="h-full rounded-full bg-gradient-to-r from-violet-500 to-cyan-400 transition-all duration-200"
-                style={{ width: `${uploadProgress ?? 0}%` }}
-              />
-            </div>
+          <label className="text-[10px] font-bold uppercase tracking-widest text-white/50">
+            Payment Date <span className="text-white/30 normal-case font-normal">(optional)</span>
+          </label>
+          <div className="relative">
+            <CalendarDays className="w-4 h-4 text-white/30 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              type="date"
+              value={paymentDate}
+              max={new Date().toISOString().slice(0, 10)}
+              onChange={(e) => setPaymentDate(e.target.value)}
+              className={`${inputClass} pl-10`}
+            />
           </div>
-        )}
+          <span className="text-[10px] text-white/40 px-1">When did you make the payment? (if known)</span>
+        </div>
 
         {error && (
           <div className="flex items-start gap-2 px-3 py-2.5 rounded-xl bg-rose-500/10 border border-rose-500/25 text-rose-300 text-xs">
@@ -295,20 +397,11 @@ export const PaymentDetailsSection: React.FC<PaymentDetailsSectionProps> = ({
           </button>
           <button
             type="submit"
-            disabled={isSubmitting || uploading}
+            disabled={isSubmitting}
             className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-xs font-bold shadow-lg shadow-violet-500/25 transition-colors cursor-pointer disabled:cursor-not-allowed"
           >
-            {isSubmitting || uploading ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                {uploading ? `Uploading ${uploadProgress}%...` : 'Submitting...'}
-              </>
-            ) : (
-              <>
-                <CheckCircle2 className="w-4 h-4" />
-                Submit Payment & Register
-              </>
-            )}
+            <CheckCircle2 className="w-4 h-4" />
+            Submit Payment & Register
           </button>
         </div>
       </form>

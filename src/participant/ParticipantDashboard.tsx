@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
@@ -19,14 +19,29 @@ import {
   CircleDollarSign,
   Lock,
   XCircle,
-  UploadCloud,
+  RefreshCw,
+  Gamepad2,
+  Radio,
+  Check,
+  Ticket,
+  Layers,
 } from 'lucide-react';
 import { useRBAC } from '../rbac/context/RBACContext';
 import { api } from '../services/api';
 import { EventOverviewCms } from '../components/cms/EventOverviewCms';
 import { ParticipantQRCard } from './ParticipantQRCard';
 import { PaymentDetailsSection } from '../components/events/PaymentDetailsSection';
-import { registerEvent, resubmitRegistrationPayment } from '../services/participantService';
+import {
+  registerEvent,
+  registerEventBundle,
+  resubmitRegistrationPayment,
+} from '../services/participantService';
+import {
+  isGamingEvent,
+  calculateRegistrationFee,
+  MAX_REGULAR_EVENTS,
+  type EventSelectionLike,
+} from '../services/eventSelection';
 
 const YEARS = ['1st Year', '2nd Year', '3rd Year', '4th Year', 'Other'];
 
@@ -47,13 +62,14 @@ export const ParticipantDashboard: React.FC = () => {
   const [savingProfile, setSavingProfile] = useState(false);
   const [viewingEvent, setViewingEvent] = useState<any>(null);
   const [resubmitTarget, setResubmitTarget] = useState<any>(null);
-  const [resubmitProgress, setResubmitProgress] = useState<number | null>(null);
   const [resubmitError, setResubmitError] = useState('');
   const [resubmittingNow, setResubmittingNow] = useState(false);
   const [registerTarget, setRegisterTarget] = useState<any>(null);
-  const [registerProgress, setRegisterProgress] = useState<number | null>(null);
   const [registerError, setRegisterError] = useState('');
   const [registeringNow, setRegisteringNow] = useState(false);
+  const [selectedRegularIds, setSelectedRegularIds] = useState<string[]>([]);
+  const [selectedGamingId, setSelectedGamingId] = useState<string | null>(null);
+  const [selectionNotice, setSelectionNotice] = useState('');
 
   const loadAll = useCallback(async () => {
     try {
@@ -83,6 +99,37 @@ export const ParticipantDashboard: React.FC = () => {
   useEffect(() => {
     loadAll();
   }, [loadAll]);
+
+  /**
+   * Resolve the current selection to event objects and derive the fee through
+   * the shared `calculateRegistrationFee` utility. Memoized so the amount
+   * always reflects the latest selection (select/remove/gaming switch) and is
+   * never calculated from stale state or a stale stored value.
+   */
+  const selectedEvents = useMemo<EventSelectionLike[]>(() => {
+    const ids = [...selectedRegularIds, ...(selectedGamingId ? [selectedGamingId] : [])];
+    return ids
+      .map((id) => openEvents.find((e) => String(e.id) === id))
+      .filter((e): e is EventSelectionLike => Boolean(e));
+  }, [selectedRegularIds, selectedGamingId, openEvents]);
+
+  const feeBreakdown = useMemo(() => {
+    const breakdown = calculateRegistrationFee(selectedEvents);
+    if (selectedEvents.length > 0 && breakdown.total === 0) {
+      console.error(
+        '[CASYUM Payment] Events are selected but the computed fee is 0. Inspect the event category/type data:',
+        selectedEvents.map((e) => ({
+          id: e.id ?? e.eventId,
+          name: e.name ?? e.eventName,
+          category: e.category,
+          type: e.type,
+          event_type: e.event_type,
+          is_gaming: e.is_gaming,
+        }))
+      );
+    }
+    return breakdown;
+  }, [selectedEvents]);
 
   const handleLogout = () => {
     logout();
@@ -131,28 +178,91 @@ export const ParticipantDashboard: React.FC = () => {
     }
   };
 
-  const handleRegister = async (eventId: string | number) => {
+  const toggleRegularEvent = (eventId: string | number) => {
     setError('');
     setNotice('');
-    const ev = openEvents.find((e) => String(e.id) === String(eventId));
-    if (!ev) return;
-    setRegisterError('');
-    setRegisterTarget(ev);
+    setSelectionNotice('');
+    const id = String(eventId);
+    setSelectedRegularIds((prev) => {
+      if (prev.includes(id)) {
+        return prev.filter((x) => x !== id);
+      }
+      if (prev.length >= MAX_REGULAR_EVENTS) {
+        setSelectionNotice(`You can select a maximum of ${MAX_REGULAR_EVENTS} regular events.`);
+        return prev;
+      }
+      return [...prev, id];
+    });
   };
 
-  const handleRegisterSubmit = async (payment: { payment_method: string; transaction_id: string; file: File }) => {
-    if (!registerTarget) return;
+  const toggleGamingEvent = (eventId: string | number) => {
+    setError('');
+    setNotice('');
+    setSelectionNotice('');
+    const id = String(eventId);
+    setSelectedGamingId((prev) => (prev === id ? null : id));
+  };
+
+  const handleBundleProceed = () => {
+    setError('');
+    setNotice('');
+    setSelectionNotice('');
+    const regularCount = selectedRegularIds.length;
+    const gamingCount = selectedGamingId ? 1 : 0;
+    if (regularCount === 0 && gamingCount === 0) {
+      setSelectionNotice('Select at least one event to continue.');
+      return;
+    }
+    setRegisterError('');
+    setRegisterTarget({
+      bundle: true,
+      fee: feeBreakdown.total,
+      regularFee: feeBreakdown.regularFee,
+      gamingFee: feeBreakdown.gamingFee,
+    });
+  };
+
+  const handleBundleSubmit = async (payment: { payment_method: string; transaction_id: string; payment_date: string }) => {
+    if (!registerTarget?.bundle) return;
     setError('');
     setNotice('');
     setRegisteringNow(true);
-    setRegisterProgress(0);
+    setRegisterError('');
+    try {
+      const res = await registerEventBundle(
+        {
+          regularEventIds: selectedRegularIds,
+          gamingEventId: selectedGamingId,
+        },
+        {
+          payment_method: payment.payment_method,
+          transaction_id: payment.transaction_id,
+          payment_date: payment.payment_date,
+        }
+      );
+      setNotice(res.message);
+      setRegisterTarget(null);
+      setSelectedRegularIds([]);
+      setSelectedGamingId(null);
+      await loadAll();
+    } catch (err) {
+      setRegisterError(err instanceof Error ? err.message : 'Failed to register for the selected events.');
+    } finally {
+      setRegisteringNow(false);
+    }
+  };
+
+  const handleRegisterSubmit = async (payment: { payment_method: string; transaction_id: string; payment_date: string }) => {
+    if (!registerTarget || registerTarget.bundle) return;
+    setError('');
+    setNotice('');
+    setRegisteringNow(true);
     setRegisterError('');
     try {
       const res = await registerEvent(registerTarget.id, {
         payment_method: payment.payment_method,
         transaction_id: payment.transaction_id,
-        file: payment.file,
-        onProgress: (pct) => setRegisterProgress(pct),
+        payment_date: payment.payment_date,
       });
       setNotice(res.message);
       setRegisterTarget(null);
@@ -161,23 +271,20 @@ export const ParticipantDashboard: React.FC = () => {
       setRegisterError(err instanceof Error ? err.message : 'Failed to register for the event.');
     } finally {
       setRegisteringNow(false);
-      setRegisterProgress(null);
     }
   };
 
-  const handleResubmit = async (payment: { payment_method: string; transaction_id: string; file: File }) => {
+  const handleResubmit = async (payment: { payment_method: string; transaction_id: string; payment_date: string }) => {
     if (!resubmitTarget) return;
     setError('');
     setNotice('');
     setResubmittingNow(true);
-    setResubmitProgress(0);
     setResubmitError('');
     try {
       const res = await resubmitRegistrationPayment(resubmitTarget.registration_id, {
         payment_method: payment.payment_method,
         transaction_id: payment.transaction_id,
-        file: payment.file,
-        onProgress: (pct) => setResubmitProgress(pct),
+        payment_date: payment.payment_date,
       });
       setNotice(res.message);
       setResubmitTarget(null);
@@ -186,7 +293,6 @@ export const ParticipantDashboard: React.FC = () => {
       setResubmitError(err instanceof Error ? err.message : 'Failed to resubmit payment.');
     } finally {
       setResubmittingNow(false);
-      setResubmitProgress(null);
     }
   };
 
@@ -222,6 +328,15 @@ export const ParticipantDashboard: React.FC = () => {
   const registeredEventIds = new Set((participant.event_ids || []).map((x: any) => Number(x)));
   const myRegistrations = participant.registered_events || [];
   const avatar = participant.profile_picture || '';
+
+  const regularEvents = openEvents.filter((ev) => !isGamingEvent(ev));
+  const gamingEvents = openEvents.filter((ev) => isGamingEvent(ev));
+  const selectedGamingEvent = selectedGamingId
+    ? openEvents.find((e) => String(e.id) === selectedGamingId) || null
+    : null;
+  const selectedRegularNames = selectedRegularIds
+    .map((id) => openEvents.find((e) => String(e.id) === id)?.name || '')
+    .filter(Boolean);
 
   return (
     <div className="min-h-screen bg-black text-white selection:bg-violet-500/30 selection:text-violet-200">
@@ -319,94 +434,264 @@ export const ParticipantDashboard: React.FC = () => {
                   No events are currently open for registration.
                 </div>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {openEvents.map((ev) => {
-                    const isFull = Number(ev.registered_count) >= Number(ev.max_participants);
-                    const isRegistered = registeredEventIds.has(Number(ev.id));
-                    return (
-                      <div
-                        key={ev.id}
-                        className="flex flex-col gap-4 rounded-2xl border border-white/10 bg-white/[0.03] p-5 hover:border-violet-500/40 transition-colors"
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="flex flex-col gap-1 min-w-0">
-                            <span className="text-[9px] font-bold uppercase tracking-widest text-cyan-400/80">{ev.category}</span>
-                            <h3 className="text-base font-bold tracking-tight truncate">{ev.name}</h3>
-                          </div>
-                          <span className="flex items-center gap-1 text-violet-300 font-bold text-sm flex-shrink-0">
-                            <CircleDollarSign className="w-4 h-4" />
-                            ₹{Number(ev.fee) || 0}
-                          </span>
+                <div className="flex flex-col gap-8">
+                  {/* REGULAR CASYUM EVENTS */}
+                  <div className="flex flex-col gap-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="flex items-center gap-2.5">
+                        <div className="p-2 rounded-xl bg-violet-500/15 border border-violet-500/30 text-violet-300">
+                          <Layers className="w-4 h-4" />
                         </div>
-
-                        <div className="flex flex-col gap-1.5 text-[11px] text-white/50">
-                          <span className="flex items-center gap-2">
-                            <Calendar className="w-3.5 h-3.5 text-white/30" />
-                            {ev.event_date}
-                          </span>
-                          <span className="flex items-center gap-2">
-                            <Clock className="w-3.5 h-3.5 text-white/30" />
-                            {ev.time || 'All day'}
-                          </span>
-                          <span className="flex items-center gap-2">
-                            <MapPin className="w-3.5 h-3.5 text-white/30" />
-                            {ev.venue || 'TBA'}
-                          </span>
+                        <div className="flex flex-col">
+                          <h2 className="text-sm font-extrabold tracking-tight font-display uppercase">Regular CASYUM Events</h2>
+                          <span className="text-[10px] text-white/40">Select up to {MAX_REGULAR_EVENTS} regular events — ₹150</span>
                         </div>
-
-                        <div className="flex items-center justify-between text-[10px] text-white/40">
-                          <span className="flex items-center gap-1.5">
-                            <Users className="w-3.5 h-3.5" />
-                            {Number(ev.registered_count)}/{Number(ev.max_participants)} registered
-                          </span>
-                          {isFull && <span className="text-rose-400 font-bold uppercase">Full</span>}
-                        </div>
-
-                        <button
-                          onClick={() => setViewingEvent(viewingEvent?.id === ev.id ? null : ev)}
-                          className={`w-full py-2.5 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all cursor-pointer flex items-center justify-center gap-2 border ${
-                            viewingEvent?.id === ev.id
-                              ? 'bg-violet-500/15 border-violet-500/40 text-violet-300'
-                              : 'bg-white/5 border-white/10 text-white/60 hover:text-white hover:border-white/25'
-                          }`}
-                        >
-                          {viewingEvent?.id === ev.id ? (
-                            <>
-                              <ChevronDown className="w-3.5 h-3.5" />
-                              Hide Details
-                            </>
-                          ) : (
-                            <>
-                              <Calendar className="w-3.5 h-3.5" />
-                              View Event Details
-                            </>
-                          )}
-                        </button>
-
-                        <button
-                          onClick={() => handleRegister(ev.id)}
-                          disabled={isRegistered || isFull}
-                          className={`w-full py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all cursor-pointer flex items-center justify-center gap-2 disabled:cursor-not-allowed ${
-                            isRegistered
-                              ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-300'
-                              : 'bg-gradient-to-r from-violet-500 to-indigo-600 hover:from-violet-600 hover:to-indigo-700 text-white shadow-lg shadow-violet-500/20'
-                          } ${isFull && !isRegistered ? 'opacity-50' : ''}`}
-                        >
-                          {isRegistered ? (
-                            <>
-                              <CheckCircle2 className="w-3.5 h-3.5" />
-                              Registered
-                            </>
-                          ) : (
-                            <>
-                              <GraduationCap className="w-3.5 h-3.5" />
-                              Register Now
-                            </>
-                          )}
-                        </button>
                       </div>
-                    );
-                  })}
+                      <span className={`px-3 py-1.5 rounded-xl text-[10px] font-bold uppercase tracking-widest border ${
+                        selectedRegularIds.length === 0
+                          ? 'bg-white/5 border-white/10 text-white/40'
+                          : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                      }`}>
+                        {selectedRegularIds.length}/{MAX_REGULAR_EVENTS} selected
+                      </span>
+                    </div>
+
+                    {regularEvents.length === 0 ? (
+                      <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-center text-white/40 text-sm">
+                        No regular events are currently open for registration.
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {regularEvents.map((ev) => {
+                          const id = String(ev.id);
+                          const isFull = Number(ev.registered_count) >= Number(ev.max_participants);
+                          const isRegistered = registeredEventIds.has(Number(ev.id));
+                          const isSelected = selectedRegularIds.includes(id);
+                          const selectable = !isRegistered && !isFull;
+                          return (
+                            <div
+                              key={ev.id}
+                              className={`flex flex-col gap-4 rounded-2xl border p-5 transition-all ${
+                                isSelected
+                                  ? 'border-violet-500/60 bg-violet-500/[0.07] shadow-[0_0_20px_rgba(139,92,246,0.12)]'
+                                  : 'border-white/10 bg-white/[0.03] hover:border-violet-500/40'
+                              }`}
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="flex flex-col gap-1 min-w-0">
+                                  <span className="text-[9px] font-bold uppercase tracking-widest text-cyan-400/80">{ev.category}</span>
+                                  <h3 className="text-base font-bold tracking-tight truncate">{ev.name}</h3>
+                                </div>
+                                {isSelected && (
+                                  <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-violet-500/20 border border-violet-500/40 text-violet-200 text-[9px] font-bold uppercase tracking-widest flex-shrink-0">
+                                    <Check className="w-3 h-3" />
+                                    Selected
+                                  </span>
+                                )}
+                              </div>
+
+                              <div className="flex flex-col gap-1.5 text-[11px] text-white/50">
+                                <span className="flex items-center gap-2">
+                                  <Calendar className="w-3.5 h-3.5 text-white/30" />
+                                  {ev.event_date}
+                                </span>
+                                <span className="flex items-center gap-2">
+                                  <Clock className="w-3.5 h-3.5 text-white/30" />
+                                  {ev.time || 'All day'}
+                                </span>
+                                <span className="flex items-center gap-2">
+                                  <MapPin className="w-3.5 h-3.5 text-white/30" />
+                                  {ev.venue || 'TBA'}
+                                </span>
+                              </div>
+
+                              <div className="flex items-center justify-between text-[10px] text-white/40">
+                                <span className="flex items-center gap-1.5">
+                                  <Users className="w-3.5 h-3.5" />
+                                  {Number(ev.registered_count)}/{Number(ev.max_participants)} registered
+                                </span>
+                                {isFull && <span className="text-rose-400 font-bold uppercase">Full</span>}
+                              </div>
+
+                              <button
+                                onClick={() => setViewingEvent(viewingEvent?.id === ev.id ? null : ev)}
+                                className="w-full py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all cursor-pointer border bg-white/5 border-white/10 text-white/60 hover:text-white hover:border-white/25 flex items-center justify-center gap-2"
+                              >
+                                {viewingEvent?.id === ev.id ? (
+                                  <>
+                                    <ChevronDown className="w-3.5 h-3.5" />
+                                    Hide Details
+                                  </>
+                                ) : (
+                                  <>
+                                    <Calendar className="w-3.5 h-3.5" />
+                                    View Details
+                                  </>
+                                )}
+                              </button>
+
+                              <button
+                                onClick={() => toggleRegularEvent(id)}
+                                disabled={!selectable}
+                                className={`w-full py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all cursor-pointer flex items-center justify-center gap-2 disabled:cursor-not-allowed ${
+                                  isRegistered
+                                    ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-300'
+                                    : isSelected
+                                      ? 'bg-violet-600 text-white shadow-lg shadow-violet-500/20'
+                                      : 'bg-gradient-to-r from-violet-500 to-indigo-600 hover:from-violet-600 hover:to-indigo-700 text-white shadow-lg shadow-violet-500/20'
+                                } ${isFull && !isRegistered ? 'opacity-50' : ''}`}
+                              >
+                                {isRegistered ? (
+                                  <>
+                                    <CheckCircle2 className="w-3.5 h-3.5" />
+                                    Registered
+                                  </>
+                                ) : isSelected ? (
+                                  <>
+                                    <Check className="w-3.5 h-3.5" />
+                                    Remove Selection
+                                  </>
+                                ) : (
+                                  <>
+                                    <GraduationCap className="w-3.5 h-3.5" />
+                                    Select Event
+                                  </>
+                                )}
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* SPECIAL GAMING EVENT */}
+                  <div className="flex flex-col gap-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="flex items-center gap-2.5">
+                        <div className="p-2 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300">
+                          <Gamepad2 className="w-4 h-4" />
+                        </div>
+                        <div className="flex flex-col">
+                          <h2 className="text-sm font-extrabold tracking-tight font-display uppercase">Special Gaming Event</h2>
+                          <span className="text-[10px] text-white/40">Select only one gaming event — ₹250</span>
+                        </div>
+                      </div>
+                      {selectedGamingEvent && (
+                        <span className="px-3 py-1.5 rounded-xl text-[10px] font-bold uppercase tracking-widest border bg-rose-500/10 border-rose-500/30 text-rose-300">
+                          {selectedGamingEvent.name} selected
+                        </span>
+                      )}
+                    </div>
+
+                    {gamingEvents.length === 0 ? (
+                      <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-center text-white/40 text-sm">
+                        No gaming events are currently open for registration.
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {gamingEvents.map((ev) => {
+                          const id = String(ev.id);
+                          const isFull = Number(ev.registered_count) >= Number(ev.max_participants);
+                          const isRegistered = registeredEventIds.has(Number(ev.id));
+                          const isSelected = selectedGamingId === id;
+                          const selectable = !isRegistered && !isFull;
+                          return (
+                            <div
+                              key={ev.id}
+                              onClick={() => {
+                                if (!selectable) return;
+                                toggleGamingEvent(id);
+                              }}
+                              className={`flex items-center gap-4 rounded-2xl border p-5 transition-all cursor-pointer ${
+                                isSelected
+                                  ? 'border-rose-500/60 bg-rose-500/[0.07] shadow-[0_0_20px_rgba(244,63,94,0.12)]'
+                                  : 'border-white/10 bg-white/[0.03] hover:border-rose-500/40'
+                              } ${!selectable ? 'cursor-not-allowed opacity-60' : ''}`}
+                            >
+                              <span
+                                className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
+                                  isSelected ? 'border-rose-400' : 'border-white/25'
+                                }`}
+                              >
+                                {isSelected && <span className="w-2.5 h-2.5 rounded-full bg-rose-400" />}
+                              </span>
+                              <div className="flex flex-col gap-0.5 min-w-0 flex-1">
+                                <span className="text-[9px] font-bold uppercase tracking-widest text-rose-400/80 flex items-center gap-1">
+                                  <Radio className="w-3 h-3" />
+                                  Gaming
+                                </span>
+                                <h3 className="text-base font-bold tracking-tight truncate">{ev.name}</h3>
+                                <span className="text-[10px] text-white/40">
+                                  {Number(ev.registered_count)}/{Number(ev.max_participants)} registered
+                                  {isFull ? ' · Full' : ''}
+                                </span>
+                              </div>
+                              <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                                <span className="flex items-center gap-1 text-rose-300 font-bold text-sm">
+                                  <CircleDollarSign className="w-4 h-4" />
+                                  ₹250
+                                </span>
+                                {isRegistered && (
+                                  <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-[9px] font-bold uppercase tracking-widest">
+                                    Registered
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Selection summary */}
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 flex flex-col gap-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex flex-col gap-1">
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-white/40">Your Selection</span>
+                        <div className="flex flex-wrap gap-1.5 text-[10px]">
+                          {selectedRegularNames.length === 0 && !selectedGamingEvent && (
+                            <span className="text-white/30">Nothing selected yet.</span>
+                          )}
+                          {selectedRegularNames.map((name) => (
+                            <span key={name} className="px-2 py-1 rounded-lg bg-violet-500/10 border border-violet-500/25 text-violet-300">
+                              {name}
+                            </span>
+                          ))}
+                          {selectedGamingEvent && (
+                            <span className="px-2 py-1 rounded-lg bg-rose-500/10 border border-rose-500/25 text-rose-300">
+                              {selectedGamingEvent.name}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex flex-col items-end gap-0.5">
+                        <span className="text-[10px] text-white/40">
+                          {feeBreakdown.regularFee > 0 && `${feeBreakdown.regularFee} (regular)`}
+                          {feeBreakdown.regularFee > 0 && feeBreakdown.gamingFee > 0 && ' + '}
+                          {feeBreakdown.gamingFee > 0 && `${feeBreakdown.gamingFee} (gaming)`}
+                        </span>
+                        <span className="text-xl font-extrabold font-display text-gradient">
+                          ₹{feeBreakdown.total}
+                        </span>
+                      </div>
+                    </div>
+                    {(selectionNotice || feeBreakdown.total === 0) && (
+                      <div className="flex items-start gap-2 px-3 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/25 text-amber-300 text-xs">
+                        <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                        <span>{selectionNotice || 'Select at least one event to continue.'}</span>
+                      </div>
+                    )}
+                    <button
+                      onClick={handleBundleProceed}
+                      disabled={feeBreakdown.total === 0}
+                      className="w-full py-3.5 rounded-xl bg-gradient-to-r from-violet-500 to-indigo-600 hover:from-violet-600 hover:to-indigo-700 text-white font-bold text-xs uppercase tracking-widest transition-all shadow-lg shadow-violet-500/20 cursor-pointer flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      <Ticket className="w-4 h-4" />
+                      Proceed to Payment — ₹{feeBreakdown.total}
+                    </button>
+                  </div>
                 </div>
               )}
             </section>
@@ -450,8 +735,23 @@ export const ParticipantDashboard: React.FC = () => {
                         className="rounded-2xl border border-white/10 bg-white/[0.03] px-5 py-4 flex flex-col gap-4"
                       >
                         <div className="flex flex-wrap items-center justify-between gap-3">
-                          <div className="flex flex-col gap-0.5">
+                          <div className="flex flex-col gap-1 min-w-0">
                             <span className="text-sm font-bold">{reg.event_name}</span>
+                            {reg.selectedEvents && (
+                              <div className="flex flex-wrap gap-1.5 mt-0.5">
+                                {Array.isArray(reg.selectedEvents.regular) &&
+                                  reg.selectedEvents.regular.map((ev: any) => (
+                                    <span key={String(ev.eventId)} className="px-2 py-0.5 rounded-md bg-violet-500/10 border border-violet-500/25 text-violet-300 text-[9px] font-bold">
+                                      {ev.eventName}
+                                    </span>
+                                  ))}
+                                {reg.selectedEvents.gaming && (
+                                  <span className="px-2 py-0.5 rounded-md bg-rose-500/10 border border-rose-500/25 text-rose-300 text-[9px] font-bold">
+                                    {reg.selectedEvents.gaming.eventName}
+                                  </span>
+                                )}
+                              </div>
+                            )}
                             <span className="text-[11px] text-white/40">
                               {reg.event_date}{reg.event_time ? ` · ${reg.event_time}` : ''} · {reg.venue || 'TBA'}
                             </span>
@@ -468,7 +768,7 @@ export const ParticipantDashboard: React.FC = () => {
                                     : 'bg-amber-500/15 border-amber-500/30 text-amber-300'
                               }`}
                             >
-                              {paymentVerified ? 'Payment Verified' : isRejected ? 'Payment Rejected' : 'Payment Pending'}
+                              {paymentVerified ? 'Payment Verified' : isRejected ? 'Payment Rejected' : 'Pending Verification'}
                             </span>
                           </div>
                         </div>
@@ -498,7 +798,7 @@ export const ParticipantDashboard: React.FC = () => {
                               }}
                               className="self-start flex items-center gap-2 px-4 py-2.5 rounded-xl bg-violet-600/20 hover:bg-violet-600/30 border border-violet-500/30 text-violet-300 text-xs font-bold cursor-pointer transition-all"
                             >
-                              <UploadCloud className="w-3.5 h-3.5" />
+                              <RefreshCw className="w-3.5 h-3.5" />
                               Resubmit Payment
                             </button>
                           </div>
@@ -533,7 +833,6 @@ export const ParticipantDashboard: React.FC = () => {
               eventName={resubmitTarget.event_name}
               fee={Number(resubmitTarget.fee) || 0}
               isSubmitting={resubmittingNow}
-              uploadProgress={resubmitProgress}
               error={resubmitError}
               onCancel={() => setResubmitTarget(null)}
               onSubmit={(payment) => void handleResubmit(payment)}
@@ -547,8 +846,26 @@ export const ParticipantDashboard: React.FC = () => {
           <div className="w-full max-w-lg bg-zinc-950 border border-white/20 rounded-3xl p-6 shadow-2xl">
             <div className="flex items-center justify-between mb-4">
               <div className="flex flex-col gap-0.5">
-                <span className="text-[10px] font-bold uppercase tracking-widest text-violet-400">Register for Event</span>
-                <h3 className="text-base font-bold font-display text-white">{registerTarget.name}</h3>
+                <span className="text-[10px] font-bold uppercase tracking-widest text-violet-400">
+                  {registerTarget.bundle ? 'Register for Selected Events' : 'Register for Event'}
+                </span>
+                <h3 className="text-base font-bold font-display text-white">
+                  {registerTarget.bundle ? 'Your Selection' : registerTarget.name}
+                </h3>
+                {registerTarget.bundle && (
+                  <div className="flex flex-wrap gap-1.5 mt-1">
+                    {selectedRegularNames.map((name) => (
+                      <span key={name} className="px-2 py-0.5 rounded-md bg-violet-500/10 border border-violet-500/25 text-violet-300 text-[9px] font-bold">
+                        {name}
+                      </span>
+                    ))}
+                    {selectedGamingEvent && (
+                      <span className="px-2 py-0.5 rounded-md bg-rose-500/10 border border-rose-500/25 text-rose-300 text-[9px] font-bold">
+                        {selectedGamingEvent.name}
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
               <button
                 onClick={() => setRegisterTarget(null)}
@@ -559,13 +876,17 @@ export const ParticipantDashboard: React.FC = () => {
               </button>
             </div>
             <PaymentDetailsSection
-              eventName={registerTarget.name}
+              eventName={registerTarget.bundle ? 'Your Selection' : registerTarget.name}
               fee={Number(registerTarget.fee) || 0}
+              regularFee={registerTarget.bundle ? feeBreakdown.regularFee : undefined}
+              gamingFee={registerTarget.bundle ? feeBreakdown.gamingFee : undefined}
+              selectedEvents={registerTarget.bundle ? selectedEvents : undefined}
               isSubmitting={registeringNow}
-              uploadProgress={registerProgress}
               error={registerError}
               onCancel={() => setRegisterTarget(null)}
-              onSubmit={(payment) => void handleRegisterSubmit(payment)}
+              onSubmit={(payment) =>
+                registerTarget.bundle ? void handleBundleSubmit(payment) : void handleRegisterSubmit(payment)
+              }
             />
           </div>
         </div>

@@ -24,7 +24,7 @@ export const AttendanceOverviewPage: React.FC = () => {
     const q = query.trim().toLowerCase();
     return events
       .map((e) => {
-        const regs = registrations.filter((r) => r.event_id === e.id);
+        const regs = registrations.filter((r) => r.event_id === e.id || r.event_ids?.includes(String(e.id)));
         const eligible = regs.filter((r) => r.attendanceEligibility === true);
         const present = regs.filter((r) =>
           attendance.some(

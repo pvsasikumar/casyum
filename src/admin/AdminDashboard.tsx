@@ -23,9 +23,10 @@ import { GalleryManagement } from './components/modules/GalleryManagement';
 import { CertificateManagement } from './components/modules/CertificateManagement';
 import { CoordinatorManagement } from './components/modules/CoordinatorManagement';
 import { RegistrationTeamManagement } from './components/modules/RegistrationTeamManagement';
-import { CasyumFacultyManagerManagement } from './components/modules/CasyumFacultyManagerManagement';
+import { CasyumFacultyCoordinatorManagement } from './components/modules/CasyumFacultyCoordinatorManagement';
 import { ParticipantsModule } from './components/modules/ParticipantsModule';
 import { SettingsModule } from './components/modules/SettingsModule';
+import { PaymentSettingsModule } from './components/modules/PaymentSettingsModule';
 import { AuditLogs } from './components/modules/AuditLogs';
 import { EmployeeManagement } from './components/modules/EmployeeManagement';
 import { EmailLogs } from './components/modules/EmailLogs';
@@ -47,6 +48,8 @@ const ModuleRouter: React.FC = () => {
       return <EventCardsModule />;
     case 'Payments':
       return <PaymentVerification />;
+    case 'Payment Settings':
+      return <PaymentSettingsModule />;
     case 'Attendance':
       return <AttendanceModule />;
     case 'Analytics':
@@ -65,8 +68,8 @@ const ModuleRouter: React.FC = () => {
       return <CoordinatorManagement />;
     case 'Registration Team':
       return <RegistrationTeamManagement />;
-    case 'CASYUM Faculty Managers':
-      return <CasyumFacultyManagerManagement />;
+    case 'CASYUM Faculty Coordinators':
+      return <CasyumFacultyCoordinatorManagement />;
     case 'Participants':
       return <ParticipantsModule />;
     case 'Settings':

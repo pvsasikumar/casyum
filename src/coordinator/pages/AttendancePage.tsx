@@ -457,7 +457,7 @@ export const AttendancePage: React.FC<AttendancePageProps> = ({ eventId, eventNa
                 Attendance locked for {unverifiedCount} participant{unverifiedCount === 1 ? '' : 's'}
               </p>
               <p className="text-[11px] text-amber-200/60 mt-0.5">
-                Attendance unlocks only after the participant's payment is verified by the Faculty Manager AND their registration is verified at the desk. Unlocks automatically once both are complete.
+                Attendance unlocks only after the participant's payment is verified by the Faculty Coordinator AND their registration is verified at the desk. Unlocks automatically once both are complete.
               </p>
             </div>
             <ShieldCheck className="w-4 h-4 text-amber-400/50 shrink-0 hidden sm:block" />

@@ -1,4 +1,4 @@
-export type UserRole = 'Super Admin' | 'Admin' | 'Event Coordinator' | 'Registration Manager' | 'Registration Team' | 'Certificate Manager' | 'Finance Manager' | 'Participant' | 'Faculty Coordinator' | 'Student Coordinator' | 'casyum_faculty_manager';
+export type UserRole = 'Super Admin' | 'Admin' | 'Event Coordinator' | 'Registration Manager' | 'Registration Team' | 'Certificate Manager' | 'Finance Manager' | 'Participant' | 'Faculty Coordinator' | 'Student Coordinator' | 'casyum_faculty_coordinator';
 
 export type PaymentStatus = 'Approved' | 'Pending' | 'Rejected';
 export type AttendanceStatus = 'Present' | 'Absent' | 'Late';
@@ -33,6 +33,7 @@ export interface EventItem {
   id: string;
   name: string;
   category: 'Technical' | 'Non-Technical' | 'Workshop' | 'Gaming';
+  event_type?: 'regular' | 'gaming';
   tagline: string;
   description: string;
   iconName: string;
@@ -176,6 +177,7 @@ export type ActiveTabModule =
   | 'Event Overview'
   | 'Event Cards'
   | 'Payments'
+  | 'Payment Settings'
   | 'Attendance'
   | 'Analytics'
   | 'Export Center'
@@ -185,7 +187,7 @@ export type ActiveTabModule =
   | 'Certificates'
   | 'Coordinators'
   | 'Registration Team'
-  | 'CASYUM Faculty Managers'
+  | 'CASYUM Faculty Coordinators'
   | 'Participants'
   | 'Settings'
   | 'Audit Logs'

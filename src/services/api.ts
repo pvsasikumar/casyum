@@ -64,6 +64,10 @@ const participantApi = {
   myEvents: () => participantService.myEvents(),
   registerEvent: (eventId: string | number, payment?: import('./participantService').RegisterPaymentInput) =>
     participantService.registerEvent(eventId, payment),
+  registerEventBundle: (
+    data: import('./participantService').RegisterEventBundleInput,
+    payment: import('./participantService').RegisterPaymentInput
+  ) => participantService.registerEventBundle(data, payment),
   register: (data: any) => participantService.register(data),
   list: (params?: { search?: string; status?: string }) => participantService.list(params),
   get: (id: string | number) => participantService.get(id),

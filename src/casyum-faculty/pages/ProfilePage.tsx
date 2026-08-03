@@ -35,9 +35,9 @@ export const ProfilePage: React.FC = () => {
             <ShieldCheck className="w-8 h-8 text-violet-300" />
           </div>
           <div className="flex flex-col">
-            <span className="text-lg font-extrabold font-display text-white">{user.name || 'CASYUM Faculty Manager'}</span>
+            <span className="text-lg font-extrabold font-display text-white">{user.name || 'CASYUM Faculty Coordinator'}</span>
             <span className="text-[11px] font-bold text-violet-300 uppercase tracking-widest flex items-center gap-1.5">
-              <KeyRound className="w-3 h-3" /> CASYUM Faculty Manager
+              <KeyRound className="w-3 h-3" /> CASYUM Faculty Coordinator
             </span>
           </div>
         </div>
@@ -63,7 +63,7 @@ export const ProfilePage: React.FC = () => {
           </div>
           <div className="flex-1 min-w-[200px] p-4 rounded-2xl bg-violet-500/10 border border-violet-500/25 flex flex-col gap-1">
             <span className="text-[10px] font-semibold text-violet-300/70 uppercase tracking-wider">Your Role</span>
-            <span className="text-xl font-extrabold text-white font-display">Faculty Manager</span>
+            <span className="text-xl font-extrabold text-white font-display">Faculty Coordinator</span>
           </div>
         </div>
       </div>

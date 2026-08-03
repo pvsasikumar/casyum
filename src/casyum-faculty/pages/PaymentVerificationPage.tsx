@@ -3,9 +3,6 @@ import {
   CheckCircle2,
   XCircle,
   ShieldCheck,
-  Eye,
-  Download,
-  FileText,
   Loader2,
   X,
   Search,
@@ -18,12 +15,7 @@ import {
   writePaymentReviewLog,
   type PaymentReviewLogEntry,
 } from '../../services/casyumFacultyService';
-import {
-  isPaymentProofPdf,
-  isPaymentProofImage,
-  formatFileSize,
-  paymentMethodLabel,
-} from '../../services/paymentProofService';
+import { paymentMethodLabel } from '../../services/paymentProofService';
 import { useRBAC } from '../../rbac/context/RBACContext';
 import { useCasyumFaculty } from '../context/CasyumFacultyContext';
 
@@ -46,7 +38,6 @@ export const PaymentVerificationPage: React.FC = () => {
   const { registrations, registrationsLoading, addToast } = useCasyumFaculty();
   const [filter, setFilter] = useState<PaymentFilter>('submitted');
   const [query, setQuery] = useState('');
-  const [proofTarget, setProofTarget] = useState<PaymentRegistrationRow | null>(null);
   const [verifyTarget, setVerifyTarget] = useState<PaymentRegistrationRow | null>(null);
   const [rejectTarget, setRejectTarget] = useState<PaymentRegistrationRow | null>(null);
   const [rejectReason, setRejectReason] = useState('');
@@ -56,7 +47,7 @@ export const PaymentVerificationPage: React.FC = () => {
   const [showLogs, setShowLogs] = useState(false);
 
   const verifier = useMemo(
-    () => ({ userId: rbac.user?.id || '', name: rbac.user?.name || 'CASYUM Faculty Manager' }),
+    () => ({ userId: rbac.user?.id || '', name: rbac.user?.name || 'CASYUM Faculty Coordinator' }),
     [rbac.user]
   );
 
@@ -159,34 +150,19 @@ export const PaymentVerificationPage: React.FC = () => {
     }
   };
 
-  const downloadProof = (r: PaymentRegistrationRow) => {
-    if (!r.paymentProofUrl) return;
-    const a = document.createElement('a');
-    a.href = r.paymentProofUrl;
-    a.download = r.paymentProofFileName || 'payment-proof';
-    a.target = '_blank';
-    a.rel = 'noopener noreferrer';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-  };
-
-  const isPdf = (r: PaymentRegistrationRow) =>
-    isPaymentProofPdf(r.paymentProofFileType) || /\.pdf$/i.test(r.paymentProofFileName);
-
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex flex-col gap-6 select-none pb-16">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex flex-col">
           <span className="text-xs font-bold text-violet-400 uppercase tracking-widest">
-            CASYUM Faculty Manager · Payment Review
+            CASYUM Faculty Coordinator · Payment Review
           </span>
           <h2 className="text-xl sm:text-2xl font-extrabold font-display text-white">
             Payment Verification Queue ({filtered.length})
           </h2>
           <p className="text-[11px] text-white/50">
-            Only CASYUM Faculty Managers can verify or reject payments.
+            Only CASYUM Faculty Coordinators can verify or reject payments.
           </p>
         </div>
 
@@ -244,7 +220,7 @@ export const PaymentVerificationPage: React.FC = () => {
                 <th className="p-4">Fee</th>
                 <th className="p-4">Payment Method</th>
                 <th className="p-4">Transaction ID</th>
-                <th className="p-4">Payment Proof</th>
+                <th className="p-4">Payment Date</th>
                 <th className="p-4">Payment Status</th>
                 <th className="p-4">Submitted Date</th>
                 <th className="p-4 text-right">Actions</th>
@@ -266,7 +242,6 @@ export const PaymentVerificationPage: React.FC = () => {
               ) : (
                 filtered.map((r) => {
                   const meta = STATUS_META[r.paymentStatus] || STATUS_META.submitted;
-                  const pdf = isPdf(r);
                   const busy = busyId === r.registration_id;
                   return (
                     <tr key={r.registration_id} className="hover:bg-white/[0.02] transition-colors align-top">
@@ -279,54 +254,43 @@ export const PaymentVerificationPage: React.FC = () => {
                         </div>
                       </td>
                       <td className="p-4">
-                        <span className="text-[11px] text-white/70">{r.event_name || r.event_id}</span>
+                        <div className="flex flex-col gap-1 min-w-0">
+                          <span className="text-[11px] text-white/70">{r.event_name || r.event_id}</span>
+                          {r.selectedEvents && (
+                            <div className="flex flex-wrap gap-1 max-w-[220px]">
+                              {Array.isArray(r.selectedEvents.regular) &&
+                                r.selectedEvents.regular.map((ev: any) => (
+                                  <span key={String(ev?.eventId)} className="px-1.5 py-0.5 rounded bg-violet-500/10 border border-violet-500/25 text-violet-300 text-[8px] font-bold">
+                                    {ev?.eventName}
+                                  </span>
+                                ))}
+                              {r.selectedEvents.gaming && (
+                                <span className="px-1.5 py-0.5 rounded bg-rose-500/10 border border-rose-500/25 text-rose-300 text-[8px] font-bold">
+                                  {r.selectedEvents.gaming.eventName}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </div>
                       </td>
-                      <td className="p-4 font-mono font-extrabold text-emerald-400">₹{r.registrationFee}</td>
+                      <td className="p-4">
+                        <span className="font-mono font-extrabold text-emerald-400">₹{r.registrationFee}</span>
+                        {(Number(r.regularFee) > 0 || Number(r.gamingFee) > 0) && (
+                          <div className="mt-0.5 text-[8px] text-white/40 whitespace-nowrap">
+                            {Number(r.regularFee) > 0 && `₹${r.regularFee} regular`}
+                            {Number(r.regularFee) > 0 && Number(r.gamingFee) > 0 && ' + '}
+                            {Number(r.gamingFee) > 0 && `₹${r.gamingFee} gaming`}
+                          </div>
+                        )}
+                      </td>
                       <td className="p-4 text-[11px] text-white/70">{paymentMethodLabel(r.paymentMethod)}</td>
                       <td className="p-4">
                         <span className="font-mono text-[11px] text-violet-300 bg-violet-500/10 px-2 py-0.5 rounded border border-violet-500/20 break-all">
                           {r.transactionId || '—'}
                         </span>
                       </td>
-                      <td className="p-4">
-                        {r.paymentProofUrl ? (
-                          <div className="flex flex-col gap-1.5">
-                            <div className="flex items-center gap-2">
-                              {pdf ? (
-                                <div className="w-9 h-9 rounded-lg bg-rose-500/10 border border-rose-500/25 flex items-center justify-center shrink-0">
-                                  <FileText className="w-4 h-4 text-rose-400" />
-                                </div>
-                              ) : (
-                                <img
-                                  src={r.paymentProofUrl}
-                                  alt="Payment proof"
-                                  className="w-9 h-9 rounded-lg object-cover border border-white/10 shrink-0"
-                                />
-                              )}
-                              <span className="text-[10px] text-white/50 truncate max-w-[90px]">
-                                {r.paymentProofFileName || 'proof'}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-1.5">
-                              <button
-                                onClick={() => setProofTarget(r)}
-                                className="flex items-center gap-1 px-2 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-white/60 hover:text-white text-[10px] font-bold cursor-pointer"
-                              >
-                                <Eye className="w-3 h-3" />
-                                {pdf ? 'Open PDF' : 'View Proof'}
-                              </button>
-                              <button
-                                onClick={() => downloadProof(r)}
-                                className="flex items-center gap-1 px-2 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-white/60 hover:text-white text-[10px] font-bold cursor-pointer"
-                              >
-                                <Download className="w-3 h-3" />
-                                Download
-                              </button>
-                            </div>
-                          </div>
-                        ) : (
-                          <span className="text-[10px] text-white/30">No proof</span>
-                        )}
+                      <td className="p-4 text-white/60 text-[11px]">
+                        {r.paymentDate ? new Date(r.paymentDate).toLocaleDateString() : '—'}
                       </td>
                       <td className="p-4">
                         <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold border whitespace-nowrap ${meta.cls}`}>
@@ -355,13 +319,6 @@ export const PaymentVerificationPage: React.FC = () => {
                       </td>
                       <td className="p-4 text-right">
                         <div className="flex items-center justify-end gap-1.5">
-                          <button
-                            title="View proof"
-                            onClick={() => setProofTarget(r)}
-                            className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-white/60 hover:text-white cursor-pointer"
-                          >
-                            <Eye className="w-3.5 h-3.5" />
-                          </button>
                           {r.paymentStatus !== 'verified' && (
                             <button
                               title="Verify payment"
@@ -438,62 +395,6 @@ export const PaymentVerificationPage: React.FC = () => {
         </div>
       )}
 
-      {/* Proof Viewer Modal */}
-      {proofTarget && (
-        <div
-          className="fixed inset-0 z-50 bg-black/90 backdrop-blur-xl flex items-center justify-center p-6"
-          onClick={() => setProofTarget(null)}
-        >
-          <div className="relative max-w-3xl w-full max-h-[85vh] rounded-3xl overflow-hidden border border-white/20 bg-zinc-950 flex flex-col">
-            <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-white/10">
-              <div className="flex flex-col min-w-0">
-                <span className="text-xs font-bold text-white truncate">
-                  {proofTarget.paymentProofFileName || 'Payment Proof'}
-                </span>
-                <span className="text-[10px] text-white/40">
-                  {proofTarget.user_full_name} · {proofTarget.registration_id} · {formatFileSize(proofTarget.paymentProofFileSize)}
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => downloadProof(proofTarget)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-[10px] font-bold cursor-pointer"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  Download
-                </button>
-                <button
-                  onClick={() => setProofTarget(null)}
-                  className="p-2 rounded-full bg-black/80 text-white border border-white/20 cursor-pointer"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-            </div>
-            <div className="flex-1 overflow-auto bg-black min-h-[300px]">
-              {isPdf(proofTarget) ? (
-                <iframe
-                  src={proofTarget.paymentProofUrl}
-                  title="Payment Proof PDF"
-                  className="w-full h-[60vh] border-0"
-                />
-              ) : isPaymentProofImage(proofTarget.paymentProofFileType) ? (
-                <img
-                  src={proofTarget.paymentProofUrl}
-                  alt="Payment proof"
-                  className="w-full h-auto object-contain"
-                />
-              ) : (
-                <div className="flex flex-col items-center justify-center gap-3 h-full text-white/50">
-                  <FileText className="w-8 h-8 text-rose-400" />
-                  <span className="text-xs">Preview not available. Download the proof to view it.</span>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Verify Confirmation Modal */}
       {verifyTarget && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
@@ -526,9 +427,28 @@ export const PaymentVerificationPage: React.FC = () => {
                 <span className="text-white/50">Amount</span>
                 <span className="font-mono font-extrabold text-emerald-400">₹{verifyTarget.registrationFee}</span>
               </div>
+              {(Number(verifyTarget.regularFee) > 0 || Number(verifyTarget.gamingFee) > 0) && (
+                <div className="flex flex-col gap-0.5 text-[10px] text-white/50 border-t border-white/10 pt-2 mt-1">
+                  {Number(verifyTarget.regularFee) > 0 && (
+                    <span>
+                      Regular events fee: <span className="text-white/80">₹{verifyTarget.regularFee}</span>
+                    </span>
+                  )}
+                  {Number(verifyTarget.gamingFee) > 0 && (
+                    <span>
+                      Gaming event fee: <span className="text-white/80">₹{verifyTarget.gamingFee}</span>
+                    </span>
+                  )}
+                  {verifyTarget.selectedEvents?.gaming && (
+                    <span>
+                      Gaming event: <span className="text-rose-300">{verifyTarget.selectedEvents.gaming.eventName}</span>
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
             <p className="text-xs text-white/60">
-              Confirm that the payment proof matches the transaction details above. This will mark the payment as verified and allow Registration Desk verification to proceed.
+              Confirm that the payment details above are correct. This will mark the payment as verified and allow Registration Desk verification to proceed.
             </p>
             <div className="flex items-center justify-end gap-3">
               <button onClick={() => setVerifyTarget(null)} className="px-4 py-2 rounded-xl text-white/60 hover:text-white bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-bold cursor-pointer">

@@ -17,14 +17,14 @@ import {
 import { sendPasswordResetEmail } from 'firebase/auth';
 import { getFirebaseAuth } from '../firebase/auth';
 import { nextSequence, now, slugify, generateTempPassword } from './helpers';
-import { CASYUM_FACULTY_MANAGER_ROLE } from '../rbac/constants';
+import { CASYUM_FACULTY_COORDINATOR_ROLE } from '../rbac/constants';
 import type { UserRole } from '../rbac/types';
 
-export const CASYUM_FACULTY_ROLES: UserRole[] = [CASYUM_FACULTY_MANAGER_ROLE];
+export const CASYUM_FACULTY_ROLES: UserRole[] = [CASYUM_FACULTY_COORDINATOR_ROLE];
 
 export type PasswordStatus = 'temporary' | 'updated';
 
-export interface CasyumFacultyManager {
+export interface CasyumFacultyCoordinator {
   id: string;
   user_id: string;
   full_name: string;
@@ -60,10 +60,10 @@ export interface CasyumFacultyActivity {
 }
 
 function isCasyumFacultyRecord(record: UserRecord): boolean {
-  return record.role === CASYUM_FACULTY_MANAGER_ROLE;
+  return record.role === CASYUM_FACULTY_COORDINATOR_ROLE;
 }
 
-function mapMemberRecord(record: UserRecord): CasyumFacultyManager {
+function mapMemberRecord(record: UserRecord): CasyumFacultyCoordinator {
   const anyRecord = record as any;
   const changed =
     anyRecord.mustChangePassword === true ||
@@ -112,10 +112,10 @@ async function logActivity(entry: {
   });
 }
 
-export async function listCasyumFacultyManagers(params?: {
+export async function listCasyumFacultyCoordinators(params?: {
   status?: string;
   search?: string;
-}): Promise<{ members: CasyumFacultyManager[] }> {
+}): Promise<{ members: CasyumFacultyCoordinator[] }> {
   const db = getDb();
   const snap = await getDocs(collection(db, 'users'));
   let members = snap.docs
@@ -139,7 +139,7 @@ export async function listCasyumFacultyManagers(params?: {
   return { members };
 }
 
-export async function createCasyumFacultyManager(data: {
+export async function createCasyumFacultyCoordinator(data: {
   full_name: string;
   email: string;
   phone: string;
@@ -151,7 +151,7 @@ export async function createCasyumFacultyManager(data: {
   created_by_name?: string;
 }): Promise<{
   message: string;
-  member: CasyumFacultyManager;
+  member: CasyumFacultyCoordinator;
   credentials: { email: string; password: string; username: string };
 }> {
   if (!data.full_name || !data.email) {
@@ -178,9 +178,9 @@ export async function createCasyumFacultyManager(data: {
     email: data.email,
     phone: data.phone || '',
     department: data.department || '',
-    designation: 'CASYUM Faculty Manager',
+    designation: 'CASYUM Faculty Coordinator',
     username,
-    role: CASYUM_FACULTY_MANAGER_ROLE,
+    role: CASYUM_FACULTY_COORDINATOR_ROLE,
     status: data.status || 'Active',
     is_first_login: true,
     mustChangePassword: true,
@@ -203,20 +203,20 @@ export async function createCasyumFacultyManager(data: {
   await logActivity({
     member_id: uid,
     member_name: data.full_name,
-    action: 'Manager Created',
-    details: `CASYUM Faculty Manager account created with email ${data.email}`,
+    action: 'Coordinator Created',
+    details: `CASYUM Faculty Coordinator account created with email ${data.email}`,
     performed_by: data.created_by || '',
     performed_by_name: data.created_by_name || data.created_by || '',
   });
 
   return {
-    message: 'CASYUM Faculty Manager created successfully',
+    message: 'CASYUM Faculty Coordinator created successfully',
     member,
     credentials: { email: data.email, password, username },
   };
 }
 
-export async function updateCasyumFacultyManager(
+export async function updateCasyumFacultyCoordinator(
   id: string,
   data: Partial<{
     full_name: string;
@@ -228,15 +228,15 @@ export async function updateCasyumFacultyManager(
     updated_by?: string;
     updated_by_name?: string;
   }>
-): Promise<{ member: CasyumFacultyManager }> {
+): Promise<{ member: CasyumFacultyCoordinator }> {
   const db = getDb();
   const uid = String(id);
   const existing = await readUserRecord(uid);
   if (!existing) {
-    throw new Error('CASYUM Faculty Manager not found.');
+    throw new Error('CASYUM Faculty Coordinator not found.');
   }
   if (!isCasyumFacultyRecord(existing)) {
-    throw new Error('This account is not a CASYUM Faculty Manager.');
+    throw new Error('This account is not a CASYUM Faculty Coordinator.');
   }
 
   const patch: Record<string, any> = { ...data, updated_at: now() };
@@ -255,7 +255,7 @@ export async function updateCasyumFacultyManager(
   await logActivity({
     member_id: uid,
     member_name: member.full_name,
-    action: 'Manager Updated',
+    action: 'Coordinator Updated',
     details: 'Profile details updated by admin',
     performed_by: updatedBy || '',
     performed_by_name: updatedByName || updatedBy || '',
@@ -268,12 +268,12 @@ export async function setCasyumFacultyStatus(
   id: string,
   status: 'Active' | 'Inactive',
   performer?: { id: string; name: string }
-): Promise<{ member: CasyumFacultyManager }> {
+): Promise<{ member: CasyumFacultyCoordinator }> {
   const db = getDb();
   const uid = String(id);
   const existing = await readUserRecord(uid);
   if (!existing) {
-    throw new Error('CASYUM Faculty Manager not found.');
+    throw new Error('CASYUM Faculty Coordinator not found.');
   }
   await updateDoc(doc(db, 'users', uid), { status, updated_at: now() });
   const updated = await readUserRecord(uid);
@@ -282,8 +282,8 @@ export async function setCasyumFacultyStatus(
   await logActivity({
     member_id: uid,
     member_name: member.full_name,
-    action: status === 'Active' ? 'Manager Enabled' : 'Manager Disabled',
-    details: `CASYUM Faculty Manager account ${status === 'Active' ? 'enabled' : 'disabled'} by admin`,
+    action: status === 'Active' ? 'Coordinator Enabled' : 'Coordinator Disabled',
+    details: `CASYUM Faculty Coordinator account ${status === 'Active' ? 'enabled' : 'disabled'} by admin`,
     performed_by: performer?.id || '',
     performed_by_name: performer?.name || performer?.id || '',
   });
@@ -291,7 +291,7 @@ export async function setCasyumFacultyStatus(
   return { member };
 }
 
-export async function deleteCasyumFacultyManager(
+export async function deleteCasyumFacultyCoordinator(
   id: string,
   performer?: { id: string; name: string }
 ): Promise<{ message: string }> {
@@ -302,14 +302,14 @@ export async function deleteCasyumFacultyManager(
     await logActivity({
       member_id: uid,
       member_name: existing.full_name,
-      action: 'Manager Deleted',
-      details: 'CASYUM Faculty Manager account permanently deleted',
+      action: 'Coordinator Deleted',
+      details: 'CASYUM Faculty Coordinator account permanently deleted',
       performed_by: performer?.id || '',
       performed_by_name: performer?.name || performer?.id || '',
     });
   }
   await deleteDoc(doc(db, 'users', uid));
-  return { message: 'CASYUM Faculty Manager deleted' };
+  return { message: 'CASYUM Faculty Coordinator deleted' };
 }
 
 export async function resetCasyumFacultyPassword(
@@ -321,7 +321,7 @@ export async function resetCasyumFacultyPassword(
   const uid = String(id);
   const existing = await readUserRecord(uid);
   if (!existing) {
-    throw new Error('CASYUM Faculty Manager not found.');
+    throw new Error('CASYUM Faculty Coordinator not found.');
   }
   if (newTemporaryPassword && newTemporaryPassword.length < 8) {
     throw new Error('Temporary password must be at least 8 characters long.');
@@ -377,7 +377,7 @@ export async function listCasyumFacultyActivity(limitCount = 500): Promise<Casyu
     .slice(0, limitCount);
 }
 
-export async function getCasyumFacultyManager(id: string): Promise<{ member: CasyumFacultyManager } | null> {
+export async function getCasyumFacultyCoordinator(id: string): Promise<{ member: CasyumFacultyCoordinator } | null> {
   const record = await readUserRecord(String(id));
   if (!record || !isCasyumFacultyRecord(record)) return null;
   return { member: mapMemberRecord(record) };

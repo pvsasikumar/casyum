@@ -17,7 +17,7 @@ export const AllEventsPage: React.FC = () => {
     return events
       .filter((e) => !q || e.name.toLowerCase().includes(q))
       .map((e) => {
-        const regs = registrations.filter((r) => r.event_id === e.id);
+        const regs = registrations.filter((r) => r.event_id === e.id || r.event_ids?.includes(String(e.id)));
         const verified = regs.filter((r) => r.paymentStatus === 'verified').length;
         const pending = regs.filter((r) => r.paymentStatus === 'submitted').length;
         const rejected = regs.filter((r) => r.paymentStatus === 'rejected').length;

@@ -220,6 +220,7 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       id: String(row?.id),
       name,
       category: row?.category || 'Technical',
+      event_type: row?.event_type || undefined,
       tagline: row?.tagline || '',
       description: row?.description || '',
       iconName: row?.iconName || 'Calendar',
@@ -521,6 +522,7 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       await api.event.create({
         name: data.name,
         category: data.category,
+        event_type: data.event_type,
         description: data.description,
         venue: data.venue,
         event_date: data.date,
@@ -544,6 +546,7 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       await api.event.update(updated.id, {
         name: updated.name,
         category: updated.category,
+        event_type: updated.event_type,
         description: updated.description,
         venue: updated.venue,
         event_date: updated.date,

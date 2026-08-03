@@ -322,7 +322,7 @@ export const VerifyParticipantPage: React.FC = () => {
             <Clock className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
             <p className="text-[11px] text-amber-200/90 leading-relaxed">
               Only participants whose payments were <span className="font-bold text-emerald-300">verified</span> by the
-              Faculty Manager are shown at the Registration Desk. {counts.blocked} participant
+              Faculty Coordinator are shown at the Registration Desk. {counts.blocked} participant
               {counts.blocked === 1 ? '' : 's'} with unverified/rejected payments will be hidden until their payment
               is verified.
             </p>

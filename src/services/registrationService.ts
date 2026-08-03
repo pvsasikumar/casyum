@@ -19,15 +19,19 @@ import { nextSequence, now } from './helpers';
 import type { RegistrationRow } from './eventService';
 import { mapRegDoc } from './eventService';
 import { normalizeTransactionId, validateTransactionId } from './paymentProofService';
+import {
+  isGamingEvent,
+  calculateRegistrationFee,
+  MAX_REGULAR_EVENTS,
+  type SelectedEventsData,
+  type SelectedEventRef,
+  type SelectedGamingRef,
+} from './eventSelection';
 
 export interface PaymentInfoInput {
   payment_method: string;
   transaction_id: string;
-  payment_proof_url: string;
-  payment_proof_file_name: string;
-  payment_proof_file_type: string;
-  payment_proof_file_size: number;
-  payment_proof_uploaded_at: string;
+  payment_date: string;
 }
 
 export interface CreateRegistrationInput {
@@ -47,6 +51,11 @@ export interface CreateRegistrationInput {
   payment_info?: PaymentInfoInput;
   payment_amount?: number;
   registration_id?: string;
+  /** Bundled multi-event selection (regular + optional gaming). */
+  selected_events?: SelectedEventsData;
+  event_ids?: string[];
+  regular_fee?: number;
+  gaming_fee?: number;
 }
 
 /**
@@ -59,11 +68,7 @@ export interface PaymentRegistrationRow extends RegistrationRow {
   registrationFee: number;
   paymentMethod: string;
   transactionId: string;
-  paymentProofUrl: string;
-  paymentProofFileName: string;
-  paymentProofFileType: string;
-  paymentProofFileSize: number;
-  paymentProofUploadedAt: string;
+  paymentDate: string;
   paymentStatus: string;
   paymentVerifiedBy: string;
   paymentVerifiedByName: string;
@@ -84,6 +89,12 @@ export interface PaymentRegistrationRow extends RegistrationRow {
   event_date?: string;
   event_time?: string;
   event_venue?: string;
+  /** All event ids included in this registration (bundles include every event). */
+  event_ids?: string[];
+  /** Bundled multi-event selection stored as the canonical shape. */
+  selectedEvents?: SelectedEventsData;
+  regularFee: number;
+  gamingFee: number;
 }
 
 function mapPaymentRegDoc(docId: string, data: Record<string, any>): PaymentRegistrationRow {
@@ -92,13 +103,15 @@ function mapPaymentRegDoc(docId: string, data: Record<string, any>): PaymentRegi
     ...legacy,
     paymentRequired: data.paymentRequired === true || data.payment_required === true,
     registrationFee: Number(data.registrationFee ?? data.payment_amount) || 0,
+    regularFee: Number(data.regularFee ?? data.regular_fee) || 0,
+    gamingFee: Number(data.gamingFee ?? data.gaming_fee) || 0,
+    event_ids: Array.isArray(data.event_ids)
+      ? data.event_ids.map(String)
+      : [String(data.event_id || '')].filter(Boolean),
+    selectedEvents: data.selectedEvents || data.selected_events || null,
     paymentMethod: data.paymentMethod || data.payment_method || '',
     transactionId: data.transactionId || data.transaction_id || '',
-    paymentProofUrl: data.paymentProofUrl || data.payment_screenshot_url || '',
-    paymentProofFileName: data.paymentProofFileName || data.payment_proof_file_name || '',
-    paymentProofFileType: data.paymentProofFileType || data.payment_proof_file_type || '',
-    paymentProofFileSize: Number(data.paymentProofFileSize ?? data.payment_proof_file_size) || 0,
-    paymentProofUploadedAt: data.paymentProofUploadedAt || data.payment_uploaded_time || '',
+    paymentDate: data.paymentDate || data.payment_date || '',
     paymentStatus: data.paymentStatus || data.payment_status || 'submitted',
     paymentVerifiedBy: data.paymentVerifiedBy || data.payment_verified_by || '',
     paymentVerifiedByName: data.paymentVerifiedByName || data.payment_verified_by_name || data.paymentVerifiedBy || '',
@@ -132,11 +145,17 @@ function buildRegistrationPayload(
 ): { canonical: Record<string, any>; legacy: Record<string, any> } {
   const payment = input.payment_info;
   const timestamp = now();
+  const selectedEvents = input.selected_events || null;
+  const eventIds = (input.event_ids || [String(input.event_id)])
+    .map(String)
+    .filter((id) => id !== '');
   const canonical: Record<string, any> = {
     registrationId: regId,
     registration_id: regId,
     event_id: input.event_id,
     event_name: eventName || '',
+    event_ids: eventIds,
+    selectedEvents,
     participant_id: input.participant_id,
     participant_user_id: input.participant_id,
     participant_email: input.participant_email || '',
@@ -155,15 +174,13 @@ function buildRegistrationPayload(
     updatedAt: serverTimestamp(),
 
     registrationFee: Number(input.payment_amount) || 0,
+    regularFee: Number(input.regular_fee) || 0,
+    gamingFee: Number(input.gaming_fee) || 0,
     paymentRequired: true,
     paymentMethod: payment?.payment_method || '',
     transactionId: payment?.transaction_id || '',
     transactionIdNormalized: normalizeTransactionId(payment?.transaction_id || ''),
-    paymentProofUrl: payment?.payment_proof_url || '',
-    paymentProofFileName: payment?.payment_proof_file_name || '',
-    paymentProofFileType: payment?.payment_proof_file_type || '',
-    paymentProofFileSize: Number(payment?.payment_proof_file_size) || 0,
-    paymentProofUploadedAt: payment?.payment_proof_uploaded_at || '',
+    paymentDate: payment?.payment_date || '',
 
     paymentStatus: 'submitted',
     paymentVerifiedBy: '',
@@ -187,6 +204,8 @@ function buildRegistrationPayload(
   const legacy: Record<string, any> = {
     registration_id: regId,
     event_id: input.event_id,
+    event_ids: eventIds,
+    selectedEvents,
     participant_id: input.participant_id,
     participant_user_id: input.participant_id,
     participant_email: input.participant_email || '',
@@ -204,18 +223,16 @@ function buildRegistrationPayload(
     created_at: timestamp,
     payment_status: 'submitted',
     payment_amount: Number(input.payment_amount) || 0,
+    regular_fee: Number(input.regular_fee) || 0,
+    gaming_fee: Number(input.gaming_fee) || 0,
     transaction_id: payment?.transaction_id || '',
     transactionIdNormalized: normalizeTransactionId(payment?.transaction_id || ''),
-    payment_screenshot_url: payment?.payment_proof_url || '',
-    payment_uploaded_time: payment?.payment_proof_uploaded_at || '',
+    payment_date: payment?.payment_date || '',
     payment_remarks: '',
     // Mirror the canonical payment/verification fields so legacy readers
     // (coordinator attendance, registration team) work without changes.
     paymentRequired: true,
     payment_method: payment?.payment_method || '',
-    payment_proof_file_name: payment?.payment_proof_file_name || '',
-    payment_proof_file_type: payment?.payment_proof_file_type || '',
-    payment_proof_file_size: Number(payment?.payment_proof_file_size) || 0,
     registrationVerificationStatus: 'locked',
     attendanceEligibility: false,
     attendanceStatus: 'not_marked',
@@ -226,12 +243,18 @@ function buildRegistrationPayload(
 
 export async function listRegistrationsByEvent(eventId: string): Promise<RegistrationRow[]> {
   const db = getDb();
-  const snap = await getDocs(
-    query(collection(db, 'registrations'), where('event_id', '==', eventId))
-  );
-  return snap.docs
-    .map((d) => mapRegDoc(d.id, d.data()))
-    .sort((a, b) => b.registered_at.localeCompare(a.registered_at));
+  const [exactSnap, bundledSnap] = await Promise.all([
+    getDocs(query(collection(db, 'registrations'), where('event_id', '==', eventId))),
+    getDocs(query(collection(db, 'registrations'), where('event_ids', 'array-contains', eventId))),
+  ]);
+  const seen = new Set<string>();
+  const rows: RegistrationRow[] = [];
+  for (const doc of [...exactSnap.docs, ...bundledSnap.docs]) {
+    if (seen.has(doc.id)) continue;
+    seen.add(doc.id);
+    rows.push(mapRegDoc(doc.id, doc.data()));
+  }
+  return rows.sort((a, b) => b.registered_at.localeCompare(a.registered_at));
 }
 
 export async function listRegistrationsByParticipant(participantId: string): Promise<RegistrationRow[]> {
@@ -294,9 +317,6 @@ export async function createRegistration(input: CreateRegistrationInput): Promis
         'This Transaction ID has already been submitted. Please verify the payment details.'
       );
     }
-    if (!input.payment_info.payment_proof_url) {
-      throw new Error('Please upload your payment proof before registering.');
-    }
   }
 
   const { canonical, legacy } = buildRegistrationPayload(regId, input, eventData.name || '');
@@ -314,6 +334,122 @@ export async function createRegistration(input: CreateRegistrationInput): Promis
   });
 
   return mapRegDoc(regId, canonical);
+}
+
+export interface CreateBundleRegistrationInput {
+  regular: SelectedEventRef[];
+  gaming: SelectedGamingRef | null;
+  participant_id: string;
+  participant_email?: string;
+  user_full_name?: string;
+  user_department?: string;
+  user_phone?: string;
+  college?: string;
+  city?: string;
+  department?: string;
+  year_of_study?: string;
+  gender?: string;
+  register_number?: string;
+  payment_info?: PaymentInfoInput;
+  registration_id?: string;
+}
+
+/**
+ * Server-side creation of a bundled registration (up to 3 regular events plus
+ * one gaming event). The fee is always recomputed from the selection here and
+ * never trusted from the client. Rejects invalid selections including both
+ * gaming events being submitted together.
+ */
+export async function createBundleRegistration(
+  input: CreateBundleRegistrationInput
+): Promise<RegistrationRow> {
+  const regular = (input.regular || []).slice(0, MAX_REGULAR_EVENTS);
+  const gaming = input.gaming || null;
+
+  if (regular.length === 0 && !gaming) {
+    throw new Error('Please select at least one event to register.');
+  }
+  if (regular.length > MAX_REGULAR_EVENTS) {
+    throw new Error(`You can select a maximum of ${MAX_REGULAR_EVENTS} regular events.`);
+  }
+  if (gaming && !isGamingEvent(gaming)) {
+    throw new Error('Only one gaming event can be selected. Please choose either Free Fire or BGMI.');
+  }
+
+  const fee = calculateRegistrationFee([...regular, ...(gaming ? [gaming] : [])]);
+
+  const db = getDb();
+  const regId = input.registration_id || `reg-${String(await nextSequence('registrations'))}`;
+
+  if (input.payment_info) {
+    const txnError = validateTransactionId(input.payment_info.transaction_id);
+    if (txnError) throw new Error(txnError);
+    const duplicate = await checkDuplicateTransaction(input.payment_info.transaction_id, regId);
+    if (duplicate) {
+      throw new Error(
+        'This Transaction ID has already been submitted. Please verify the payment details.'
+      );
+    }
+  }
+
+  const selectedEvents: SelectedEventsData = {
+    regular: regular.map((r) => ({ eventId: String(r.eventId), eventName: String(r.eventName) })),
+    gaming: gaming ? { eventId: String(gaming.eventId), eventName: String(gaming.eventName) } : null,
+  };
+  const eventIds = [
+    ...selectedEvents.regular.map((r) => r.eventId),
+    ...(selectedEvents.gaming ? [selectedEvents.gaming.eventId] : []),
+  ];
+  const primaryEventId = eventIds[0];
+  const displayName = [
+    ...selectedEvents.regular.map((r) => r.eventName),
+    ...(selectedEvents.gaming ? [selectedEvents.gaming.eventName] : []),
+  ].join(', ');
+
+  const payload = buildRegistrationPayload(
+    regId,
+    {
+      event_id: primaryEventId,
+      participant_id: input.participant_id,
+      participant_email: input.participant_email,
+      user_full_name: input.user_full_name,
+      user_department: input.user_department,
+      user_phone: input.user_phone,
+      college: input.college,
+      city: input.city,
+      department: input.department,
+      year_of_study: input.year_of_study,
+      gender: input.gender,
+      register_number: input.register_number,
+      status: 'Confirmed',
+      payment_amount: fee.total,
+      regular_fee: fee.regularFee,
+      gaming_fee: fee.gamingFee,
+      payment_info: input.payment_info,
+      registration_id: regId,
+      selected_events: selectedEvents,
+      event_ids: eventIds,
+    },
+    displayName
+  );
+
+  await setDoc(doc(db, 'eventRegistrations', regId), payload.canonical);
+  await setDoc(doc(db, 'registrations', regId), payload.legacy);
+
+  await Promise.all(
+    eventIds.map((eventId) =>
+      updateDoc(doc(db, 'events', eventId), {
+        registered_count: increment(1),
+        updated_at: now(),
+      })
+    )
+  );
+  await updateDoc(doc(db, 'participants', input.participant_id), {
+    event_ids: arrayUnion(...eventIds),
+    updated_at: now(),
+  });
+
+  return mapRegDoc(regId, payload.canonical);
 }
 
 /** Throws an error that keeps a payment review list read-only for non-reviewers. */
@@ -479,9 +615,6 @@ export async function resubmitPayment(
       'This Transaction ID has already been submitted. Please verify the payment details.'
     );
   }
-  if (!payment.payment_proof_url) {
-    throw new Error('Please upload your payment proof before resubmitting.');
-  }
   const timestamp = now();
   const resubmissionCount = Number(reg.paymentResubmissionCount) + 1;
 
@@ -489,11 +622,7 @@ export async function resubmitPayment(
     paymentMethod: payment.payment_method,
     transactionId: payment.transaction_id,
     transactionIdNormalized: normalizeTransactionId(payment.transaction_id),
-    paymentProofUrl: payment.payment_proof_url,
-    paymentProofFileName: payment.payment_proof_file_name,
-    paymentProofFileType: payment.payment_proof_file_type,
-    paymentProofFileSize: Number(payment.payment_proof_file_size) || 0,
-    paymentProofUploadedAt: payment.payment_proof_uploaded_at,
+    paymentDate: payment.payment_date,
     paymentStatus: 'submitted',
     paymentResubmittedAt: timestamp,
     paymentResubmissionCount: resubmissionCount,
@@ -511,12 +640,8 @@ export async function resubmitPayment(
     payment_status: 'submitted',
     transaction_id: payment.transaction_id,
     transactionIdNormalized: normalizeTransactionId(payment.transaction_id),
-    payment_screenshot_url: payment.payment_proof_url,
-    payment_uploaded_time: payment.payment_proof_uploaded_at,
+    payment_date: payment.payment_date,
     payment_method: payment.payment_method,
-    payment_proof_file_name: payment.payment_proof_file_name,
-    payment_proof_file_type: payment.payment_proof_file_type,
-    payment_proof_file_size: Number(payment.payment_proof_file_size) || 0,
     payment_remarks: '',
     payment_resubmitted_at: timestamp,
     payment_resubmission_count: resubmissionCount,
@@ -597,20 +722,24 @@ export async function removeRegistration(registrationId: string): Promise<void> 
   const snap = await getDoc(ref);
   if (!snap.exists()) return;
   const data = snap.data();
-  const eventId = String(data.event_id || '');
   const participantId = String(data.participant_id || '');
+  const eventIds = Array.isArray(data.event_ids)
+    ? data.event_ids.map(String).filter(Boolean)
+    : [String(data.event_id || '')].filter(Boolean);
 
   await deleteDoc(doc(db, 'eventRegistrations', registrationId));
   await deleteDoc(ref);
-  if (eventId) {
-    await updateDoc(doc(db, 'events', eventId), {
-      registered_count: increment(-1),
-      updated_at: now(),
-    });
-  }
+  await Promise.all(
+    eventIds.map((eventId) =>
+      updateDoc(doc(db, 'events', eventId), {
+        registered_count: increment(-1),
+        updated_at: now(),
+      })
+    )
+  );
   if (participantId) {
     await updateDoc(doc(db, 'participants', participantId), {
-      event_ids: arrayRemove(eventId),
+      event_ids: arrayRemove(...eventIds),
     });
   }
 }
@@ -619,6 +748,3 @@ export async function removeRegistrationsByParticipant(participantId: string): P
   const regs = await listRegistrationsByParticipant(participantId);
   await Promise.all(regs.map((r) => removeRegistration(r.registration_id)));
 }
-
-/** Upload a payment proof and return the metadata needed for registration. */
-export { uploadPaymentProof, type PaymentProofUploadResult } from './paymentProofService';

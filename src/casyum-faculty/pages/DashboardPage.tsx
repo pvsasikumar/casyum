@@ -87,7 +87,7 @@ export const DashboardPage: React.FC = () => {
       {/* Header */}
       <div className="flex flex-col gap-1.5">
         <span className="text-xs font-bold text-violet-400 uppercase tracking-widest">
-          {user?.name ? `Welcome back, ${user.name}` : 'Faculty Manager'}
+          {user?.name ? `Welcome back, ${user.name}` : 'Faculty Coordinator'}
         </span>
         <h1 className="text-2xl sm:text-3xl font-extrabold font-display text-white tracking-tight">
           CASYUM Faculty <span className="text-violet-400">Management</span>

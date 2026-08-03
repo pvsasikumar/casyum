@@ -15,7 +15,7 @@ export interface ProfileFormData {
 export interface PaymentFormData {
   payment_method: string;
   transaction_id: string;
-  file: File;
+  payment_date: string;
 }
 
 export function useEventRegistration(eventId: string, slug: string) {
@@ -30,7 +30,6 @@ export function useEventRegistration(eventId: string, slug: string) {
   const [profileError, setProfileError] = useState('');
   const [registerMessage, setRegisterMessage] = useState<string | null>(null);
   const [registerError, setRegisterError] = useState('');
-  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
 
   const refreshStatus = useCallback(async () => {
     const current = getCurrentUser();
@@ -74,13 +73,11 @@ export function useEventRegistration(eventId: string, slug: string) {
       setIsRegistering(true);
       setRegisterError('');
       setRegisterMessage(null);
-      setUploadProgress(0);
       try {
         const input: RegisterPaymentInput = {
           payment_method: payment.payment_method,
           transaction_id: payment.transaction_id,
-          file: payment.file,
-          onProgress: (pct) => setUploadProgress(pct),
+          payment_date: payment.payment_date,
         };
         const result = await registerEvent(eventId, input);
         setRegisterMessage(result.message);
@@ -93,7 +90,6 @@ export function useEventRegistration(eventId: string, slug: string) {
         return false;
       } finally {
         setIsRegistering(false);
-        setUploadProgress(null);
       }
     },
     [eventId]
@@ -147,7 +143,6 @@ export function useEventRegistration(eventId: string, slug: string) {
     setShowPaymentForm(false);
     setRegisterError('');
     setRegisterMessage(null);
-    setUploadProgress(null);
   }, []);
 
   return {
@@ -165,7 +160,6 @@ export function useEventRegistration(eventId: string, slug: string) {
     profileError,
     registerMessage,
     registerError,
-    uploadProgress,
     handleRegister,
     handleProfileComplete,
     doRegister,

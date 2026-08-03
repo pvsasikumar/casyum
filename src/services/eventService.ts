@@ -31,6 +31,8 @@ export interface EventRow {
   status: string;
   revenue: number;
   rules: string[];
+  /** 'gaming' marks special gaming events (Free Fire / BGMI). */
+  event_type: string;
   created_at: string;
   updated_at: string;
 }
@@ -58,6 +60,13 @@ export interface RegistrationRow {
   payment_screenshot_url: string;
   payment_uploaded_time: string;
   payment_remarks: string;
+  event_ids?: string[];
+  selectedEvents?: {
+    regular: Array<{ eventId: string; eventName: string }>;
+    gaming: { eventId: string; eventName: string } | null;
+  } | null;
+  regular_fee?: number;
+  gaming_fee?: number;
   payment_required?: boolean;
   payment_method?: string;
   payment_proof_file_name?: string;
@@ -100,6 +109,7 @@ export function mapEventDoc(docId: string, data: Record<string, any>): EventRow 
     status: data.status || 'Open',
     revenue: Number(data.revenue) || 0,
     rules: Array.isArray(data.rules) ? data.rules : [],
+    event_type: data.event_type || (data.is_gaming === true ? 'gaming' : ''),
     created_at: data.created_at || '',
     updated_at: data.updated_at || '',
   };
@@ -109,6 +119,15 @@ function mapRegDoc(docId: string, data: Record<string, any>): RegistrationRow {
   return {
     registration_id: docId,
     event_id: data.event_id || '',
+    event_ids: Array.isArray(data.event_ids)
+      ? data.event_ids.map(String)
+      : [String(data.event_id || '')].filter(Boolean),
+    selectedEvents:
+      data.selectedEvents || data.selected_events
+        ? (data.selectedEvents || data.selected_events)
+        : null,
+    regular_fee: Number(data.regular_fee ?? data.regularFee) || 0,
+    gaming_fee: Number(data.gaming_fee ?? data.gamingFee) || 0,
     participant_id: data.participant_id || '',
     participant_user_id: data.participant_user_id || data.participant_id || data.participant_email || docId,
     participant_email: data.participant_email || '',
@@ -180,9 +199,17 @@ export async function getEvent(id: string | number): Promise<{ event: any }> {
   const regSnap = await getDocs(
     query(collection(db, 'registrations'), where('event_id', '==', eventId))
   );
-  const registrations = regSnap.docs
-    .map((d) => mapRegDoc(d.id, d.data()))
-    .sort((a, b) => b.registered_at.localeCompare(a.registered_at));
+  const bundleSnap = await getDocs(
+    query(collection(db, 'registrations'), where('event_ids', 'array-contains', eventId))
+  );
+  const byId = new Map<string, ReturnType<typeof mapRegDoc>>();
+  regSnap.docs.forEach((d) => byId.set(d.id, mapRegDoc(d.id, d.data())));
+  bundleSnap.docs.forEach((d) => {
+    if (!byId.has(d.id)) byId.set(d.id, mapRegDoc(d.id, d.data()));
+  });
+  const registrations = Array.from(byId.values()).sort((a, b) =>
+    b.registered_at.localeCompare(a.registered_at)
+  );
 
   return { event: { ...event, registrations } };
 }
@@ -200,6 +227,7 @@ export async function createEvent(data: {
   faculty_coordinator?: string;
   student_coordinator?: string;
   tagline?: string;
+  event_type?: string;
 }): Promise<{ event: EventRow }> {
   if (!data.name) {
     throw new Error('Event name is required.');
@@ -225,6 +253,7 @@ export async function createEvent(data: {
     status: data.status || 'Open',
     revenue: 0,
     rules: [],
+    event_type: data.event_type || '',
     created_at: now(),
     updated_at: now(),
   };
@@ -252,6 +281,7 @@ export async function updateEvent(
     cardImage: string;
     banner: string;
     registered_count: number;
+    event_type?: string;
   }>
 ): Promise<{ event: EventRow }> {
   const db = getDb();

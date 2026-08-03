@@ -5,13 +5,13 @@ import { Sparkles, Lock, Eye, EyeOff, Loader2, AlertCircle, ShieldCheck, Mail, A
 import { useRBAC } from '../../rbac/context/RBACContext';
 import { api } from '../../services/api';
 import { signOut } from '../../services/authService';
-import { ADMIN_PORTAL_ROLES, REGISTRATION_TEAM_ROLE, CASYUM_FACULTY_MANAGER_ROLE } from '../../rbac/constants';
+import { ADMIN_PORTAL_ROLES, REGISTRATION_TEAM_ROLE, CASYUM_FACULTY_COORDINATOR_ROLE } from '../../rbac/constants';
 import type { UserRole } from '../../rbac/types';
 
 function dashboardPathFor(role: string): string {
   if (role === 'Super Admin') return '/admin/dashboard';
   if (role === REGISTRATION_TEAM_ROLE) return '/registration-team/dashboard';
-  if (role === CASYUM_FACULTY_MANAGER_ROLE) return '/casyum-faculty/dashboard';
+  if (role === CASYUM_FACULTY_COORDINATOR_ROLE) return '/casyum-faculty/dashboard';
   return '/coordinator/dashboard';
 }
 
@@ -48,7 +48,7 @@ export const AdminLogin: React.FC = () => {
         if (location.pathname !== target && location.pathname !== '/create-password') {
           navigate(target, { replace: true });
         }
-      } else if (role === CASYUM_FACULTY_MANAGER_ROLE) {
+      } else if (role === CASYUM_FACULTY_COORDINATOR_ROLE) {
         const target = dashboardPathFor(role);
         if (location.pathname !== target && location.pathname !== '/create-password') {
           navigate(target, { replace: true });
@@ -83,11 +83,11 @@ export const AdminLogin: React.FC = () => {
       if (
         !ADMIN_PORTAL_ROLES.includes(userRole) &&
         userRole !== REGISTRATION_TEAM_ROLE &&
-        userRole !== CASYUM_FACULTY_MANAGER_ROLE
+        userRole !== CASYUM_FACULTY_COORDINATOR_ROLE
       ) {
         await signOut();
         setPassword('');
-        setError('Unauthorized Access. Only Super Admin, Event Coordinators, Registration Team and CASYUM Faculty Managers may access this portal.');
+        setError('Unauthorized Access. Only Super Admin, Event Coordinators, Registration Team and CASYUM Faculty Coordinators may access this portal.');
         return;
       }
 
