@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
 import { useRBAC } from '../rbac/context/RBACContext';
+import type { LoginUser } from '../services/authService';
 
 export function useGoogleParticipantLogin() {
   const navigate = useNavigate();
@@ -10,8 +11,12 @@ export function useGoogleParticipantLogin() {
   const [error, setError] = useState('');
 
   const signIn = useCallback(
-    async (redirect?: string) => {
+    async (redirect?: string, onSuccess?: (user: LoginUser) => void | Promise<void>) => {
       if (isSigningIn) return;
+      const destination =
+        typeof redirect === 'string' && redirect.startsWith('/')
+          ? redirect
+          : '/participant/dashboard';
       setIsSigningIn(true);
       setError('');
       try {
@@ -27,9 +32,19 @@ export function useGoogleParticipantLogin() {
           profile_completed: result.user.profile_completed,
           is_first_login: result.is_first_login,
         });
-        navigate(redirect || '/participant/dashboard', { replace: true });
+        if (typeof onSuccess === 'function') {
+          await onSuccess(result.user);
+          return;
+        }
+        navigate(destination, { replace: true });
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Google sign-in failed. Please try again.');
+        console.error('Participant login error:', err);
+        const message = err instanceof Error ? err.message : '';
+        if (message && message.toLowerCase().includes('cancel')) {
+          setError('Google sign-in was cancelled. Please try again.');
+        } else {
+          setError('Login failed. Please try again.');
+        }
       } finally {
         setIsSigningIn(false);
       }

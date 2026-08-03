@@ -18,11 +18,12 @@ import { AttendanceService } from '../services/AttendanceService';
 import { useCoordinator } from '../context/CoordinatorContext';
 import { ConfirmationDialog } from '../../admin/components/common/ConfirmationDialog';
 import { QRScanner } from '../../components/scanner/QRScanner';
+import type { ScannedParticipant } from '../../services/participantLookupService';
 import {
-  getScannedParticipant,
-  resolveParticipantCode,
-  type ScannedParticipant,
-} from '../../services/participantLookupService';
+  checkEventAttendance,
+  searchEventAttendance,
+  type AttendanceCheck,
+} from '../../services/qrVerificationService';
 import type {
   ParticipantAttendanceView,
   EventAttendanceStats,
@@ -40,9 +41,12 @@ interface AttendancePageProps {
 interface ScanResultView {
   profile: ScannedParticipant;
   registered: boolean;
+  paymentVerified: boolean;
+  deskVerified: boolean;
   attendanceStatus: 'Present' | 'Absent' | 'Not Marked';
   verificationStatus: VerificationStatus;
   attendanceEligible: boolean;
+  message: string;
 }
 
 /** Attendance is only unlocked when the payment is verified by the Faculty
@@ -399,37 +403,38 @@ export const AttendancePage: React.FC<AttendancePageProps> = ({ eventId, eventNa
     }
   }, [eventId, user, viewParticipants, addToast]);
 
-  const processScanData = useCallback(
-    async (data: string) => {
-      const participantId = resolveParticipantCode(data);
-      if (!participantId) {
-        setScanError('Invalid QR Code.');
+  const applyCheck = useCallback(
+    (check: AttendanceCheck) => {
+      if (!check.profile) {
+        setScanError(check.message);
         setScanResult(null);
         return;
       }
+      const profile = check.profile;
+      const existing = pendingAttendance[profile.id] || dbAttendance[profile.id];
+      const attendanceStatus = existing
+        ? AttendanceService.normalizeAttendanceStatus(existing.status)
+        : 'Not Marked';
+      setScanResult({
+        profile,
+        registered: check.registered,
+        paymentVerified: check.paymentVerified,
+        deskVerified: check.deskVerified,
+        attendanceStatus,
+        verificationStatus: profile.verificationStatus,
+        attendanceEligible: check.eligible,
+        message: check.message,
+      });
+    },
+    [pendingAttendance, dbAttendance]
+  );
+
+  const processScanData = useCallback(
+    async (data: string) => {
       setScanBusy(true);
       setScanError('');
       try {
-        const profile = await getScannedParticipant(participantId, { eventId });
-        if (!profile) {
-          setScanError('Participant not found.');
-          setScanResult(null);
-          return;
-        }
-        const registered = profile.eventIds.includes(eventId);
-        const existing = pendingAttendance[profile.id] || dbAttendance[profile.id];
-        const attendanceStatus = existing
-          ? AttendanceService.normalizeAttendanceStatus(existing.status)
-          : 'Not Marked';
-        const attendanceEligible =
-          registered && profile.verificationStatus === 'Verified' && isVerified(profile.id);
-        setScanResult({
-          profile,
-          registered,
-          attendanceStatus,
-          verificationStatus: profile.verificationStatus,
-          attendanceEligible,
-        });
+        applyCheck(await checkEventAttendance(eventId, data));
       } catch {
         setScanError('Unable to fetch participant. Please try again.');
         setScanResult(null);
@@ -437,16 +442,30 @@ export const AttendancePage: React.FC<AttendancePageProps> = ({ eventId, eventNa
         setScanBusy(false);
       }
     },
-    [eventId, pendingAttendance, dbAttendance, isVerified]
+    [eventId, applyCheck]
   );
 
   const handleManualSearch = useCallback(async () => {
-    if (!manualInput.trim()) {
-      setScanError('Enter a participant or registration ID first.');
+    const query = manualInput.trim();
+    if (!query) {
+      setScanError('Enter a name, email, phone or registration ID first.');
       return;
     }
-    await processScanData(manualInput.trim());
-  }, [manualInput, processScanData]);
+    setScanBusy(true);
+    setScanError('');
+    try {
+      // Try as an ID/code first, then fall back to name/email/phone matching
+      // across the event's registrations.
+      let check = await checkEventAttendance(eventId, query);
+      if (!check.profile) check = await searchEventAttendance(eventId, query);
+      applyCheck(check);
+    } catch {
+      setScanError('Unable to fetch participant. Please try again.');
+      setScanResult(null);
+    } finally {
+      setScanBusy(false);
+    }
+  }, [eventId, manualInput, applyCheck]);
 
   const handleCheckInScanned = useCallback(async () => {
     if (!scanResult || !scanResult.attendanceEligible || scanResult.attendanceStatus === 'Present') return;
@@ -591,15 +610,16 @@ export const AttendancePage: React.FC<AttendancePageProps> = ({ eventId, eventNa
             {qrTab === 'scan' ? (
               <>
                 <p className="text-[11px] text-white/40">
-                  Point the camera at a participant's QR code. The QR only encodes a unique participant ID — all
+                  Point the camera at a participant's QR code. The QR only encodes a unique registration token — all
                   details are fetched securely from Firestore after scanning.
                 </p>
-                <QRScanner onResult={processScanData} />
+                <QRScanner onResult={processScanData} processing={scanBusy || marking} />
               </>
             ) : (
               <div className="flex flex-col gap-3">
                 <p className="text-[11px] text-white/40">
-                  Enter a participant ID or registration ID to fetch their details and check them in.
+                  Enter the participant's name, email, phone or registration ID to fetch their details and check them
+                  in.
                 </p>
                 <div className="flex gap-2">
                   <input
@@ -607,7 +627,7 @@ export const AttendancePage: React.FC<AttendancePageProps> = ({ eventId, eventNa
                     value={manualInput}
                     onChange={(e) => { setManualInput(e.target.value); setScanError(''); }}
                     onKeyDown={(e) => { if (e.key === 'Enter') void handleManualSearch(); }}
-                    placeholder="Participant ID or Registration ID..."
+                    placeholder="Name, email, phone or registration ID..."
                     className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-xs text-white placeholder-white/30 focus:outline-none focus:border-cyan-500/50"
                   />
                   <button
@@ -747,7 +767,7 @@ const ScanResultCard: React.FC<{
   marking: boolean;
   onMarkAttendance: () => void;
 }> = ({ result, eventName, marking, onMarkAttendance }) => {
-  const { profile, registered, attendanceStatus, verificationStatus, attendanceEligible } = result;
+  const { profile, registered, paymentVerified, deskVerified, attendanceStatus, verificationStatus, attendanceEligible } = result;
   const verifyBadge = VERIFICATION_BADGE[verificationStatus] || VERIFICATION_BADGE.Pending;
   const attendanceBadge = ATTENDANCE_BADGE[attendanceStatus] || ATTENDANCE_BADGE['Not Marked'];
   const canMark = attendanceEligible && attendanceStatus !== 'Present' && !marking;
@@ -817,9 +837,11 @@ const ScanResultCard: React.FC<{
         <div className="mx-4 mb-4 px-3.5 py-3 rounded-xl bg-amber-500/10 border border-amber-500/25 text-amber-300 text-xs flex items-start gap-2">
           <Lock className="w-4 h-4 shrink-0 mt-0.5" />
           <span>
-            {verificationStatus === 'Verified'
-              ? 'Payment and registration desk verification are required before attendance.'
-              : 'Participant must complete Registration Desk verification before attendance.'}
+            {!paymentVerified
+              ? 'Payment verification is pending. Attendance is not allowed yet.'
+              : !deskVerified
+                ? 'Registration desk verification is pending. Attendance is not allowed yet.'
+                : 'Participant must complete verification before attendance.'}
           </span>
         </div>
       )}

@@ -25,8 +25,8 @@ import {
 } from 'lucide-react';
 import { useRegistrationTeam } from '../context/RegistrationTeamContext';
 import { QRScanner } from '../../components/scanner/QRScanner';
-import { decodeQRPayload } from '../../lib/qr';
-import { getScannedParticipant } from '../../services/participantLookupService';
+import { scanForDeskVerification } from '../../services/qrVerificationService';
+import type { ScannedParticipant } from '../../services/participantLookupService';
 import {
   verifyParticipant,
   rejectParticipant,
@@ -124,6 +124,39 @@ const Pagination: React.FC<{ page: number; pageCount: number; total: number; onC
   </div>
 );
 
+function rowFromProfile(profile: ScannedParticipant): VerificationParticipantRow {
+  return {
+    id: profile.id,
+    participant_id: profile.participantId,
+    full_name: profile.fullName,
+    email: profile.email,
+    phone: profile.phone,
+    college: profile.college,
+    city: profile.city,
+    department: profile.department,
+    year_of_study: profile.yearOfStudy,
+    register_number: profile.registerNumber,
+    profilePicture: profile.profilePicture,
+    payment_status: profile.paymentStatus,
+    payment_verified: profile.paymentVerified,
+    event_ids: profile.eventIds,
+    registrationId: profile.registrationId,
+    eventNames: profile.eventNames,
+    registrationStatus: 'Confirmed',
+    verificationStatus: profile.verificationStatus,
+    verifiedBy: profile.verifiedBy,
+    verifiedByName: profile.verifiedBy,
+    verifiedByUserId: '',
+    verifiedAt: profile.verifiedAt,
+    rejectedBy: '',
+    rejectedByName: '',
+    rejectedByUserId: '',
+    rejectedAt: '',
+    rejectionReason: profile.rejectionReason,
+    verificationRemarks: profile.rejectionReason,
+  };
+}
+
 export const VerifyParticipantPage: React.FC = () => {
   const { user, participants, participantsLoading, participantsError, addToast } = useRegistrationTeam();
   const [query, setQuery] = useState('');
@@ -139,6 +172,8 @@ export const VerifyParticipantPage: React.FC = () => {
   const [rejectReason, setRejectReason] = useState<string>(VERIFICATION_REJECT_REASONS[0]);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [scanOpen, setScanOpen] = useState(false);
+  const [scanBusy, setScanBusy] = useState(false);
+  const [manualToken, setManualToken] = useState('');
 
   const verifier = useMemo(
     () => ({ userId: user?.id || '', name: user?.name || 'Registration Desk' }),
@@ -234,6 +269,16 @@ export const VerifyParticipantPage: React.FC = () => {
 
   const handleVerify = async (p: VerificationParticipantRow) => {
     if (p.verificationStatus === 'Verified') return;
+    // Desk verification is only allowed once the payment is verified — the
+    // same rule Firestore enforces server-side.
+    if (p.payment_verified !== true) {
+      addToast(
+        'Payment not verified',
+        'Payment verification is pending. Registration desk verification is not allowed yet.',
+        'error'
+      );
+      return;
+    }
     setBusyId(p.id);
     try {
       const res = await verifyParticipant(p.id, verifier);
@@ -278,59 +323,40 @@ export const VerifyParticipantPage: React.FC = () => {
   };
 
   const handleScanResult = async (data: string) => {
-    const participantId = decodeQRPayload(data);
-    if (!participantId) {
-      addToast('Invalid QR Code', 'This QR code is not a valid CASYUM participant code.', 'error');
-      return;
-    }
-    let p = findById(participantId);
-    if (!p) {
-      // Fall back to a direct Firestore fetch if the real-time list is stale.
-      const profile = await getScannedParticipant(participantId).catch(() => null);
-      if (profile) {
-        p = {
-          id: profile.id,
-          participant_id: profile.participantId,
-          full_name: profile.fullName,
-          email: profile.email,
-          phone: profile.phone,
-          college: profile.college,
-          city: profile.city,
-          department: profile.department,
-          year_of_study: profile.yearOfStudy,
-          register_number: profile.registerNumber,
-          profilePicture: profile.profilePicture,
-          payment_status: profile.paymentStatus,
-          payment_verified: profile.paymentVerified,
-          event_ids: profile.eventIds,
-          registrationId: profile.registrationId,
-          eventNames: profile.eventNames,
-          registrationStatus: 'Confirmed',
-          verificationStatus: profile.verificationStatus,
-          verifiedBy: profile.verifiedBy,
-          verifiedByName: profile.verifiedBy,
-          verifiedByUserId: '',
-          verifiedAt: profile.verifiedAt,
-          rejectedBy: '',
-          rejectedByName: '',
-          rejectedByUserId: '',
-          rejectedAt: '',
-          rejectionReason: profile.rejectionReason,
-          verificationRemarks: profile.rejectionReason,
-        };
+    setScanBusy(true);
+    try {
+      const outcome = await scanForDeskVerification(data);
+      if (outcome.status === 'invalid' || outcome.status === 'not_found') {
+        addToast('Invalid QR Code', outcome.message, 'error');
+        return;
       }
+      const profile = outcome.profile;
+      let p = findById(profile.participantId) || findById(profile.registrationId);
+      if (!p) {
+        // The real-time list may be stale — assemble from the fresh profile.
+        p = rowFromProfile(profile);
+      }
+      setScanOpen(false);
+      setSelected(p);
+      if (outcome.status === 'already_verified') {
+        addToast('Participant already verified', outcome.message, 'warning');
+      } else if (outcome.status === 'payment_pending') {
+        addToast('Payment pending', outcome.message, 'warning');
+      } else if (outcome.status === 'already_rejected') {
+        addToast('Participant was rejected', outcome.message, 'warning');
+      } else {
+        addToast('QR Scanned', `${p.full_name} matched.`, 'success');
+      }
+    } catch {
+      addToast('Error', 'Unable to fetch participant. Please try again.', 'error');
+    } finally {
+      setScanBusy(false);
     }
-    if (!p) {
-      addToast('Participant not found', 'No participant matches this QR code.', 'error');
-      return;
-    }
-    setScanOpen(false);
-    setSelected(p);
-    if (p.verificationStatus === 'Verified') {
-      addToast('Participant already verified', `${p.full_name} is already verified at the desk.`, 'warning');
-    } else {
-      addToast('QR Scanned', `${p.full_name} matched.`, 'success');
-    }
+  };
+
+  const handleManualLookup = () => {
+    if (!manualToken.trim() || scanBusy) return;
+    void handleScanResult(manualToken.trim());
   };
 
   if (!user) return null;
@@ -656,8 +682,17 @@ export const VerifyParticipantPage: React.FC = () => {
                 </div>
               )}
 
+              {selected.payment_verified !== true && (
+                <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-start gap-2">
+                  <ShieldAlert className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
+                  <p className="text-xs text-amber-200/90 leading-relaxed">
+                    Payment verification is pending. Registration desk verification is not allowed yet.
+                  </p>
+                </div>
+              )}
+
               <div className="flex flex-col gap-2 mt-1">
-                {selected.verificationStatus !== 'Verified' && (
+                {selected.verificationStatus !== 'Verified' && selected.payment_verified === true && (
                   <button
                     onClick={() => handleVerify(selected)}
                     disabled={busyId === selected.id}
@@ -774,15 +809,42 @@ export const VerifyParticipantPage: React.FC = () => {
                   </div>
                   <h3 className="text-base font-bold font-display text-white">Scan Participant QR</h3>
                 </div>
-                <button onClick={() => setScanOpen(false)} className="p-1.5 rounded-lg text-white/50 hover:text-white bg-white/5 hover:bg-white/10 cursor-pointer">
+                <button
+                  onClick={() => { setScanOpen(false); setScanBusy(false); setManualToken(''); }}
+                  className="p-1.5 rounded-lg text-white/50 hover:text-white bg-white/5 hover:bg-white/10 cursor-pointer"
+                >
                   <X className="w-4 h-4" />
                 </button>
               </div>
               <p className="text-[11px] text-white/40">
                 Point the camera at the participant's QR code shown on their dashboard. The QR only encodes a unique
-                participant ID — all details are fetched securely from Firestore after scanning.
+                registration token — all details are fetched securely from Firestore after scanning.
               </p>
-              <QRScanner onResult={handleScanResult} />
+              <QRScanner onResult={handleScanResult} processing={scanBusy} />
+
+              <div className="flex flex-col gap-2 border-t border-white/10 pt-4">
+                <p className="text-[10px] text-white/40">
+                  Camera unavailable? Enter the registration ID printed on the participant's pass instead.
+                </p>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={manualToken}
+                    onChange={(e) => setManualToken(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') handleManualLookup(); }}
+                    placeholder="e.g. REG-2026-000123"
+                    className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white placeholder-white/30 focus:outline-none focus:border-violet-500/50"
+                  />
+                  <button
+                    onClick={handleManualLookup}
+                    disabled={scanBusy || !manualToken.trim()}
+                    className="px-4 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white text-xs font-bold cursor-pointer disabled:opacity-50 flex items-center gap-2"
+                  >
+                    {scanBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
+                    Look Up
+                  </button>
+                </div>
+              </div>
             </motion.div>
           </motion.div>
         )}

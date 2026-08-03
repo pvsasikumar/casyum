@@ -108,7 +108,7 @@ function mapParticipantRow(
       event_date: events[r.event_id]?.event_date || '',
       event_time: events[r.event_id]?.time || '',
       venue: events[r.event_id]?.venue || '',
-      fee: r.payment_amount || events[r.event_id]?.fee || 0,
+      fee: r.payment_amount || (events[r.event_id] ? calculateRegistrationFee([events[r.event_id]]).total : 0),
     })),
   };
 }
@@ -189,7 +189,7 @@ export async function myEvents(): Promise<{ events: any[] }> {
       event_date: events[r.event_id]?.event_date || '',
       event_time: events[r.event_id]?.time || '',
       venue: events[r.event_id]?.venue || '',
-      fee: events[r.event_id]?.fee || 0,
+      fee: events[r.event_id] ? calculateRegistrationFee([events[r.event_id]]).total : 0,
     })),
   };
 }

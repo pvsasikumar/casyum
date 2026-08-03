@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { getCurrentUser, readParticipantRecord, type ParticipantRecord } from '../services/authService';
-import { completeProfile, registerEvent, type RegisterPaymentInput } from '../services/participantService';
+import { completeProfile } from '../services/participantService';
 import { listRegistrationsByParticipant } from '../services/registrationService';
 import { useGoogleParticipantLogin } from './useGoogleParticipantLogin';
 
@@ -12,23 +13,28 @@ export interface ProfileFormData {
   year_of_study: string;
 }
 
-export interface PaymentFormData {
-  payment_method: string;
-  transaction_id: string;
-  payment_date: string;
-}
-
-export function useEventRegistration(eventId: string, slug: string) {
+/**
+ * Orchestrates the public "Register for Event" flow from an event details page.
+ *
+ * Landing page → Event Details → Register for Event → Google Login if needed →
+ * Complete Profile if needed → Participant Dashboard → Selected Event →
+ * Correct Payment Amount → Enter Transaction ID → Submit Registration.
+ *
+ * The hook never renders a payment form itself; it moves the participant to the
+ * Participant Dashboard with the clicked event preselected (but does NOT open
+ * payment — the participant picks any additional events and clicks
+ * "Proceed to Payment" manually). If the participant is already registered, it
+ * redirects to the dashboard with a clear notice instead of creating a duplicate.
+ */
+export function useEventRegistration(eventId: string) {
+  const navigate = useNavigate();
   const { signIn, isSigningIn, error: signInError } = useGoogleParticipantLogin();
   const [isChecking, setIsChecking] = useState(true);
   const [profile, setProfile] = useState<ParticipantRecord | null>(null);
   const [alreadyRegistered, setAlreadyRegistered] = useState(false);
-  const [isRegistering, setIsRegistering] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
-  const [showPaymentForm, setShowPaymentForm] = useState(false);
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileError, setProfileError] = useState('');
-  const [registerMessage, setRegisterMessage] = useState<string | null>(null);
   const [registerError, setRegisterError] = useState('');
 
   const refreshStatus = useCallback(async () => {
@@ -68,58 +74,55 @@ export function useEventRegistration(eventId: string, slug: string) {
     };
   }, [refreshStatus]);
 
-  const doRegister = useCallback(
-    async (payment: PaymentFormData): Promise<boolean> => {
-      setIsRegistering(true);
-      setRegisterError('');
-      setRegisterMessage(null);
-      try {
-        const input: RegisterPaymentInput = {
-          payment_method: payment.payment_method,
-          transaction_id: payment.transaction_id,
-          payment_date: payment.payment_date,
-        };
-        const result = await registerEvent(eventId, input);
-        setRegisterMessage(result.message);
-        setAlreadyRegistered(true);
-        return true;
-      } catch (err) {
-        const message = err instanceof Error ? err.message : 'Registration failed. Please try again.';
-        setRegisterError(message);
-        if (message.includes('already registered')) setAlreadyRegistered(true);
-        return false;
-      } finally {
-        setIsRegistering(false);
-      }
-    },
-    [eventId]
-  );
+  const isAlreadyRegistered = useCallback(async (): Promise<boolean> => {
+    const current = getCurrentUser();
+    if (!current) return false;
+    const record = await readParticipantRecord(current.uid);
+    if (!record) return false;
+    const regs = await listRegistrationsByParticipant(current.uid);
+    return (
+      regs.some((r) => r.event_id === eventId) ||
+      (record.event_ids || []).includes(eventId)
+    );
+  }, [eventId]);
 
-  const handleRegister = useCallback(async () => {
-    setRegisterError('');
-    setRegisterMessage(null);
-    if (!getCurrentUser()) {
-      await signIn(`/events/${slug}`);
-      const record = await readParticipantRecord(getCurrentUser()?.uid || '');
-      setProfile(record);
-      if (!record?.profile_completed) {
-        setShowProfileModal(true);
-        return;
-      }
-      setShowPaymentForm(true);
+  const finishRegistrationFlow = useCallback(async () => {
+    const already = await isAlreadyRegistered();
+    if (already) {
+      setAlreadyRegistered(true);
+      navigate(`/participant/dashboard?event=${encodeURIComponent(eventId)}&status=already_registered`, {
+        replace: true,
+      });
+    } else {
+      navigate(`/participant/dashboard?event=${encodeURIComponent(eventId)}&select=1`, {
+        replace: true,
+      });
+    }
+  }, [eventId, isAlreadyRegistered, navigate]);
+
+  const continueAfterAuth = useCallback(async () => {
+    const current = getCurrentUser();
+    if (!current) {
+      setRegisterError('Unable to confirm your sign-in. Please try again.');
       return;
     }
-    let record = profile;
-    if (!record) {
-      record = await readParticipantRecord(getCurrentUser()?.uid || '');
-      setProfile(record);
-    }
+    const record = await readParticipantRecord(current.uid);
+    setProfile(record);
     if (!record?.profile_completed) {
       setShowProfileModal(true);
       return;
     }
-    setShowPaymentForm(true);
-  }, [profile, signIn, slug]);
+    await finishRegistrationFlow();
+  }, [finishRegistrationFlow]);
+
+  const handleRegister = useCallback(async () => {
+    setRegisterError('');
+    if (!getCurrentUser()) {
+      await signIn(undefined, () => continueAfterAuth());
+      return;
+    }
+    await continueAfterAuth();
+  }, [continueAfterAuth, signIn]);
 
   const handleProfileComplete = useCallback(
     async (data: ProfileFormData) => {
@@ -129,21 +132,15 @@ export function useEventRegistration(eventId: string, slug: string) {
         await completeProfile(data);
         setShowProfileModal(false);
         await refreshStatus();
-        setShowPaymentForm(true);
+        await finishRegistrationFlow();
       } catch (err) {
         setProfileError(err instanceof Error ? err.message : 'Failed to save your profile. Please try again.');
       } finally {
         setProfileSaving(false);
       }
     },
-    [refreshStatus]
+    [finishRegistrationFlow, refreshStatus]
   );
-
-  const cancelPaymentForm = useCallback(() => {
-    setShowPaymentForm(false);
-    setRegisterError('');
-    setRegisterMessage(null);
-  }, []);
 
   return {
     isChecking,
@@ -151,17 +148,12 @@ export function useEventRegistration(eventId: string, slug: string) {
     signInError,
     profile,
     alreadyRegistered,
-    isRegistering,
     showProfileModal,
     setShowProfileModal,
-    showPaymentForm,
-    cancelPaymentForm,
     profileSaving,
     profileError,
-    registerMessage,
     registerError,
     handleRegister,
     handleProfileComplete,
-    doRegister,
   };
 }

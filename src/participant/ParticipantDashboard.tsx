@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   LogOut,
@@ -40,6 +40,8 @@ import {
   isGamingEvent,
   calculateRegistrationFee,
   MAX_REGULAR_EVENTS,
+  REGULAR_EVENT_FEE,
+  GAMING_EVENT_FEE,
   type EventSelectionLike,
 } from '../services/eventSelection';
 
@@ -49,7 +51,9 @@ const inputClass = 'w-full bg-white/5 border border-white/10 rounded-xl px-5 py-
 
 export const ParticipantDashboard: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { logout } = useRBAC();
+  const pendingEventProcessedRef = useRef(false);
 
   const [participant, setParticipant] = useState<any>(null);
   const [openEvents, setOpenEvents] = useState<any[]>([]);
@@ -99,6 +103,67 @@ export const ParticipantDashboard: React.FC = () => {
   useEffect(() => {
     loadAll();
   }, [loadAll]);
+
+  /**
+   * Handles a deep link from the public event details page:
+   * `/participant/dashboard?event=<id>&select=1` pre-selects the clicked event
+   * (added to the current selection) WITHOUT opening the payment flow, so the
+   * participant can review their selection and choose additional events first;
+   * `&status=already_registered` surfaces the existing registration status
+   * instead of creating a duplicate.
+   */
+  useEffect(() => {
+    if (loading || !participant || pendingEventProcessedRef.current) return;
+    const eventIdParam = searchParams.get('event');
+    if (!eventIdParam) {
+      pendingEventProcessedRef.current = true;
+      return;
+    }
+    if (participant.profile_completed !== 1) return;
+    if (openEvents.length === 0) return;
+
+    const already = (participant.event_ids || []).some(
+      (x: any) => Number(x) === Number(eventIdParam)
+    );
+    const wantsSelect = searchParams.get('select') === '1';
+    const wantsAlreadyNotice = searchParams.get('status') === 'already_registered';
+
+    pendingEventProcessedRef.current = true;
+    setSearchParams({}, { replace: true });
+
+    if (already || wantsAlreadyNotice) {
+      setNotice('You are already registered for this event.');
+      return;
+    }
+
+    const ev = openEvents.find((e) => String(e.id) === String(eventIdParam));
+    if (!ev) {
+      setNotice('The selected event is not available for registration right now.');
+      return;
+    }
+    if (Number(ev.max_participants) > 0 && Number(ev.registered_count) >= Number(ev.max_participants)) {
+      setNotice('This event has reached its maximum capacity.');
+      return;
+    }
+
+    if (wantsSelect) {
+      setSelectionNotice('');
+      if (isGamingEvent(ev)) {
+        setSelectedGamingId(String(ev.id));
+        setNotice(`${ev.name} added to your selection. Choose your events, review the amount, then click Proceed to Payment.`);
+      } else {
+        setSelectedRegularIds((prev) => {
+          if (prev.includes(String(ev.id))) return prev;
+          if (prev.length >= MAX_REGULAR_EVENTS) {
+            setNotice('You can select a maximum of 3 regular events.');
+            return prev;
+          }
+          return [...prev, String(ev.id)];
+        });
+        setNotice(`${ev.name} added to your selection. Choose your events, review the amount, then click Proceed to Payment.`);
+      }
+    }
+  }, [loading, participant, openEvents, searchParams, setSearchParams]);
 
   /**
    * Resolve the current selection to event objects and derive the fee through
@@ -423,6 +488,7 @@ export const ParticipantDashboard: React.FC = () => {
 
               <ParticipantQRCard
                 participantId={participant.participant_id || participant.id}
+                registrationId={participant.registered_events?.[0]?.registration_id}
                 participantName={participant.full_name}
                 verificationStatus={participant.verificationStatus || 'Pending'}
                 verifiedBy={participant.verifiedBy}
@@ -444,7 +510,7 @@ export const ParticipantDashboard: React.FC = () => {
                         </div>
                         <div className="flex flex-col">
                           <h2 className="text-sm font-extrabold tracking-tight font-display uppercase">Regular CASYUM Events</h2>
-                          <span className="text-[10px] text-white/40">Select up to {MAX_REGULAR_EVENTS} regular events — ₹150</span>
+                          <span className="text-[10px] text-white/40">Select up to {MAX_REGULAR_EVENTS} regular events — ₹{REGULAR_EVENT_FEE}</span>
                         </div>
                       </div>
                       <span className={`px-3 py-1.5 rounded-xl text-[10px] font-bold uppercase tracking-widest border ${
@@ -574,7 +640,7 @@ export const ParticipantDashboard: React.FC = () => {
                         </div>
                         <div className="flex flex-col">
                           <h2 className="text-sm font-extrabold tracking-tight font-display uppercase">Special Gaming Event</h2>
-                          <span className="text-[10px] text-white/40">Select only one gaming event — ₹250</span>
+                          <span className="text-[10px] text-white/40">Select only one gaming event — ₹{GAMING_EVENT_FEE}</span>
                         </div>
                       </div>
                       {selectedGamingEvent && (
@@ -630,7 +696,7 @@ export const ParticipantDashboard: React.FC = () => {
                               <div className="flex flex-col items-end gap-1 flex-shrink-0">
                                 <span className="flex items-center gap-1 text-rose-300 font-bold text-sm">
                                   <CircleDollarSign className="w-4 h-4" />
-                                  ₹250
+                                  ₹{GAMING_EVENT_FEE}
                                 </span>
                                 {isRegistered && (
                                   <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-[9px] font-bold uppercase tracking-widest">
@@ -683,14 +749,19 @@ export const ParticipantDashboard: React.FC = () => {
                         <span>{selectionNotice || 'Select at least one event to continue.'}</span>
                       </div>
                     )}
-                    <button
-                      onClick={handleBundleProceed}
-                      disabled={feeBreakdown.total === 0}
-                      className="w-full py-3.5 rounded-xl bg-gradient-to-r from-violet-500 to-indigo-600 hover:from-violet-600 hover:to-indigo-700 text-white font-bold text-xs uppercase tracking-widest transition-all shadow-lg shadow-violet-500/20 cursor-pointer flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
-                    >
-                      <Ticket className="w-4 h-4" />
-                      Proceed to Payment — ₹{feeBreakdown.total}
-                    </button>
+                    {feeBreakdown.total > 0 ? (
+                      <button
+                        onClick={handleBundleProceed}
+                        className="w-full py-3.5 rounded-xl bg-gradient-to-r from-violet-500 to-indigo-600 hover:from-violet-600 hover:to-indigo-700 text-white font-bold text-xs uppercase tracking-widest transition-all shadow-lg shadow-violet-500/20 cursor-pointer flex items-center justify-center gap-2"
+                      >
+                        <Ticket className="w-4 h-4" />
+                        Proceed to Payment — ₹{feeBreakdown.total}
+                      </button>
+                    ) : (
+                      <p className="w-full py-3.5 rounded-xl border border-dashed border-white/15 text-center text-[10px] font-bold uppercase tracking-widest text-white/30">
+                        Select events above to enable payment
+                      </p>
+                    )}
                   </div>
                 </div>
               )}
@@ -815,8 +886,8 @@ export const ParticipantDashboard: React.FC = () => {
 
       {resubmitTarget && (
         <div className="fixed inset-0 z-[9999] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <div className="w-full max-w-lg bg-zinc-950 border border-white/20 rounded-3xl p-6 shadow-2xl">
-            <div className="flex items-center justify-between mb-4">
+          <div className="w-[calc(100vw-24px)] md:w-[min(92vw,900px)] max-w-full max-h-[92vh] overflow-y-auto my-auto flex flex-col gap-4">
+            <div className="flex items-center justify-between gap-3">
               <div className="flex flex-col gap-0.5">
                 <span className="text-[10px] font-bold uppercase tracking-widest text-violet-400">Resubmit Payment</span>
                 <h3 className="text-base font-bold font-display text-white">{resubmitTarget.event_name}</h3>
@@ -843,8 +914,8 @@ export const ParticipantDashboard: React.FC = () => {
 
       {registerTarget && (
         <div className="fixed inset-0 z-[9999] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <div className="w-full max-w-lg bg-zinc-950 border border-white/20 rounded-3xl p-6 shadow-2xl">
-            <div className="flex items-center justify-between mb-4">
+          <div className="w-[calc(100vw-24px)] md:w-[min(92vw,900px)] max-w-full max-h-[92vh] overflow-y-auto my-auto flex flex-col gap-4">
+            <div className="flex items-center justify-between gap-3">
               <div className="flex flex-col gap-0.5">
                 <span className="text-[10px] font-bold uppercase tracking-widest text-violet-400">
                   {registerTarget.bundle ? 'Register for Selected Events' : 'Register for Event'}
@@ -880,7 +951,13 @@ export const ParticipantDashboard: React.FC = () => {
               fee={Number(registerTarget.fee) || 0}
               regularFee={registerTarget.bundle ? feeBreakdown.regularFee : undefined}
               gamingFee={registerTarget.bundle ? feeBreakdown.gamingFee : undefined}
-              selectedEvents={registerTarget.bundle ? selectedEvents : undefined}
+              selectedEvents={
+                registerTarget.bundle
+                  ? selectedEvents
+                  : registerTarget.event
+                    ? [registerTarget.event]
+                    : undefined
+              }
               isSubmitting={registeringNow}
               error={registerError}
               onCancel={() => setRegisterTarget(null)}

@@ -28,6 +28,10 @@ export interface ScannedParticipant {
   verifiedBy: string;
   verifiedAt: string;
   rejectionReason: string;
+  registrationVerificationStatus: string;
+  registrationVerifiedBy: string;
+  registrationVerifiedAt: string;
+  attendanceEligibility: boolean;
   eventIds: string[];
   eventNames: string[];
   registrationIds: string[];
@@ -78,6 +82,21 @@ function buildProfile(
   const paymentVerified =
     regs.length > 0 && regPaymentStatuses.length > 0 && regPaymentStatuses.every((s) => s === 'verified');
 
+  // Registration Desk verification state, mirrored on each registration doc by
+  // the desk's verification sync. All of a participant's registrations are
+  // updated together, so the first is representative.
+  const deskStatuses = regs
+    .map((r) => String(r.registration_verification_status || 'locked').toLowerCase())
+    .filter((s) => s !== '');
+  const registrationVerificationStatus =
+    deskStatuses.length === 0
+      ? 'locked'
+      : deskStatuses.every((s) => s === 'verified')
+        ? 'verified'
+        : deskStatuses.includes('rejected')
+          ? 'rejected'
+          : 'locked';
+
   return {
     id,
     participantId: id,
@@ -97,6 +116,10 @@ function buildProfile(
     verifiedBy: data.verifiedBy || '',
     verifiedAt: data.verifiedAt || '',
     rejectionReason: data.rejectionReason || data.verificationRemarks || '',
+    registrationVerificationStatus,
+    registrationVerifiedBy: regs[0]?.registration_verified_by_name || '',
+    registrationVerifiedAt: regs[0]?.registration_verified_at || '',
+    attendanceEligibility: registrationVerificationStatus === 'verified' && paymentVerified,
     eventIds: [...new Set(regs.flatMap((r) => regEventIds(r)))],
     eventNames: [...new Set(regs.flatMap((r) => regEventNames(r, eventNames)))],
     registrationIds: regs.map((r) => r.registration_id),
@@ -149,9 +172,36 @@ export async function getScannedParticipant(
   return buildProfile(id, data, regs, eventNames);
 }
 
+/**
+ * Manual fallback search used by Event Coordinators when the camera is
+ * unavailable. Searches the event's registrations by name, email, phone or
+ * registration id (all fields the coordinator is allowed to read), then
+ * resolves the full profile through the same server-side lookup as a scan.
+ */
+export async function searchEventParticipant(
+  eventId: string,
+  queryText: string
+): Promise<ScannedParticipant | null> {
+  const q = String(queryText || '').trim().toLowerCase();
+  if (!q) return null;
+
+  const regs = await listRegistrationsByEvent(eventId).catch(() => [] as RegistrationRow[]);
+  const match = regs.find(
+    (r) =>
+      String(r.user_full_name || '').toLowerCase().includes(q) ||
+      String(r.participant_email || '').toLowerCase().includes(q) ||
+      String(r.user_phone || '').toLowerCase().includes(q) ||
+      String(r.registration_id || '').toLowerCase().includes(q)
+  );
+  if (!match) return null;
+
+  const participantId = String(match.participant_user_id || match.participant_id || '');
+  if (!participantId) return null;
+  return getScannedParticipant(participantId, { eventId });
+}
+
 async function resolveParticipantKey(db: Firestore, key: string): Promise<string | null> {
-  const direct = await getDoc(doc(db, 'participants', key));
-  if (direct.exists()) return key;
+  const direct = await getDoc(doc(db, 'participants', key));  if (direct.exists()) return key;
 
   try {
     const byRegId = await getDocs(

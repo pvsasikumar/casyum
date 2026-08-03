@@ -14,11 +14,12 @@ export const GAMING_EVENT_NAMES = ['Free Fire', 'BGMI'] as const;
 export const MAX_REGULAR_EVENTS = 3;
 export const REGULAR_EVENT_FEE = 150;
 export const GAMING_EVENT_FEE = 250;
+export const REGULAR_PLUS_GAMING_FEE = REGULAR_EVENT_FEE + GAMING_EVENT_FEE;
 
 export const ALLOWED_TOTALS = [
   REGULAR_EVENT_FEE,
   GAMING_EVENT_FEE,
-  REGULAR_EVENT_FEE + GAMING_EVENT_FEE,
+  REGULAR_PLUS_GAMING_FEE,
 ] as const;
 
 /** A minimal view of an event that is enough to classify it. */
@@ -123,6 +124,15 @@ export function calculateRegistrationFee(
     }
   }
   return feeFromCounts(regularCount, gamingCount);
+}
+
+/**
+ * Returns the registration fee for a single event, derived through the shared
+ * `calculateRegistrationFee` calculator. Regular events return ₹150, gaming
+ * events (Free Fire / BGMI) return ₹250 — never a per-event price.
+ */
+export function singleEventRegistrationFee(event: EventSelectionLike | null | undefined): number {
+  return calculateRegistrationFee(event ? [event] : []).total;
 }
 
 /**

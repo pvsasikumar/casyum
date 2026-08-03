@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
-  ArrowRight,
   CalendarDays,
   CheckCircle2,
   Clock,
@@ -20,8 +19,12 @@ import { DEFAULT_EVENT_IMAGE, isValidStoredImage } from '../../services/eventSlu
 import { useEventRegistration } from '../../hooks/useEventRegistration';
 import { PublicEventRenderer } from './PublicEventRenderer';
 import { ProfileCompletionModal } from './ProfileCompletionModal';
-import { PaymentDetailsSection } from './PaymentDetailsSection';
 import { SmartImage } from '../ui/SmartImage';
+import {
+  MAX_REGULAR_EVENTS,
+  isGamingEvent,
+  singleEventRegistrationFee,
+} from '../../services/eventSelection';
 
 const skeletonBlock = 'animate-pulse rounded-2xl bg-white/[0.04]';
 
@@ -75,19 +78,14 @@ export const EventDetailsPage: React.FC = () => {
     isSigningIn,
     signInError,
     alreadyRegistered,
-    isRegistering,
     showProfileModal,
     setShowProfileModal,
-    showPaymentForm,
-    cancelPaymentForm,
     profileSaving,
     profileError,
-    registerMessage,
     registerError,
     handleRegister,
     handleProfileComplete,
-    doRegister,
-  } = useEventRegistration(event?.eventId || '', event?.slug || '');
+  } = useEventRegistration(event?.eventId || '');
 
   if (loading) {
     return (
@@ -146,6 +144,9 @@ export const EventDetailsPage: React.FC = () => {
   const isClosed = event.registrationStatus === 'Registration Closed' || event.registrationStatus === 'Completed';
   const isFull = event.registrationStatus === 'Event Full';
 
+  const isGaming = isGamingEvent(event);
+  const registrationFee = singleEventRegistrationFee(event);
+
   const registerPanel = (
     <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-6 flex flex-col gap-4 sticky top-24">
       <div className="flex items-center justify-between gap-3">
@@ -178,6 +179,20 @@ export const EventDetailsPage: React.FC = () => {
 
       <div className="h-px bg-white/10" />
 
+      <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 flex flex-col gap-1">
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-[10px] font-bold uppercase tracking-widest text-white/50">
+            {isGaming ? 'Gaming Registration Fee' : 'Registration Fee'}
+          </span>
+          <span className="text-xl font-extrabold font-display text-emerald-300">₹{registrationFee}</span>
+        </div>
+        <p className="text-[10px] text-white/40 leading-relaxed">
+          {isGaming
+            ? 'Choose only one gaming event.'
+            : `Choose up to ${MAX_REGULAR_EVENTS} regular events for the same fee.`}
+        </p>
+      </div>
+
       {isClosed ? (
         <div className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white/50 text-xs font-bold">
           <Clock className="w-4 h-4" />
@@ -193,36 +208,21 @@ export const EventDetailsPage: React.FC = () => {
           <CheckCircle2 className="w-4 h-4" />
           You are already registered for this event.
         </div>
-      ) : showPaymentForm ? (
-        <PaymentDetailsSection
-          eventName={event.name}
-          fee={event.fee}
-          isSubmitting={isRegistering}
-          error={registerError}
-          onCancel={cancelPaymentForm}
-          onSubmit={(payment) => void doRegister(payment)}
-        />
       ) : (
         <button
           onClick={() => void handleRegister()}
-          disabled={isRegistering || isSigningIn || isChecking}
+          disabled={isSigningIn || isChecking}
           className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-xs font-bold shadow-lg shadow-violet-500/25 transition-colors cursor-pointer disabled:cursor-not-allowed"
         >
-          {isRegistering || isSigningIn ? (
+          {isSigningIn || isChecking ? (
             <Loader2 className="w-4 h-4 animate-spin" />
           ) : (
             <Ticket className="w-4 h-4" />
           )}
-          {isSigningIn ? 'Signing in...' : isRegistering ? 'Registering...' : 'Register for Event'}
+          {isSigningIn ? 'Signing in...' : isChecking ? 'Checking...' : 'Register for Event'}
         </button>
       )}
 
-      {registerMessage && (
-        <p className="flex items-start gap-2 text-xs text-emerald-300">
-          <CheckCircle2 className="w-4 h-4 flex-shrink-0 mt-0.5" />
-          {registerMessage}
-        </p>
-      )}
       {(registerError || signInError) && (
         <p className="text-xs text-rose-300">{registerError || signInError}</p>
       )}
@@ -295,16 +295,6 @@ export const EventDetailsPage: React.FC = () => {
           onClose={() => setShowProfileModal(false)}
           onSubmit={(data) => void handleProfileComplete(data)}
         />
-      )}
-
-      {registerMessage && !showProfileModal && (
-        <Link
-          to="/participant/dashboard"
-          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[999] flex items-center gap-2 px-4 py-3 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs font-bold backdrop-blur-xl shadow-2xl hover:bg-emerald-500/25 transition-colors"
-        >
-          View your registrations
-          <ArrowRight className="w-3.5 h-3.5" />
-        </Link>
       )}
     </div>
   );

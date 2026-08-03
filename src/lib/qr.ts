@@ -612,26 +612,47 @@ export interface QRMatrix {
  *
  * SECURITY: the QR code never stores participant PII (name, email, phone,
  * verification status, college, department...). It only encodes the unique
- * participant identifier (Firestore document id). All participant details are
- * fetched securely from Firestore after a successful scan.
+ * registration token (the canonical registration id, or the participant
+ * identifier as a fallback). All participant details are fetched securely from
+ * Firestore after a successful scan and are never trusted from the QR data
+ * itself.
  *
- * Supported payload formats (all decode to a bare participant id):
- *   - <participantId>              (canonical, current)
- *   - casyum:reg:<participantId>   (legacy prefix)
- *   - base64 {participantId,...}   (legacy coordinator check-in payload)
+ * Supported payload formats (all decode to a bare registration/participant id):
+ *   - CASYUM:REG:<registrationId>    (canonical, current)
+ *   - casyum://checkin/<id>          (URI style deep-link token)
+ *   - casyum:reg:<participantId>     (legacy prefix)
+ *   - <participantId>                (legacy bare id)
+ *   - base64 {participantId,...}     (legacy coordinator check-in payload)
  */
 export const QR_PREFIX = 'casyum:reg:';
+export const QR_PREFIX_REG = 'CASYUM:REG:';
+export const QR_URI_PREFIX = 'casyum://checkin/';
 
-export function encodeParticipantQR(participantId: string): string {
-  return String(participantId || '').trim();
+const REG_PREFIX_LEN = QR_PREFIX.length;
+const URI_PREFIX_LEN = QR_URI_PREFIX.length;
+
+export function encodeParticipantQR(identifier: string): string {
+  const id = String(identifier || '').trim();
+  if (!id) return '';
+  const lower = id.toLowerCase();
+  if (lower.startsWith('casyum:reg:') || lower.startsWith('casyum://checkin/')) {
+    return id;
+  }
+  return `${QR_PREFIX_REG}${id}`;
 }
 
 export function decodeQRPayload(data: string): string | null {
   const raw = String(data || '').trim();
   if (!raw) return null;
+  const lower = raw.toLowerCase();
 
-  if (raw.startsWith(QR_PREFIX)) {
-    const id = raw.slice(QR_PREFIX.length).trim();
+  if (lower.startsWith('casyum:reg:')) {
+    const id = raw.slice(REG_PREFIX_LEN).trim();
+    return id || null;
+  }
+
+  if (lower.startsWith('casyum://checkin/')) {
+    const id = raw.slice(URI_PREFIX_LEN).trim();
     return id || null;
   }
 
@@ -666,15 +687,45 @@ export function generateQRMatrix(text: string): QRMatrix {
   return { size, modules };
 }
 
+export interface DrawQROptions {
+  /** Render scale in device pixels per module. Defaults to fit `targetSize`. */
+  scale?: number;
+  foreground?: string;
+  background?: string;
+  /** Quiet zone in modules around the code (default 4). */
+  quietModules?: number;
+  /** When `scale` is omitted, scale is chosen so the canvas is at least this
+   * many pixels square (default 1024). */
+  targetSize?: number;
+}
+
+/**
+ * Renders a QR matrix to a canvas at high resolution.
+ *
+ * Scannability rules enforced here:
+ *  - black modules on a pure white background (no gradients/glow/transparency)
+ *  - a generous white quiet zone on all four sides
+ *  - square, undistorted modules rendered at integer pixel scale
+ * The default foreground/background are black-on-white.
+ */
 export function drawQRToCanvas(
   canvas: HTMLCanvasElement,
   matrix: QRMatrix,
-  scale = 8,
-  foreground = '#ffffff',
-  background = '#000000'
+  optionsOrScale: number | DrawQROptions = {},
 ): void {
+  const opts: DrawQROptions =
+    typeof optionsOrScale === 'number' ? { scale: optionsOrScale } : optionsOrScale;
+  const foreground = opts.foreground || '#000000';
+  const background = opts.background || '#ffffff';
+  const quietModules = Math.max(2, Math.floor(opts.quietModules ?? 4));
+  const targetSize = Math.max(512, Math.floor(opts.targetSize ?? 1024));
+
+  const quietPixels = targetSize >= matrix.size * 1.1
+    ? Math.floor(targetSize / (matrix.size + quietModules * 2))
+    : 1;
+  const scale = Math.max(2, Math.floor(opts.scale ?? quietPixels));
   const dim = matrix.size * scale;
-  const quietZone = scale * 2;
+  const quietZone = quietModules * scale;
   canvas.width = dim + quietZone * 2;
   canvas.height = dim + quietZone * 2;
   const ctx = canvas.getContext('2d');

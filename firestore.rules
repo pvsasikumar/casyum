@@ -208,6 +208,7 @@ service cloud.firestore {
       allow read: if isSignedIn() && (
         isAdmin()
         || isPaymentReviewer()
+        || isRegistrationTeam()
         || (isCoordinator() && isAssignedEvent(resource.data.event_id))
         || request.auth.uid == resource.data.participant_id
         || request.auth.uid == resource.data.participant_user_id
@@ -216,7 +217,9 @@ service cloud.firestore {
         && request.resource.data.participant_id == request.auth.uid
         && request.resource.data.event_id != null
         && hasValidSelection(request.resource.data);
-      allow update: if isAdmin() || isPaymentReviewer() || (isCoordinator() && isAssignedEvent(resource.data.event_id));
+      allow update: if isAdmin() || isPaymentReviewer()
+        || (isCoordinator() && isAssignedEvent(resource.data.event_id))
+        || (isRegistrationTeam() && isDeskVerificationUpdate() && isPaymentAlreadyVerified());
       allow delete: if isAdmin();
     }
 
@@ -228,6 +231,7 @@ service cloud.firestore {
       allow read: if isSignedIn() && (
         isAdmin()
         || isPaymentReviewer()
+        || isRegistrationTeam()
         || (isCoordinator() && isAssignedEvent(resource.data.event_id))
         || request.auth.uid == resource.data.participant_id
         || request.auth.uid == resource.data.participant_user_id

@@ -108,12 +108,13 @@ export const Hero: React.FC<HeroProps> = ({ startAnimation, onOpenLogin, isSigni
           </a>
 
           <button
-            onClick={onOpenLogin}
+            type="button"
+            onClick={() => onOpenLogin?.()}
             disabled={isSigningIn}
             className="glass-panel px-8 py-3.5 text-[10px] sm:text-xs font-bold uppercase tracking-[0.2em] text-white rounded-full hover:bg-white/10 transition-all duration-300 border border-white/10 hover:border-white/20 hover:scale-105 active:scale-98 cursor-pointer disabled:opacity-50 disabled:cursor-wait inline-flex items-center gap-2"
           >
             {isSigningIn && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-            Login
+            {isSigningIn ? 'Signing in...' : 'Login'}
           </button>
         </motion.div>
       </motion.div>

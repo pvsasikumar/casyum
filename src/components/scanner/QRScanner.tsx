@@ -16,20 +16,27 @@ import {
 interface QRScannerProps {
   onResult: (data: string) => void;
   autoStart?: boolean;
+  /** When true, scan results are suppressed (e.g. while a verification request
+   * is still being processed) so the same QR cannot be scanned repeatedly. */
+  processing?: boolean;
 }
 
 /**
  * Professional camera-based QR scanner used by the Registration Team and Event
  * Coordinators. Provides camera selection, front/rear switching, flashlight
  * (when supported) and fully automatic code detection — no manual capture.
+ *
+ * The camera (and therefore the permission prompt) is only ever requested when
+ * the user explicitly clicks a Start/Scan button — never on mount.
  */
-export const QRScanner: React.FC<QRScannerProps> = ({ onResult, autoStart = true }) => {
+export const QRScanner: React.FC<QRScannerProps> = ({ onResult, autoStart = false, processing = false }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const rafRef = useRef(0);
   const runningRef = useRef(false);
   const lastCodeRef = useRef('');
   const lastCodeTimeRef = useRef(0);
+  const processingRef = useRef(false);
   const onResultRef = useRef(onResult);
 
   const [cameras, setCameras] = useState<MediaDeviceInfo[]>([]);
@@ -43,9 +50,25 @@ export const QRScanner: React.FC<QRScannerProps> = ({ onResult, autoStart = true
     onResultRef.current = onResult;
   }, [onResult]);
 
+  useEffect(() => {
+    processingRef.current = processing;
+    // Once the pending request finishes, allow the same QR to be scanned again
+    // (used after a failed verification attempt).
+    if (!processing) {
+      lastCodeRef.current = '';
+      lastCodeTimeRef.current = 0;
+    }
+  }, [processing]);
+
   const scanLoop = useCallback(() => {
-    const video = videoRef.current;
     if (!runningRef.current) return;
+    // Suppress decoding while a verification request is being processed so the
+    // same QR cannot be re-submitted repeatedly.
+    if (processingRef.current) {
+      rafRef.current = requestAnimationFrame(scanLoop);
+      return;
+    }
+    const video = videoRef.current;
     if (!video || video.readyState < 2 || video.videoWidth === 0) {
       rafRef.current = requestAnimationFrame(scanLoop);
       return;
@@ -101,6 +124,15 @@ export const QRScanner: React.FC<QRScannerProps> = ({ onResult, autoStart = true
     }
   }, []);
 
+  const refreshCameras = useCallback(async () => {
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      setCameras(devices.filter((d) => d.kind === 'videoinput'));
+    } catch {
+      // ignore — camera list is a convenience, not a blocker
+    }
+  }, []);
+
   const startCamera = useCallback(
     async (deviceId?: string) => {
       setStatus('starting');
@@ -134,6 +166,8 @@ export const QRScanner: React.FC<QRScannerProps> = ({ onResult, autoStart = true
         runningRef.current = true;
         setStatus('active');
         rafRef.current = requestAnimationFrame(() => scanLoopRef.current());
+        // Device labels are only populated after permission is granted.
+        void refreshCameras();
       } catch (err: any) {
         const name = err?.name || '';
         const message =
@@ -146,17 +180,8 @@ export const QRScanner: React.FC<QRScannerProps> = ({ onResult, autoStart = true
         setStatus('error');
       }
     },
-    [refreshTorchSupport]
+    [refreshTorchSupport, refreshCameras]
   );
-
-  const refreshCameras = useCallback(async () => {
-    try {
-      const devices = await navigator.mediaDevices.enumerateDevices();
-      setCameras(devices.filter((d) => d.kind === 'videoinput'));
-    } catch {
-      // ignore — camera list is a convenience, not a blocker
-    }
-  }, []);
 
   useEffect(() => {
     let cancelled = false;

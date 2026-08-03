@@ -1,6 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import MagicBento from './MagicBento';
 import { listPublicEvents, type PublicEvent } from '../services/publicEventService';
+import {
+  MAX_REGULAR_EVENTS,
+  REGULAR_EVENT_FEE,
+  GAMING_EVENT_FEE,
+  REGULAR_PLUS_GAMING_FEE,
+} from '../services/eventSelection';
 
 export const Events: React.FC = () => {
   const [events, setEvents] = useState<PublicEvent[] | null>(null);
@@ -51,6 +57,25 @@ export const Events: React.FC = () => {
             </button>
           </div>
         )}
+
+        {/* Registration pricing */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="rounded-2xl border border-violet-500/25 bg-violet-500/[0.06] px-5 py-4 flex flex-col gap-1">
+            <span className="text-xl font-extrabold font-display text-emerald-300">₹{REGULAR_EVENT_FEE}</span>
+            <span className="text-xs font-bold text-white/80">Regular Events</span>
+            <span className="text-[10px] text-white/40">Choose up to {MAX_REGULAR_EVENTS} events</span>
+          </div>
+          <div className="rounded-2xl border border-rose-500/25 bg-rose-500/[0.06] px-5 py-4 flex flex-col gap-1">
+            <span className="text-xl font-extrabold font-display text-emerald-300">₹{GAMING_EVENT_FEE}</span>
+            <span className="text-xs font-bold text-white/80">Gaming Event</span>
+            <span className="text-[10px] text-white/40">Choose either Free Fire or BGMI</span>
+          </div>
+          <div className="rounded-2xl border border-cyan-500/25 bg-cyan-500/[0.06] px-5 py-4 flex flex-col gap-1">
+            <span className="text-xl font-extrabold font-display text-emerald-300">₹{REGULAR_PLUS_GAMING_FEE}</span>
+            <span className="text-xs font-bold text-white/80">Regular + Gaming</span>
+            <span className="text-[10px] text-white/40">Total for both categories</span>
+          </div>
+        </div>
 
         {/* Magic Bento Container */}
         <div className="w-full flex justify-center">
