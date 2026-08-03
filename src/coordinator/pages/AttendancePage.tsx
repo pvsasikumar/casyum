@@ -1,22 +1,48 @@
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, QrCode, CheckCircle2, AlertCircle, X, Lock, ShieldCheck } from 'lucide-react';
+import {
+  ArrowLeft,
+  QrCode,
+  CheckCircle2,
+  AlertCircle,
+  X,
+  Lock,
+  ShieldCheck,
+  Search,
+  ScanLine,
+  Loader2,
+} from 'lucide-react';
 import { AttendanceTable } from '../components/AttendanceTable';
 import { AttendanceSummary } from '../components/AttendanceSummary';
 import { AttendanceService } from '../services/AttendanceService';
 import { useCoordinator } from '../context/CoordinatorContext';
 import { ConfirmationDialog } from '../../admin/components/common/ConfirmationDialog';
+import { QRScanner } from '../../components/scanner/QRScanner';
+import {
+  getScannedParticipant,
+  resolveParticipantCode,
+  type ScannedParticipant,
+} from '../../services/participantLookupService';
 import type {
   ParticipantAttendanceView,
   EventAttendanceStats,
   EventParticipant,
   CoordinatorAttendanceRecord,
+  VerificationStatus,
 } from '../types';
 import type { ParticipantVerificationInfo } from '../services/ParticipantService';
 
 interface AttendancePageProps {
   eventId: string;
   eventName: string;
+}
+
+interface ScanResultView {
+  profile: ScannedParticipant;
+  registered: boolean;
+  attendanceStatus: 'Present' | 'Absent' | 'Not Marked';
+  verificationStatus: VerificationStatus;
+  attendanceEligible: boolean;
 }
 
 /** Attendance is only unlocked when the payment is verified by the Faculty
@@ -41,8 +67,12 @@ export const AttendancePage: React.FC<AttendancePageProps> = ({ eventId, eventNa
   const [clearDialogOpen, setClearDialogOpen] = useState(false);
   const [markAllDialogOpen, setMarkAllDialogOpen] = useState(false);
   const [qrDialogOpen, setQrDialogOpen] = useState(false);
-  const [qrInput, setQrInput] = useState('');
-  const [qrError, setQrError] = useState('');
+  const [qrTab, setQrTab] = useState<'scan' | 'manual'>('scan');
+  const [manualInput, setManualInput] = useState('');
+  const [scanBusy, setScanBusy] = useState(false);
+  const [scanError, setScanError] = useState('');
+  const [scanResult, setScanResult] = useState<ScanResultView | null>(null);
+  const [marking, setMarking] = useState(false);
 
   // Firestore real-time listeners for the coordinator's assigned event only.
   useEffect(() => {
@@ -369,46 +399,78 @@ export const AttendancePage: React.FC<AttendancePageProps> = ({ eventId, eventNa
     }
   }, [eventId, user, viewParticipants, addToast]);
 
-  const handleQRScan = useCallback(async () => {
-    if (!qrInput.trim()) {
-      setQrError('Please enter or scan a QR code');
-      return;
-    }
+  const processScanData = useCallback(
+    async (data: string) => {
+      const participantId = resolveParticipantCode(data);
+      if (!participantId) {
+        setScanError('Invalid QR Code.');
+        setScanResult(null);
+        return;
+      }
+      setScanBusy(true);
+      setScanError('');
+      try {
+        const profile = await getScannedParticipant(participantId, { eventId });
+        if (!profile) {
+          setScanError('Participant not found.');
+          setScanResult(null);
+          return;
+        }
+        const registered = profile.eventIds.includes(eventId);
+        const existing = pendingAttendance[profile.id] || dbAttendance[profile.id];
+        const attendanceStatus = existing
+          ? AttendanceService.normalizeAttendanceStatus(existing.status)
+          : 'Not Marked';
+        const attendanceEligible =
+          registered && profile.verificationStatus === 'Verified' && isVerified(profile.id);
+        setScanResult({
+          profile,
+          registered,
+          attendanceStatus,
+          verificationStatus: profile.verificationStatus,
+          attendanceEligible,
+        });
+      } catch {
+        setScanError('Unable to fetch participant. Please try again.');
+        setScanResult(null);
+      } finally {
+        setScanBusy(false);
+      }
+    },
+    [eventId, pendingAttendance, dbAttendance, isVerified]
+  );
 
-    const data = AttendanceService.decodeQRData(qrInput.trim());
-    if (!data || data.eventId !== eventId) {
-      setQrError('Invalid QR code for this event');
+  const handleManualSearch = useCallback(async () => {
+    if (!manualInput.trim()) {
+      setScanError('Enter a participant or registration ID first.');
       return;
     }
+    await processScanData(manualInput.trim());
+  }, [manualInput, processScanData]);
 
-    const participant = viewParticipants.find((p) => p.participantId === data.participantId);
-    if (!participant) {
-      setQrError('Participant not found in this event');
-      return;
-    }
-    if (participant.verificationStatus !== 'Verified' || !isVerified(data.participantId)) {
-      setQrError('Attendance locked: payment and registration desk verification are required');
-      return;
-    }
-
-    const existing = pendingAttendance[data.participantId] || dbAttendance[data.participantId];
-    if (existing && AttendanceService.normalizeAttendanceStatus(existing.status) === 'Present') {
-      setQrError('Participant already checked in');
-      return;
-    }
-
-    if (!user) return;
-    const ok = await updateAttendance(data.participantId, 'Present');
+  const handleCheckInScanned = useCallback(async () => {
+    if (!scanResult || !scanResult.attendanceEligible || scanResult.attendanceStatus === 'Present') return;
+    setMarking(true);
+    const ok = await updateAttendance(scanResult.profile.id, 'Present');
     if (ok) {
-      setQrInput('');
-      setQrError('');
-      addToast('QR Check-In', 'Participant checked in successfully', 'success');
+      setScanResult((prev) =>
+        prev
+          ? { ...prev, attendanceStatus: 'Present' as const, attendanceEligible: false }
+          : prev
+      );
+      addToast('QR Check-In', 'Attendance marked successfully.', 'success');
     }
-  }, [qrInput, eventId, user, updateAttendance, pendingAttendance, dbAttendance, viewParticipants, addToast, isVerified]);
+    setMarking(false);
+  }, [scanResult, updateAttendance, addToast]);
 
-  const generateQRForParticipant = (participantId: string) => {
-    return AttendanceService.generateQRData(participantId, eventId);
-  };
+  const closeQrDialog = useCallback(() => {
+    setQrDialogOpen(false);
+    setQrTab('scan');
+    setManualInput('');
+    setScanBusy(false);
+    setScanError('');
+    setScanResult(null);
+  }, []);
 
   return (
     <div className="min-h-screen bg-black text-white selection:bg-violet-500/30 selection:text-violet-200">
@@ -481,79 +543,107 @@ export const AttendancePage: React.FC<AttendancePageProps> = ({ eventId, eventNa
       {/* QR Check-In Dialog */}
       {qrDialogOpen && (
         <div className="fixed inset-0 z-[9999] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-md bg-zinc-950 border border-white/20 rounded-3xl p-6 shadow-2xl flex flex-col gap-4">
+          <div className="w-full max-w-2xl bg-zinc-950 border border-white/20 rounded-3xl p-6 shadow-2xl flex flex-col gap-4 max-h-[92vh] overflow-y-auto">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="p-2 rounded-xl bg-cyan-500/20 text-cyan-400">
                   <QrCode className="w-5 h-5" />
                 </div>
-                <h3 className="text-base font-bold font-display text-white">QR Check-In</h3>
+                <div className="flex flex-col min-w-0">
+                  <h3 className="text-base font-bold font-display text-white">QR Check-In</h3>
+                  <span className="text-[10px] text-white/40 truncate">{eventName}</span>
+                </div>
               </div>
               <button
-                onClick={() => { setQrDialogOpen(false); setQrError(''); setQrInput(''); }}
+                onClick={closeQrDialog}
                 className="p-1.5 rounded-lg text-white/50 hover:text-white bg-white/5 hover:bg-white/10 cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <p className="text-xs text-white/60">
-              Scan participant QR code or paste the QR string below to mark them as Present.
-            </p>
-
-            <input
-              type="text"
-              value={qrInput}
-              onChange={(e) => { setQrInput(e.target.value); setQrError(''); }}
-              placeholder="Paste QR code data here..."
-              className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-xs text-white placeholder-white/30 focus:outline-none focus:border-cyan-500/50"
-            />
-
-            {qrError && (
-              <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs">
-                <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
-                <span>{qrError}</span>
-              </div>
-            )}
-
-            <div className="flex items-center justify-end gap-3">
+            {/* Modes: Scanner / Manual Search */}
+            <div className="flex items-center gap-1 p-1 rounded-xl bg-white/5 border border-white/10 w-fit">
               <button
-                onClick={() => { setQrDialogOpen(false); setQrError(''); setQrInput(''); }}
-                className="px-4 py-2 rounded-xl text-white/60 hover:text-white bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-bold cursor-pointer"
+                onClick={() => { setQrTab('scan'); setScanError(''); }}
+                className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                  qrTab === 'scan'
+                    ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'
+                    : 'text-white/50 hover:text-white border border-transparent'
+                }`}
               >
-                Cancel
+                <ScanLine className="w-3.5 h-3.5" />
+                QR Scanner
               </button>
               <button
-                onClick={handleQRScan}
-                className="px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-violet-600 text-white text-xs font-bold cursor-pointer flex items-center gap-2"
+                onClick={() => { setQrTab('manual'); setScanError(''); }}
+                className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                  qrTab === 'manual'
+                    ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'
+                    : 'text-white/50 hover:text-white border border-transparent'
+                }`}
               >
-                <CheckCircle2 className="w-3.5 h-3.5" />
-                <span>Check In</span>
+                <Search className="w-3.5 h-3.5" />
+                Manual Search
               </button>
             </div>
 
-            {/* QR Codes for participants (for testing) */}
-            <details className="mt-2">
-              <summary className="text-[10px] text-white/40 cursor-pointer hover:text-white/60">
-                Show participant QR codes (testing)
-              </summary>
-              <div className="mt-2 max-h-40 overflow-y-auto flex flex-col gap-1">
-                {viewParticipants.slice(0, 10).map((p) => (
-                  <div key={p.participantId} className="flex items-center justify-between px-2 py-1 rounded bg-white/5 text-[9px]">
-                    <span className="text-white/70 truncate max-w-[120px]">{p.participantName}</span>
-                    <button
-                      onClick={() => {
-                        setQrInput(generateQRForParticipant(p.participantId));
-                        setQrError('');
-                      }}
-                      className="text-cyan-400 hover:text-cyan-300 font-bold cursor-pointer"
-                    >
-                      Copy QR
-                    </button>
-                  </div>
-                ))}
+            {qrTab === 'scan' ? (
+              <>
+                <p className="text-[11px] text-white/40">
+                  Point the camera at a participant's QR code. The QR only encodes a unique participant ID — all
+                  details are fetched securely from Firestore after scanning.
+                </p>
+                <QRScanner onResult={processScanData} />
+              </>
+            ) : (
+              <div className="flex flex-col gap-3">
+                <p className="text-[11px] text-white/40">
+                  Enter a participant ID or registration ID to fetch their details and check them in.
+                </p>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={manualInput}
+                    onChange={(e) => { setManualInput(e.target.value); setScanError(''); }}
+                    onKeyDown={(e) => { if (e.key === 'Enter') void handleManualSearch(); }}
+                    placeholder="Participant ID or Registration ID..."
+                    className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-xs text-white placeholder-white/30 focus:outline-none focus:border-cyan-500/50"
+                  />
+                  <button
+                    onClick={() => void handleManualSearch()}
+                    disabled={scanBusy || !manualInput.trim()}
+                    className="px-4 py-3 rounded-xl bg-cyan-600 hover:bg-cyan-700 text-white text-xs font-bold cursor-pointer disabled:opacity-50 flex items-center gap-2"
+                  >
+                    {scanBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
+                    Search
+                  </button>
+                </div>
               </div>
-            </details>
+            )}
+
+            {scanBusy && (
+              <div className="flex items-center gap-2 px-3.5 py-3 rounded-xl bg-white/5 border border-white/10 text-xs text-white/70">
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-cyan-400" />
+                Fetching participant details from Firestore...
+              </div>
+            )}
+
+            {scanError && (
+              <div className="flex items-center gap-2 px-3.5 py-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs">
+                <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                <span>{scanError}</span>
+              </div>
+            )}
+
+            {scanResult && (
+              <ScanResultCard
+                result={scanResult}
+                eventName={eventName}
+                marking={marking}
+                onMarkAttendance={handleCheckInScanned}
+              />
+            )}
           </div>
         </div>
       )}
@@ -628,6 +718,134 @@ const ToastContainerCoordinator: React.FC = () => {
           </div>
         </div>
       ))}
+    </div>
+  );
+};
+
+const VERIFICATION_BADGE: Record<string, { label: string; cls: string }> = {
+  Verified: { label: 'Verified', cls: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' },
+  Rejected: { label: 'Rejected', cls: 'bg-rose-500/20 text-rose-300 border-rose-500/30' },
+  Pending: { label: 'Pending', cls: 'bg-amber-500/20 text-amber-300 border-amber-500/30' },
+};
+
+const ATTENDANCE_BADGE: Record<string, { label: string; cls: string }> = {
+  Present: { label: 'Present', cls: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' },
+  Absent: { label: 'Absent', cls: 'bg-rose-500/20 text-rose-300 border-rose-500/30' },
+  'Not Marked': { label: 'Not Marked', cls: 'bg-white/5 text-white/50 border-white/15' },
+};
+
+const ScanResultRow: React.FC<{ label: string; value: string; valueCls?: string }> = ({ label, value, valueCls }) => (
+  <div className="flex items-center justify-between gap-3 text-xs">
+    <span className="text-white/40 shrink-0">{label}</span>
+    <span className={`text-white/80 text-right truncate ${valueCls || ''}`}>{value}</span>
+  </div>
+);
+
+const ScanResultCard: React.FC<{
+  result: ScanResultView;
+  eventName: string;
+  marking: boolean;
+  onMarkAttendance: () => void;
+}> = ({ result, eventName, marking, onMarkAttendance }) => {
+  const { profile, registered, attendanceStatus, verificationStatus, attendanceEligible } = result;
+  const verifyBadge = VERIFICATION_BADGE[verificationStatus] || VERIFICATION_BADGE.Pending;
+  const attendanceBadge = ATTENDANCE_BADGE[attendanceStatus] || ATTENDANCE_BADGE['Not Marked'];
+  const canMark = attendanceEligible && attendanceStatus !== 'Present' && !marking;
+
+  return (
+    <div className="rounded-2xl border border-white/15 bg-white/[0.03] overflow-hidden">
+      {/* Profile header */}
+      <div className="flex items-center gap-3 p-4 border-b border-white/10">
+        <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-cyan-500 to-violet-600 p-[1px] shrink-0">
+          {profile.profilePicture ? (
+            <img
+              src={profile.profilePicture}
+              alt={profile.fullName}
+              referrerPolicy="no-referrer"
+              className="w-full h-full rounded-[15px] object-cover"
+            />
+          ) : (
+            <div className="w-full h-full bg-zinc-950 rounded-[15px] flex items-center justify-center text-sm font-bold text-cyan-300">
+              {profile.fullName.split(' ').map((n) => n[0]).join('').slice(0, 2)}
+            </div>
+          )}
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-bold text-white truncate">{profile.fullName || 'Participant'}</p>
+          <p className="text-[10px] text-white/40 font-mono truncate">{profile.registrationId || profile.participantId}</p>
+        </div>
+        <div className="flex flex-col items-end gap-1">
+          <span className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold border whitespace-nowrap ${verifyBadge.cls}`}>
+            {verifyBadge.label}
+          </span>
+          <span className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold border whitespace-nowrap ${attendanceBadge.cls}`}>
+            {attendanceBadge.label}
+          </span>
+        </div>
+      </div>
+
+      {/* Details */}
+      <div className="flex flex-col gap-2.5 p-4">
+        <ScanResultRow label="Registration ID" value={profile.registrationId || profile.participantId || '—'} />
+        <ScanResultRow label="Selected Event" value={eventName} />
+        <ScanResultRow
+          label="Verification Status"
+          value={verificationStatus}
+          valueCls={verificationStatus === 'Verified' ? 'text-emerald-400 font-bold' : verificationStatus === 'Rejected' ? 'text-rose-400 font-bold' : 'text-amber-400 font-bold'}
+        />
+        <ScanResultRow
+          label="Attendance Status"
+          value={attendanceStatus}
+          valueCls={attendanceStatus === 'Present' ? 'text-emerald-400 font-bold' : attendanceStatus === 'Absent' ? 'text-rose-400 font-bold' : 'text-white/60'}
+        />
+      </div>
+
+      {/* Rules / messages */}
+      {!registered && (
+        <div className="mx-4 mb-4 px-3.5 py-3 rounded-xl bg-rose-500/10 border border-rose-500/25 text-rose-300 text-xs flex items-start gap-2">
+          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+          <span>This participant is not registered for this event.</span>
+        </div>
+      )}
+      {registered && attendanceStatus === 'Present' && (
+        <div className="mx-4 mb-4 px-3.5 py-3 rounded-xl bg-emerald-500/10 border border-emerald-500/25 text-emerald-300 text-xs flex items-start gap-2">
+          <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
+          <span>Attendance already recorded.</span>
+        </div>
+      )}
+      {registered && attendanceStatus !== 'Present' && !attendanceEligible && (
+        <div className="mx-4 mb-4 px-3.5 py-3 rounded-xl bg-amber-500/10 border border-amber-500/25 text-amber-300 text-xs flex items-start gap-2">
+          <Lock className="w-4 h-4 shrink-0 mt-0.5" />
+          <span>
+            {verificationStatus === 'Verified'
+              ? 'Payment and registration desk verification are required before attendance.'
+              : 'Participant must complete Registration Desk verification before attendance.'}
+          </span>
+        </div>
+      )}
+
+      {/* Action */}
+      <div className="p-4 border-t border-white/10">
+        {registered && attendanceStatus === 'Present' ? (
+          <div className="w-full py-3 rounded-xl bg-emerald-600/15 border border-emerald-500/30 text-emerald-300 text-xs font-bold flex items-center justify-center gap-2">
+            <CheckCircle2 className="w-4 h-4" />
+            Checked In
+          </div>
+        ) : (
+          <button
+            onClick={onMarkAttendance}
+            disabled={!canMark}
+            className={`w-full py-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
+              canMark
+                ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                : 'bg-white/5 text-white/30 cursor-not-allowed'
+            }`}
+          >
+            {marking ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+            Mark Attendance
+          </button>
+        )}
+      </div>
     </div>
   );
 };

@@ -342,6 +342,7 @@ export interface VerificationParticipantRow {
   department: string;
   year_of_study: string;
   register_number: string;
+  profilePicture: string;
   payment_status: string;
   payment_verified: boolean;
   event_ids: string[];
@@ -408,6 +409,7 @@ function mapVerificationParticipant(
     department: data.department || '',
     year_of_study: data.year_of_study || '',
     register_number: data.register_number || '',
+    profilePicture: data.profile_picture || data.photo || '',
     payment_status: regPaymentStatuses[0] || data.payment_status || 'submitted',
     payment_verified: paymentVerified,
     event_ids: eventIds,

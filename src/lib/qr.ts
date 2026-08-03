@@ -607,6 +607,47 @@ export interface QRMatrix {
   modules: boolean[][];
 }
 
+/**
+ * QR payload for participant passes.
+ *
+ * SECURITY: the QR code never stores participant PII (name, email, phone,
+ * verification status, college, department...). It only encodes the unique
+ * participant identifier (Firestore document id). All participant details are
+ * fetched securely from Firestore after a successful scan.
+ *
+ * Supported payload formats (all decode to a bare participant id):
+ *   - <participantId>              (canonical, current)
+ *   - casyum:reg:<participantId>   (legacy prefix)
+ *   - base64 {participantId,...}   (legacy coordinator check-in payload)
+ */
+export const QR_PREFIX = 'casyum:reg:';
+
+export function encodeParticipantQR(participantId: string): string {
+  return String(participantId || '').trim();
+}
+
+export function decodeQRPayload(data: string): string | null {
+  const raw = String(data || '').trim();
+  if (!raw) return null;
+
+  if (raw.startsWith(QR_PREFIX)) {
+    const id = raw.slice(QR_PREFIX.length).trim();
+    return id || null;
+  }
+
+  try {
+    const decoded = atob(raw);
+    if (decoded.startsWith('{')) {
+      const parsed = JSON.parse(decoded) as { participantId?: string };
+      if (parsed && parsed.participantId) return String(parsed.participantId);
+    }
+  } catch {
+    // Not a base64 payload — fall through to treating it as a bare id.
+  }
+
+  return raw;
+}
+
 export function generateQRMatrix(text: string): QRMatrix {
   const utf8 = unescape(encodeURIComponent(text));
   const typeNumber = getTypeNumber(utf8.length);

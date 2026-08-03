@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { QrCode, BadgeCheck, Clock, XCircle } from 'lucide-react';
-import { generateQRMatrix, drawQRToCanvas } from '../lib/qr';
+import { generateQRMatrix, drawQRToCanvas, encodeParticipantQR } from '../lib/qr';
 
 interface ParticipantQRCardProps {
   participantId: string;
@@ -24,12 +24,12 @@ export const ParticipantQRCard: React.FC<ParticipantQRCardProps> = ({
   verifiedAt,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const payload = `casyum:reg:${participantId}`;
+  const payload = encodeParticipantQR(participantId);
 
   useEffect(() => {
     if (!canvasRef.current) return;
     const matrix = generateQRMatrix(payload);
-    drawQRToCanvas(canvasRef.current, matrix, 8, '#111111', '#ffffff');
+    drawQRToCanvas(canvasRef.current, matrix, 9, '#111111', '#ffffff');
   }, [payload]);
 
   const badge = STATUS_BADGE[verificationStatus] || STATUS_BADGE.Pending;
@@ -49,7 +49,7 @@ export const ParticipantQRCard: React.FC<ParticipantQRCardProps> = ({
       </div>
 
       <div className="rounded-xl bg-white p-3">
-        <canvas ref={canvasRef} className="w-40 h-40 block" />
+        <canvas ref={canvasRef} className="w-48 h-48 block" />
       </div>
 
       <div className="w-full flex flex-col items-center gap-1 text-center">

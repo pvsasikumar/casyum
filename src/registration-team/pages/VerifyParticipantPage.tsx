@@ -24,7 +24,9 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { useRegistrationTeam } from '../context/RegistrationTeamContext';
-import { QRScanner } from '../components/QRScanner';
+import { QRScanner } from '../../components/scanner/QRScanner';
+import { decodeQRPayload } from '../../lib/qr';
+import { getScannedParticipant } from '../../services/participantLookupService';
 import {
   verifyParticipant,
   rejectParticipant,
@@ -219,7 +221,11 @@ export const VerifyParticipantPage: React.FC = () => {
   const findById = (id: string): VerificationParticipantRow | null => {
     const clean = id.trim();
     if (!clean) return null;
-    return participants.find((p) => p.id === clean || p.participant_id === clean) || null;
+    return (
+      participants.find(
+        (p) => p.id === clean || p.participant_id === clean || p.registrationId === clean
+      ) || null
+    );
   };
 
   const syncSelected = (id: string) => {
@@ -271,14 +277,59 @@ export const VerifyParticipantPage: React.FC = () => {
     }
   };
 
-  const handleScanResult = (data: string) => {
-    const p = findById(data);
-    if (p) {
-      setScanOpen(false);
-      setSelected(p);
-      addToast('QR Scanned', `${p.full_name} matched.`, 'success');
+  const handleScanResult = async (data: string) => {
+    const participantId = decodeQRPayload(data);
+    if (!participantId) {
+      addToast('Invalid QR Code', 'This QR code is not a valid CASYUM participant code.', 'error');
+      return;
+    }
+    let p = findById(participantId);
+    if (!p) {
+      // Fall back to a direct Firestore fetch if the real-time list is stale.
+      const profile = await getScannedParticipant(participantId).catch(() => null);
+      if (profile) {
+        p = {
+          id: profile.id,
+          participant_id: profile.participantId,
+          full_name: profile.fullName,
+          email: profile.email,
+          phone: profile.phone,
+          college: profile.college,
+          city: profile.city,
+          department: profile.department,
+          year_of_study: profile.yearOfStudy,
+          register_number: profile.registerNumber,
+          profilePicture: profile.profilePicture,
+          payment_status: profile.paymentStatus,
+          payment_verified: profile.paymentVerified,
+          event_ids: profile.eventIds,
+          registrationId: profile.registrationId,
+          eventNames: profile.eventNames,
+          registrationStatus: 'Confirmed',
+          verificationStatus: profile.verificationStatus,
+          verifiedBy: profile.verifiedBy,
+          verifiedByName: profile.verifiedBy,
+          verifiedByUserId: '',
+          verifiedAt: profile.verifiedAt,
+          rejectedBy: '',
+          rejectedByName: '',
+          rejectedByUserId: '',
+          rejectedAt: '',
+          rejectionReason: profile.rejectionReason,
+          verificationRemarks: profile.rejectionReason,
+        };
+      }
+    }
+    if (!p) {
+      addToast('Participant not found', 'No participant matches this QR code.', 'error');
+      return;
+    }
+    setScanOpen(false);
+    setSelected(p);
+    if (p.verificationStatus === 'Verified') {
+      addToast('Participant already verified', `${p.full_name} is already verified at the desk.`, 'warning');
     } else {
-      addToast('Not Found', 'No participant matches this QR code.', 'error');
+      addToast('QR Scanned', `${p.full_name} matched.`, 'success');
     }
   };
 
@@ -530,10 +581,19 @@ export const VerifyParticipantPage: React.FC = () => {
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-violet-600 to-indigo-500 p-[1px]">
-                    <div className="w-full h-full bg-zinc-950 rounded-[15px] flex items-center justify-center text-sm font-bold text-violet-300">
-                      {selected.full_name.split(' ').map((n) => n[0]).join('').slice(0, 2)}
-                    </div>
+                  <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-violet-600 to-indigo-500 p-[1px] shrink-0">
+                    {selected.profilePicture ? (
+                      <img
+                        src={selected.profilePicture}
+                        alt={selected.full_name}
+                        referrerPolicy="no-referrer"
+                        className="w-full h-full rounded-[15px] object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-full bg-zinc-950 rounded-[15px] flex items-center justify-center text-sm font-bold text-violet-300">
+                        {selected.full_name.split(' ').map((n) => n[0]).join('').slice(0, 2)}
+                      </div>
+                    )}
                   </div>
                   <div className="flex flex-col min-w-0">
                     <span className="text-sm font-bold text-white truncate">{selected.full_name}</span>
@@ -705,7 +765,7 @@ export const VerifyParticipantPage: React.FC = () => {
               initial={{ opacity: 0, scale: 0.94, y: 16 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.94, y: 16 }}
-              className="w-full max-w-md bg-zinc-950 border border-white/20 rounded-3xl p-6 shadow-2xl flex flex-col gap-4"
+              className="w-full max-w-2xl bg-zinc-950 border border-white/20 rounded-3xl p-6 shadow-2xl flex flex-col gap-4 max-h-[92vh] overflow-y-auto"
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
@@ -719,7 +779,8 @@ export const VerifyParticipantPage: React.FC = () => {
                 </button>
               </div>
               <p className="text-[11px] text-white/40">
-                Point the camera at the participant's QR code (shown on their dashboard). The QR contains their registration ID.
+                Point the camera at the participant's QR code shown on their dashboard. The QR only encodes a unique
+                participant ID — all details are fetched securely from Firestore after scanning.
               </p>
               <QRScanner onResult={handleScanResult} />
             </motion.div>
