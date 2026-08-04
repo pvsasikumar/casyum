@@ -3,6 +3,7 @@ import {
   getScannedParticipant,
   searchEventParticipant,
   type ScannedParticipant,
+  type RegisteredEventDetail,
 } from './participantLookupService';
 
 /**
@@ -51,7 +52,7 @@ export async function scanForDeskVerification(raw: string): Promise<DeskScanOutc
     return {
       status: 'payment_pending',
       profile,
-      message: 'Payment verification is pending. Registration desk verification is not allowed yet.',
+      message: 'Payment Not Verified. Faculty Coordinator approval is required.',
     };
   }
 
@@ -81,6 +82,8 @@ export interface AttendanceCheck {
   paymentVerified: boolean;
   deskVerified: boolean;
   eligible: boolean;
+  /** Events this participant is registered for (for the "Wrong Event" case). */
+  registeredEvents: RegisteredEventDetail[];
   message: string;
 }
 
@@ -93,6 +96,7 @@ export interface AttendanceCheck {
  * Only then is the participant eligible to be marked present.
  */
 export function buildAttendanceCheck(eventId: string, profile: ScannedParticipant | null): AttendanceCheck {
+  const emptyEvents: RegisteredEventDetail[] = [];
   if (!profile) {
     return {
       profile: null,
@@ -100,19 +104,24 @@ export function buildAttendanceCheck(eventId: string, profile: ScannedParticipan
       paymentVerified: false,
       deskVerified: false,
       eligible: false,
+      registeredEvents: emptyEvents,
       message: 'Participant not found.',
     };
   }
 
   const registered = profile.eventIds.includes(eventId);
   if (!registered) {
+    const registeredNames = profile.registeredEvents.map((e) => e.name).filter(Boolean);
     return {
       profile,
       registered: false,
       paymentVerified: profile.paymentVerified,
       deskVerified: false,
       eligible: false,
-      message: 'This participant is not registered for this event.',
+      registeredEvents: profile.registeredEvents,
+      message: registeredNames.length > 0
+        ? `Wrong Event. Registered for: ${registeredNames.join(', ')}`
+        : 'Wrong Event. This participant is not registered for this event.',
     };
   }
 
@@ -123,7 +132,8 @@ export function buildAttendanceCheck(eventId: string, profile: ScannedParticipan
       paymentVerified: false,
       deskVerified: false,
       eligible: false,
-      message: 'Payment verification is pending. Attendance is not allowed yet.',
+      registeredEvents: profile.registeredEvents,
+      message: 'Payment Not Verified. Attendance is not allowed yet.',
     };
   }
 
@@ -136,7 +146,8 @@ export function buildAttendanceCheck(eventId: string, profile: ScannedParticipan
       paymentVerified: true,
       deskVerified: false,
       eligible: false,
-      message: 'Registration desk verification is pending. Attendance is not allowed yet.',
+      registeredEvents: profile.registeredEvents,
+      message: 'Registration Verification Pending. Please complete verification at the Registration Desk.',
     };
   }
 
@@ -146,6 +157,7 @@ export function buildAttendanceCheck(eventId: string, profile: ScannedParticipan
     paymentVerified: true,
     deskVerified: true,
     eligible: true,
+    registeredEvents: profile.registeredEvents,
     message: 'Participant is eligible for attendance.',
   };
 }
@@ -159,6 +171,7 @@ export async function checkEventAttendance(eventId: string, identifier: string):
       paymentVerified: false,
       deskVerified: false,
       eligible: false,
+      registeredEvents: [],
       message: 'Invalid QR Code.',
     };
   }
@@ -179,6 +192,7 @@ export async function searchEventAttendance(eventId: string, query: string): Pro
       paymentVerified: false,
       deskVerified: false,
       eligible: false,
+      registeredEvents: [],
       message: 'No participant matches this search.',
     };
   }

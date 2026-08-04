@@ -274,7 +274,7 @@ export const VerifyParticipantPage: React.FC = () => {
     if (p.payment_verified !== true) {
       addToast(
         'Payment not verified',
-        'Payment verification is pending. Registration desk verification is not allowed yet.',
+        'Payment Not Verified. Faculty Coordinator approval is required.',
         'error'
       );
       return;
@@ -686,7 +686,7 @@ export const VerifyParticipantPage: React.FC = () => {
                 <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-start gap-2">
                   <ShieldAlert className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
                   <p className="text-xs text-amber-200/90 leading-relaxed">
-                    Payment verification is pending. Registration desk verification is not allowed yet.
+                    Payment Not Verified. Faculty Coordinator approval is required.
                   </p>
                 </div>
               )}

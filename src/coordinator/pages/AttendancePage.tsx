@@ -18,7 +18,7 @@ import { AttendanceService } from '../services/AttendanceService';
 import { useCoordinator } from '../context/CoordinatorContext';
 import { ConfirmationDialog } from '../../admin/components/common/ConfirmationDialog';
 import { QRScanner } from '../../components/scanner/QRScanner';
-import type { ScannedParticipant } from '../../services/participantLookupService';
+import type { ScannedParticipant, RegisteredEventDetail } from '../../services/participantLookupService';
 import {
   checkEventAttendance,
   searchEventAttendance,
@@ -46,6 +46,7 @@ interface ScanResultView {
   attendanceStatus: 'Present' | 'Absent' | 'Not Marked';
   verificationStatus: VerificationStatus;
   attendanceEligible: boolean;
+  registeredEvents: RegisteredEventDetail[];
   message: string;
 }
 
@@ -423,6 +424,7 @@ export const AttendancePage: React.FC<AttendancePageProps> = ({ eventId, eventNa
         attendanceStatus,
         verificationStatus: profile.verificationStatus,
         attendanceEligible: check.eligible,
+        registeredEvents: check.registeredEvents || [],
         message: check.message,
       });
     },
@@ -767,7 +769,16 @@ const ScanResultCard: React.FC<{
   marking: boolean;
   onMarkAttendance: () => void;
 }> = ({ result, eventName, marking, onMarkAttendance }) => {
-  const { profile, registered, paymentVerified, deskVerified, attendanceStatus, verificationStatus, attendanceEligible } = result;
+  const {
+    profile,
+    registered,
+    paymentVerified,
+    deskVerified,
+    attendanceStatus,
+    verificationStatus,
+    attendanceEligible,
+    registeredEvents,
+  } = result;
   const verifyBadge = VERIFICATION_BADGE[verificationStatus] || VERIFICATION_BADGE.Pending;
   const attendanceBadge = ATTENDANCE_BADGE[attendanceStatus] || ATTENDANCE_BADGE['Not Marked'];
   const canMark = attendanceEligible && attendanceStatus !== 'Present' && !marking;
@@ -824,7 +835,23 @@ const ScanResultCard: React.FC<{
       {!registered && (
         <div className="mx-4 mb-4 px-3.5 py-3 rounded-xl bg-rose-500/10 border border-rose-500/25 text-rose-300 text-xs flex items-start gap-2">
           <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-          <span>This participant is not registered for this event.</span>
+          <div className="flex flex-col gap-1">
+            <span className="font-bold">Wrong Event — this QR is for a different event.</span>
+            <span>Participant is scanned against: {eventName}</span>
+            {registeredEvents.length > 0 && (
+              <div className="mt-1 flex flex-col gap-1.5">
+                <span className="text-white/60">Registered for:</span>
+                {registeredEvents.map((e) => (
+                  <span key={e.eventId} className="flex items-center gap-1.5 text-emerald-300">
+                    <CheckCircle2 className="w-3 h-3 shrink-0" />
+                    {e.name}
+                    {e.date || e.time ? ` — ${[e.date, e.time].filter(Boolean).join(' · ')}` : ''}
+                    {e.venue ? ` (${e.venue})` : ''}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
       {registered && attendanceStatus === 'Present' && (
@@ -838,9 +865,9 @@ const ScanResultCard: React.FC<{
           <Lock className="w-4 h-4 shrink-0 mt-0.5" />
           <span>
             {!paymentVerified
-              ? 'Payment verification is pending. Attendance is not allowed yet.'
+              ? 'Payment Not Verified. Attendance is not allowed yet.'
               : !deskVerified
-                ? 'Registration desk verification is pending. Attendance is not allowed yet.'
+                ? 'Registration Verification Pending. Please complete verification at the Registration Desk.'
                 : 'Participant must complete verification before attendance.'}
           </span>
         </div>

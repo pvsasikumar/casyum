@@ -13,6 +13,7 @@ import {
 } from 'firebase/firestore';
 import { getDb } from '../firebase/firestore';
 import { now, nextSequence } from './helpers';
+import { listRegistrationsByParticipant } from './registrationService';
 
 export type VerificationStatus = 'Pending' | 'Verified' | 'Rejected';
 
@@ -109,6 +110,28 @@ export async function verifyParticipant(
   const existing = snap.data();
   if (existing.verificationStatus === 'Verified') {
     return { message: 'Participant is already verified.' };
+  }
+
+  // Defense in depth: the Registration Desk must not verify a participant whose
+  // payment has not been cleared by the Faculty Coordinator. Enforced server-side
+  // here in addition to the UI gate. When the registrations cannot be read (legacy
+  // data / rules), the gate falls back to the participant doc's payment flags.
+  const registrations = await listRegistrationsByParticipant(participantId).catch(() => null);
+  if (registrations && registrations.length > 0) {
+    const statuses = registrations
+      .map((r) => String(r.payment_status || '').toLowerCase())
+      .filter((s) => s !== '');
+    const allPaymentVerified =
+      statuses.length > 0 &&
+      statuses.every((s) => s === 'verified' || s === 'not_required');
+    if (!allPaymentVerified) {
+      throw new Error('Payment Not Verified. Faculty Coordinator approval is required before desk verification.');
+    }
+  } else {
+    const docPaymentStatus = String(existing.payment_status || '').toLowerCase();
+    if (docPaymentStatus === 'rejected' || docPaymentStatus === 'pending') {
+      throw new Error('Payment Not Verified. Faculty Coordinator approval is required before desk verification.');
+    }
   }
 
   const verifiedAt = now();

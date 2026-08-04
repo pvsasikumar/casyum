@@ -5,6 +5,14 @@ import { listRegistrationsByParticipant, listRegistrationsByEvent } from './regi
 import type { RegistrationRow } from './eventService';
 import type { VerificationStatus } from './verificationService';
 
+export interface RegisteredEventDetail {
+  eventId: string;
+  name: string;
+  date: string;
+  time: string;
+  venue: string;
+}
+
 /**
  * Full participant profile assembled from Firestore after a QR scan / manual
  * lookup. Never reconstructed from the QR payload itself.
@@ -35,6 +43,7 @@ export interface ScannedParticipant {
   eventIds: string[];
   eventNames: string[];
   registrationIds: string[];
+  registeredEvents: RegisteredEventDetail[];
 }
 
 function regEventIds(reg: RegistrationRow): string[] {
@@ -42,7 +51,11 @@ function regEventIds(reg: RegistrationRow): string[] {
   return [String(reg.event_id || '')].filter(Boolean);
 }
 
-function regEventNames(reg: RegistrationRow, events: Record<string, string>): string[] {
+interface EventDetailMap {
+  [eventId: string]: { name: string; date: string; time: string; venue: string };
+}
+
+function regEventNames(reg: RegistrationRow, events: EventDetailMap): string[] {
   const names: string[] = [];
   const sel = reg.selectedEvents;
   if (sel?.regular && Array.isArray(sel.regular)) {
@@ -52,19 +65,27 @@ function regEventNames(reg: RegistrationRow, events: Record<string, string>): st
   }
   if (sel?.gaming?.eventName) names.push(String(sel.gaming.eventName));
   if (names.length > 0) return names;
-  const byEventId = regEventIds(reg).map((id) => events[id]).filter(Boolean);
+  const byEventId = regEventIds(reg).map((id) => events[id]?.name).filter(Boolean);
   if (byEventId.length > 0) return byEventId;
   return [];
 }
 
-async function fetchEventNames(regs: RegistrationRow[]): Promise<Record<string, string>> {
+async function fetchEventDetails(regs: RegistrationRow[]): Promise<EventDetailMap> {
   const db = getDb();
   const ids = [...new Set(regs.flatMap((r) => regEventIds(r)).filter(Boolean))];
-  const map: Record<string, string> = {};
+  const map: EventDetailMap = {};
   await Promise.all(
     ids.map(async (id) => {
       const snap = await getDoc(doc(db, 'events', id));
-      if (snap.exists()) map[id] = String(snap.data().name || '');
+      if (snap.exists()) {
+        const d = snap.data();
+        map[id] = {
+          name: String(d.name || ''),
+          date: String(d.event_date || ''),
+          time: String(d.time || ''),
+          venue: String(d.venue || ''),
+        };
+      }
     })
   );
   return map;
@@ -74,7 +95,7 @@ function buildProfile(
   id: string,
   data: Record<string, any>,
   regs: RegistrationRow[],
-  eventNames: Record<string, string>
+  eventDetails: EventDetailMap
 ): ScannedParticipant {
   const regPaymentStatuses = regs
     .map((r) => String(r.payment_status || '').toLowerCase())
@@ -121,8 +142,16 @@ function buildProfile(
     registrationVerifiedAt: regs[0]?.registration_verified_at || '',
     attendanceEligibility: registrationVerificationStatus === 'verified' && paymentVerified,
     eventIds: [...new Set(regs.flatMap((r) => regEventIds(r)))],
-    eventNames: [...new Set(regs.flatMap((r) => regEventNames(r, eventNames)))],
+    eventNames: [...new Set(regs.flatMap((r) => regEventNames(r, eventDetails)))],
     registrationIds: regs.map((r) => r.registration_id),
+    registeredEvents: [...new Set(regs.flatMap((r) => regEventIds(r)))]
+      .map((eventId) => {
+        const detail = eventDetails[eventId];
+        return detail
+          ? { eventId, name: detail.name, date: detail.date, time: detail.time, venue: detail.venue }
+          : null;
+      })
+      .filter((d): d is RegisteredEventDetail => d !== null),
   };
 }
 
@@ -167,9 +196,9 @@ export async function getScannedParticipant(
   } else {
     regs = await listRegistrationsByParticipant(id).catch(() => [] as RegistrationRow[]);
   }
-  const eventNames = await fetchEventNames(regs);
+  const eventDetails = await fetchEventDetails(regs);
 
-  return buildProfile(id, data, regs, eventNames);
+  return buildProfile(id, data, regs, eventDetails);
 }
 
 /**

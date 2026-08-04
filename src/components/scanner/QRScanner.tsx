@@ -11,6 +11,7 @@ import {
   Video,
   RefreshCcw,
   AlertTriangle,
+  CheckCheck,
 } from 'lucide-react';
 
 interface QRScannerProps {
@@ -52,14 +53,19 @@ export const QRScanner: React.FC<QRScannerProps> = ({ onResult, autoStart = fals
   const containerRef = useRef<HTMLDivElement>(null);
   const instanceRef = useRef<Html5Qrcode | null>(null);
   const generationRef = useRef(0);
+  const mountedRef = useRef(true);
   const lastCodeRef = useRef('');
   const lastCodeTimeRef = useRef(0);
   const processingRef = useRef(false);
+  const pausedRef = useRef(false);
+  const activeDeviceIdRef = useRef('');
   const onResultRef = useRef(onResult);
+  const startCameraRef = useRef<(deviceId?: string) => Promise<void>>(async () => {});
 
   const [cameras, setCameras] = useState<ScannerCamera[]>([]);
   const [activeDeviceId, setActiveDeviceId] = useState('');
   const [status, setStatus] = useState<'idle' | 'starting' | 'active' | 'error'>('idle');
+  const [paused, setPaused] = useState(false);
   const [error, setError] = useState('');
   const [torchOn, setTorchOn] = useState(false);
   const [torchSupported, setTorchSupported] = useState(false);
@@ -70,12 +76,33 @@ export const QRScanner: React.FC<QRScannerProps> = ({ onResult, autoStart = fals
   }, [onResult]);
 
   useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
     processingRef.current = processing;
     // Once the pending request finishes, allow the same QR to be scanned again
     // (used after a failed verification attempt).
     if (!processing) {
       lastCodeRef.current = '';
       lastCodeTimeRef.current = 0;
+      // Restart scanning after the parent finished handling the decoded code.
+      if (pausedRef.current) {
+        pausedRef.current = false;
+        if (mountedRef.current) setPaused(false);
+        const instance = instanceRef.current;
+        if (instance) {
+          try {
+            instance.resume();
+          } catch {
+            // Engine is gone (e.g. camera released) — restart from scratch.
+            void startCameraRef.current(activeDeviceIdRef.current || undefined);
+          }
+        }
+      }
     }
   }, [processing]);
 
@@ -108,7 +135,11 @@ export const QRScanner: React.FC<QRScannerProps> = ({ onResult, autoStart = fals
 
   const readActiveDeviceId = useCallback(() => {
     const track = readActiveTrack();
-    if (track) setActiveDeviceId(track.getSettings().deviceId || '');
+    if (track) {
+      const id = track.getSettings().deviceId || '';
+      activeDeviceIdRef.current = id;
+      setActiveDeviceId(id);
+    }
   }, [readActiveTrack]);
 
   const refreshTorchSupport = useCallback(() => {
@@ -132,10 +163,38 @@ export const QRScanner: React.FC<QRScannerProps> = ({ onResult, autoStart = fals
     const now = Date.now();
     const isDuplicate =
       decodedText === lastCodeRef.current && now - lastCodeTimeRef.current < DUPLICATE_WINDOW_MS;
-    if (!isDuplicate) {
-      lastCodeRef.current = decodedText;
-      lastCodeTimeRef.current = now;
-      onResultRef.current(decodedText);
+    if (isDuplicate) return;
+    lastCodeRef.current = decodedText;
+    lastCodeTimeRef.current = now;
+
+    // Pause the engine immediately so the same code cannot re-fire while the
+    // parent processes the result. Scanning resumes automatically once the
+    // `processing` prop flips back to false (or via the Resume button).
+    pausedRef.current = true;
+    if (mountedRef.current) setPaused(true);
+    const instance = instanceRef.current;
+    if (instance) {
+      try {
+        instance.pause();
+      } catch {
+        // engine may already be gone — nothing to pause
+      }
+    }
+
+    onResultRef.current(decodedText);
+  }, []);
+
+  const resumeScanning = useCallback(async () => {
+    if (!pausedRef.current) return;
+    pausedRef.current = false;
+    if (mountedRef.current) setPaused(false);
+    const instance = instanceRef.current;
+    if (!instance) return;
+    try {
+      instance.resume();
+    } catch {
+      // Engine is gone (e.g. camera released) — restart from scratch.
+      await startCameraRef.current(activeDeviceIdRef.current || undefined);
     }
   }, []);
 
@@ -158,6 +217,18 @@ export const QRScanner: React.FC<QRScannerProps> = ({ onResult, autoStart = fals
       setError('');
       setTorchOn(false);
       setTorchSupported(false);
+
+      // getMediaDeviceSupport is unavailable on insecure origins / non-supporting
+      // browsers (e.g. WebView without camera permission grants).
+      const mediaSupported =
+        typeof navigator !== 'undefined' &&
+        !!navigator.mediaDevices &&
+        typeof navigator.mediaDevices.getUserMedia === 'function';
+      if (!mediaSupported) {
+        setError('Camera scanning is not supported in this browser. Use manual search instead.');
+        setStatus('error');
+        return;
+      }
 
       const instance = getOrCreateInstance();
       if (!instance) {
@@ -206,6 +277,12 @@ export const QRScanner: React.FC<QRScannerProps> = ({ onResult, autoStart = fals
     [getOrCreateInstance, handleDecoded, readActiveDeviceId, refreshTorchSupport, refreshCameras, errorMessage]
   );
 
+  // Keep a stable reference to startCamera so earlier callbacks (resume,
+  // processing) can trigger a restart without circular declaration ordering.
+  useEffect(() => {
+    startCameraRef.current = startCamera;
+  }, [startCamera]);
+
   // Keep the engine-rendered video filling the square frame (object-fit cover).
   useEffect(() => {
     if (status !== 'active') return;
@@ -221,6 +298,7 @@ export const QRScanner: React.FC<QRScannerProps> = ({ onResult, autoStart = fals
     const gen = ++generationRef.current;
     const instance = instanceRef.current;
     if (!instance) return;
+    pausedRef.current = false;
     try {
       await instance.stop();
     } catch {
@@ -229,6 +307,7 @@ export const QRScanner: React.FC<QRScannerProps> = ({ onResult, autoStart = fals
     if (generationRef.current === gen) {
       setTorchOn(false);
       setTorchSupported(false);
+      setPaused(false);
       setStatus('idle');
     }
   }, []);
@@ -405,7 +484,24 @@ export const QRScanner: React.FC<QRScannerProps> = ({ onResult, autoStart = fals
           </div>
         )}
 
-        {isActive && (
+        {paused && (
+          <div className="absolute inset-0 bg-zinc-950/80 backdrop-blur-sm flex flex-col items-center justify-center gap-3 z-10">
+            <div className="w-14 h-14 rounded-2xl bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center">
+              <CheckCheck className="w-6 h-6 text-emerald-400" />
+            </div>
+            <p className="text-xs font-bold text-white/80">QR captured</p>
+            <p className="text-[10px] text-white/50">Processing scan result...</p>
+            <button
+              onClick={() => void resumeScanning()}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-700 text-white text-[11px] font-bold cursor-pointer"
+            >
+              <RefreshCcw className="w-3 h-3" />
+              Resume Scanning
+            </button>
+          </div>
+        )}
+
+        {isActive && !paused && (
           <>
             {/* Scan guide */}
             <div className="absolute inset-0 pointer-events-none flex items-center justify-center">

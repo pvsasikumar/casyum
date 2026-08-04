@@ -490,9 +490,11 @@ export const ParticipantDashboard: React.FC = () => {
                 participantId={participant.participant_id || participant.id}
                 registrationId={participant.registered_events?.[0]?.registration_id}
                 participantName={participant.full_name}
+                paymentStatus={participant.registered_events?.[0]?.payment_status}
                 verificationStatus={participant.verificationStatus || 'Pending'}
                 verifiedBy={participant.verifiedBy}
                 verifiedAt={participant.verifiedAt}
+                devSelfCheck={import.meta.env.DEV && searchParams.get('qrdiag') === '1'}
               />
 
               {openEvents.length === 0 ? (
