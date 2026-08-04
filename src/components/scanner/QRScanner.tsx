@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import jsQR from 'jsqr';
+import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { Html5Qrcode } from 'html5-qrcode';
 import { motion } from 'framer-motion';
 import {
   Camera,
@@ -21,30 +21,49 @@ interface QRScannerProps {
   processing?: boolean;
 }
 
+/** Decode rate (frames per second) handed to the ZXing engine. */
+const SCAN_FPS = 10;
+/** Square scan box size in pixels handed to the ZXing engine. */
+const SCAN_BOX_SIZE = 300;
+/** Ignore re-decodes of the same code within this window. */
+const DUPLICATE_WINDOW_MS = 3000;
+
+interface ScannerCamera {
+  id: string;
+  label: string;
+}
+
 /**
  * Professional camera-based QR scanner used by the Registration Team and Event
  * Coordinators. Provides camera selection, front/rear switching, flashlight
  * (when supported) and fully automatic code detection — no manual capture.
  *
+ * Detection is delegated to the `html5-qrcode` ZXing engine, which runs inside
+ * a web worker instead of the old main-thread canvas + jsQR loop (far more
+ * reliable and battery-friendly on mobile).
+ *
  * The camera (and therefore the permission prompt) is only ever requested when
  * the user explicitly clicks a Start/Scan button — never on mount.
  */
 export const QRScanner: React.FC<QRScannerProps> = ({ onResult, autoStart = false, processing = false }) => {
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const rafRef = useRef(0);
-  const runningRef = useRef(false);
+  // html5-qrcode resolves its container by id, so give every instance a unique
+  // one (StrictMode-safe even when several scanners mount over a session).
+  const containerId = useId().replace(/:/g, '');
+  const containerRef = useRef<HTMLDivElement>(null);
+  const instanceRef = useRef<Html5Qrcode | null>(null);
+  const generationRef = useRef(0);
   const lastCodeRef = useRef('');
   const lastCodeTimeRef = useRef(0);
   const processingRef = useRef(false);
   const onResultRef = useRef(onResult);
 
-  const [cameras, setCameras] = useState<MediaDeviceInfo[]>([]);
+  const [cameras, setCameras] = useState<ScannerCamera[]>([]);
   const [activeDeviceId, setActiveDeviceId] = useState('');
   const [status, setStatus] = useState<'idle' | 'starting' | 'active' | 'error'>('idle');
   const [error, setError] = useState('');
   const [torchOn, setTorchOn] = useState(false);
   const [torchSupported, setTorchSupported] = useState(false);
+  const [torchToggling, setTorchToggling] = useState(false);
 
   useEffect(() => {
     onResultRef.current = onResult;
@@ -60,128 +79,159 @@ export const QRScanner: React.FC<QRScannerProps> = ({ onResult, autoStart = fals
     }
   }, [processing]);
 
-  const scanLoop = useCallback(() => {
-    if (!runningRef.current) return;
-    // Suppress decoding while a verification request is being processed so the
-    // same QR cannot be re-submitted repeatedly.
-    if (processingRef.current) {
-      rafRef.current = requestAnimationFrame(scanLoop);
-      return;
+  const getOrCreateInstance = useCallback((): Html5Qrcode | null => {
+    if (instanceRef.current) return instanceRef.current;
+    if (!containerRef.current) return null;
+    const instance = new Html5Qrcode(containerId);
+    instanceRef.current = instance;
+    return instance;
+  }, [containerId]);
+
+  const refreshCameras = useCallback(async () => {
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      setCameras(
+        devices.filter((d) => d.kind === 'videoinput').map((d) => ({ id: d.deviceId, label: d.label }))
+      );
+    } catch {
+      // ignore — camera list is a convenience, not a blocker
     }
-    const video = videoRef.current;
-    if (!video || video.readyState < 2 || video.videoWidth === 0) {
-      rafRef.current = requestAnimationFrame(scanLoop);
-      return;
-    }
-    const width = video.videoWidth;
-    const height = video.videoHeight;
-    const canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
-    const ctx = canvas.getContext('2d', { willReadFrequently: true });
-    if (ctx) {
-      ctx.drawImage(video, 0, 0, width, height);
-      const imageData = ctx.getImageData(0, 0, width, height);
-      const code = jsQR(imageData.data, width, height, { inversionAttempts: 'attemptBoth' });
-      if (code && code.data) {
-        const now = Date.now();
-        const isDuplicate = code.data === lastCodeRef.current && now - lastCodeTimeRef.current < 3000;
-        if (!isDuplicate) {
-          lastCodeRef.current = code.data;
-          lastCodeTimeRef.current = now;
-          onResultRef.current(code.data);
-        }
-      }
-    }
-    if (runningRef.current) rafRef.current = requestAnimationFrame(scanLoop);
   }, []);
 
-  const scanLoopRef = useRef(scanLoop);
-  useEffect(() => {
-    scanLoopRef.current = scanLoop;
-  }, [scanLoop]);
-
-  const stopCamera = useCallback(() => {
-    runningRef.current = false;
-    cancelAnimationFrame(rafRef.current);
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((t) => t.stop());
-      streamRef.current = null;
+  const readActiveTrack = useCallback((): MediaStreamTrack | null => {
+    const video = containerRef.current?.querySelector('video');
+    if (video && video.srcObject instanceof MediaStream) {
+      return video.srcObject.getVideoTracks()[0] || null;
     }
-    setTorchOn(false);
-    setTorchSupported(false);
-    setStatus('idle');
+    return null;
   }, []);
 
-  const refreshTorchSupport = useCallback((stream: MediaStream) => {
-    const track = stream.getVideoTracks()[0];
-    if (!track) return;
+  const readActiveDeviceId = useCallback(() => {
+    const track = readActiveTrack();
+    if (track) setActiveDeviceId(track.getSettings().deviceId || '');
+  }, [readActiveTrack]);
+
+  const refreshTorchSupport = useCallback(() => {
+    const track = readActiveTrack();
+    if (!track) {
+      setTorchSupported(false);
+      return;
+    }
     try {
       const caps = track.getCapabilities() as MediaTrackCapabilities & { torch?: boolean };
       setTorchSupported(typeof caps.torch === 'boolean');
     } catch {
       setTorchSupported(false);
     }
+  }, [readActiveTrack]);
+
+  const handleDecoded = useCallback((decodedText: string) => {
+    // Suppress decoding while a verification request is being processed so the
+    // same QR cannot be re-submitted repeatedly.
+    if (processingRef.current) return;
+    const now = Date.now();
+    const isDuplicate =
+      decodedText === lastCodeRef.current && now - lastCodeTimeRef.current < DUPLICATE_WINDOW_MS;
+    if (!isDuplicate) {
+      lastCodeRef.current = decodedText;
+      lastCodeTimeRef.current = now;
+      onResultRef.current(decodedText);
+    }
   }, []);
 
-  const refreshCameras = useCallback(async () => {
-    try {
-      const devices = await navigator.mediaDevices.enumerateDevices();
-      setCameras(devices.filter((d) => d.kind === 'videoinput'));
-    } catch {
-      // ignore — camera list is a convenience, not a blocker
+  const errorMessage = useCallback((err: any): string => {
+    const name = err?.name || '';
+    const message = String(err?.message || '').toLowerCase();
+    if (name === 'NotAllowedError' || name === 'SecurityError' || message.includes('permission')) {
+      return 'Camera permission required.';
     }
+    if (name === 'NotFoundError' || message.includes('not found') || message.includes('no camera')) {
+      return 'No camera found on this device.';
+    }
+    return 'Camera access is unavailable. Use manual search instead.';
   }, []);
 
   const startCamera = useCallback(
     async (deviceId?: string) => {
+      const gen = ++generationRef.current;
       setStatus('starting');
       setError('');
-      runningRef.current = false;
-      cancelAnimationFrame(rafRef.current);
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach((t) => t.stop());
-        streamRef.current = null;
-      }
       setTorchOn(false);
       setTorchSupported(false);
 
+      const instance = getOrCreateInstance();
+      if (!instance) {
+        setError('Camera access is unavailable. Use manual search instead.');
+        setStatus('error');
+        return;
+      }
+
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          audio: false,
-          video: deviceId
-            ? { deviceId: { exact: deviceId }, width: { ideal: 1280 }, height: { ideal: 720 } }
-            : { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
-        });
-        streamRef.current = stream;
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          await videoRef.current.play().catch(() => {});
+        if (instance.isScanning) {
+          await instance.stop();
         }
-        const track = stream.getVideoTracks()[0];
-        if (track) {
-          setActiveDeviceId(track.getSettings().deviceId || '');
+        try {
+          instance.clear();
+        } catch {
+          // container may already be clean
         }
-        refreshTorchSupport(stream);
-        runningRef.current = true;
+        if (generationRef.current !== gen) return;
+
+        const cameraConfig: string | MediaTrackConstraints = deviceId || { facingMode: 'environment' };
+        await instance.start(
+          cameraConfig,
+          {
+            fps: SCAN_FPS,
+            qrbox: SCAN_BOX_SIZE,
+            aspectRatio: 1,
+          },
+          (decodedText) => handleDecoded(decodedText),
+          () => {
+            // Per-frame decode misses are expected while scanning — ignore.
+          }
+        );
+
+        if (generationRef.current !== gen) return;
+        readActiveDeviceId();
+        refreshTorchSupport();
         setStatus('active');
-        rafRef.current = requestAnimationFrame(() => scanLoopRef.current());
         // Device labels are only populated after permission is granted.
         void refreshCameras();
       } catch (err: any) {
-        const name = err?.name || '';
-        const message =
-          name === 'NotAllowedError' || name === 'SecurityError'
-            ? 'Camera permission required.'
-            : name === 'NotFoundError'
-              ? 'No camera found on this device.'
-              : 'Camera access is unavailable. Use manual search instead.';
-        setError(message);
+        if (generationRef.current !== gen) return;
+        setError(errorMessage(err));
         setStatus('error');
       }
     },
-    [refreshTorchSupport, refreshCameras]
+    [getOrCreateInstance, handleDecoded, readActiveDeviceId, refreshTorchSupport, refreshCameras, errorMessage]
   );
+
+  // Keep the engine-rendered video filling the square frame (object-fit cover).
+  useEffect(() => {
+    if (status !== 'active') return;
+    const video = containerRef.current?.querySelector('video');
+    if (video) {
+      video.style.objectFit = 'cover';
+      video.style.width = '100%';
+      video.style.height = '100%';
+    }
+  }, [status]);
+
+  const stopCamera = useCallback(async () => {
+    const gen = ++generationRef.current;
+    const instance = instanceRef.current;
+    if (!instance) return;
+    try {
+      await instance.stop();
+    } catch {
+      // not scanning
+    }
+    if (generationRef.current === gen) {
+      setTorchOn(false);
+      setTorchSupported(false);
+      setStatus('idle');
+    }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -195,29 +245,49 @@ export const QRScanner: React.FC<QRScannerProps> = ({ onResult, autoStart = fals
     void init();
     return () => {
       cancelled = true;
-      stopCamera();
+      // Discard any in-flight start and release the camera + DOM created by
+      // the engine. Runs on unmount and StrictMode's double-invoked effects.
+      generationRef.current += 1;
+      const instance = instanceRef.current;
+      instanceRef.current = null;
+      if (instance) {
+        void instance
+          .stop()
+          .catch(() => undefined)
+          .then(() => {
+            try {
+              instance.clear();
+            } catch {
+              // container may already be gone
+            }
+          });
+      }
     };
-  }, [autoStart, startCamera, stopCamera, refreshCameras]);
+  }, [autoStart, startCamera, refreshCameras]);
 
   const switchCamera = useCallback(() => {
     if (cameras.length < 2) return;
-    const currentIndex = cameras.findIndex((c) => c.deviceId === activeDeviceId);
+    const currentIndex = cameras.findIndex((c) => c.id === activeDeviceId);
     const next = cameras[(currentIndex + 1) % cameras.length];
-    void startCamera(next.deviceId);
+    void startCamera(next.id);
   }, [cameras, activeDeviceId, startCamera]);
 
   const toggleTorch = useCallback(async () => {
-    const track = streamRef.current?.getVideoTracks()[0];
-    if (!track) return;
+    if (torchToggling) return;
+    const instance = instanceRef.current;
+    if (!instance || !instance.isScanning) return;
+    setTorchToggling(true);
     try {
-      await track.applyConstraints({
+      await instance.applyVideoConstraints({
         advanced: [{ torch: !torchOn } as MediaTrackConstraintSet],
       });
       setTorchOn((prev) => !prev);
     } catch {
       // flashlight not available on this track
+    } finally {
+      setTorchToggling(false);
     }
-  }, [torchOn]);
+  }, [torchOn, torchToggling]);
 
   const isActive = status === 'active';
   const hasMultipleCameras = cameras.length > 1;
@@ -253,7 +323,7 @@ export const QRScanner: React.FC<QRScannerProps> = ({ onResult, autoStart = fals
             className="flex-1 min-w-[140px] bg-zinc-900 border border-white/10 rounded-xl px-3 py-2 text-[11px] text-white/80 focus:outline-none focus:border-violet-500/50 cursor-pointer"
           >
             {cameras.map((cam) => (
-              <option key={cam.deviceId} value={cam.deviceId} className="bg-zinc-900">
+              <option key={cam.id} value={cam.id} className="bg-zinc-900">
                 {cam.label || `Camera ${cameras.indexOf(cam) + 1}`}
               </option>
             ))}
@@ -275,6 +345,7 @@ export const QRScanner: React.FC<QRScannerProps> = ({ onResult, autoStart = fals
         {torchSupported && isActive && (
           <button
             onClick={() => void toggleTorch()}
+            disabled={torchToggling}
             title="Toggle Flashlight"
             className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border text-[11px] font-bold cursor-pointer transition-all ${
               torchOn
@@ -288,7 +359,7 @@ export const QRScanner: React.FC<QRScannerProps> = ({ onResult, autoStart = fals
         )}
 
         <button
-          onClick={() => (isActive ? stopCamera() : void startCamera())}
+          onClick={() => (isActive ? void stopCamera() : void startCamera())}
           className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-[11px] font-bold cursor-pointer transition-all ${
             isActive
               ? 'bg-rose-600/20 hover:bg-rose-600/30 border border-rose-500/30 text-rose-300'
@@ -308,7 +379,7 @@ export const QRScanner: React.FC<QRScannerProps> = ({ onResult, autoStart = fals
 
       {/* Camera preview */}
       <div className="relative w-full aspect-square rounded-3xl overflow-hidden border border-white/15 bg-black">
-        <video ref={videoRef} playsInline muted autoPlay className="w-full h-full object-cover" />
+        <div id={containerId} ref={containerRef} className="absolute inset-0" />
 
         {!isActive && (
           <div className="absolute inset-0 bg-zinc-950/80 backdrop-blur-sm flex flex-col items-center justify-center gap-3">
