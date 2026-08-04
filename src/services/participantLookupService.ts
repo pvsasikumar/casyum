@@ -181,11 +181,22 @@ export async function getScannedParticipant(
 
   const db = getDb();
   const id = await resolveParticipantKey(db, key);
-  if (!id) return null;
+  if (!id) {
+    console.warn('[CASYUM:SCAN] lookup did not resolve to a participant', { identifier: key });
+    return null;
+  }
 
   const snap = await getDoc(doc(db, 'participants', id));
-  if (!snap.exists()) return null;
+  if (!snap.exists()) {
+    console.warn('[CASYUM:SCAN] participant document not found', { collection: 'participants', docId: id, identifier: key });
+    return null;
+  }
   const data = snap.data();
+  console.info('[CASYUM:SCAN] participant document found', {
+    collection: 'participants',
+    docId: id,
+    participantId: id,
+  });
 
   let regs: RegistrationRow[] = [];
   if (opts?.eventId) {
@@ -197,6 +208,17 @@ export async function getScannedParticipant(
     regs = await listRegistrationsByParticipant(id).catch(() => [] as RegistrationRow[]);
   }
   const eventDetails = await fetchEventDetails(regs);
+
+  const paymentStatuses = regs
+    .map((r) => String(r.payment_status || '').toLowerCase())
+    .filter((s) => s !== '');
+  console.info('[CASYUM:SCAN] registrations loaded', {
+    participantId: id,
+    count: regs.length,
+    registrationIds: regs.map((r) => r.registration_id),
+    paymentStatuses,
+    paymentVerified: regs.length > 0 && paymentStatuses.length > 0 && paymentStatuses.every((s) => s === 'verified'),
+  });
 
   return buildProfile(id, data, regs, eventDetails);
 }
@@ -229,41 +251,165 @@ export async function searchEventParticipant(
   return getScannedParticipant(participantId, { eventId });
 }
 
+interface RegistrationMatch {
+  participantId: string;
+  registrationId: string;
+  collection: string;
+  docId: string;
+  field: string;
+}
+
+/** Field + collection pairs searched when resolving a registration token. */
+const REGISTRATION_LOOKUP_CANDIDATES: Array<[string, string]> = [
+  ['registrations', 'registration_id'],
+  ['registrations', 'registrationId'],
+  ['eventRegistrations', 'registration_id'],
+  ['eventRegistrations', 'registrationId'],
+];
+
+function readParticipantId(data: Record<string, any>): string {
+  return String(data.participant_id || data.participant_user_id || '').trim();
+}
+
+function readStoredRegistrationId(data: Record<string, any>, docId: string): string {
+  return String(data.registration_id || data.registrationId || docId || '');
+}
+
+async function findRegistrationByField(
+  db: Firestore,
+  field: string,
+  value: string
+): Promise<RegistrationMatch | null> {
+  for (const [collectionName, candidateField] of REGISTRATION_LOOKUP_CANDIDATES) {
+    if (candidateField !== field) continue;
+    try {
+      const snap = await getDocs(query(collection(db, collectionName), where(field, '==', value)));
+      const match = snap.docs.find((d) => readParticipantId(d.data()).length > 0);
+      if (match) {
+        const data = match.data();
+        const participantId = readParticipantId(data);
+        const storedRegistrationId = readStoredRegistrationId(data, match.id);
+        console.info('[CASYUM:SCAN] registration matched by field', {
+          collection: collectionName,
+          field,
+          value,
+          docId: match.id,
+          participantId,
+          storedRegistrationId,
+        });
+        return { participantId, registrationId: storedRegistrationId, collection: collectionName, docId: match.id, field };
+      }
+    } catch (err: any) {
+      // Rules or a missing index may reject this query — try the next pair.
+      console.warn('[CASYUM:SCAN] registration query skipped', {
+        collection: collectionName,
+        field,
+        value,
+        error: String(err?.message || err),
+      });
+    }
+  }
+  return null;
+}
+
+async function findRegistrationByFieldInAllCollections(
+  db: Firestore,
+  key: string
+): Promise<RegistrationMatch | null> {
+  const fields = [...new Set(REGISTRATION_LOOKUP_CANDIDATES.map(([, field]) => field))];
+  for (const field of fields) {
+    const match = await findRegistrationByField(db, field, key);
+    if (match) return match;
+  }
+  return null;
+}
+
+async function findRegistrationByDocId(db: Firestore, key: string): Promise<RegistrationMatch | null> {
+  for (const collectionName of ['registrations', 'eventRegistrations']) {
+    try {
+      const snap = await getDoc(doc(db, collectionName, key));
+      if (snap.exists()) {
+        const data = snap.data();
+        const participantId = readParticipantId(data);
+        if (participantId) {
+          const storedRegistrationId = readStoredRegistrationId(data, snap.id);
+          console.info('[CASYUM:SCAN] registration matched by document id', {
+            collection: collectionName,
+            docId: snap.id,
+            participantId,
+            storedRegistrationId,
+          });
+          return {
+            participantId,
+            registrationId: storedRegistrationId,
+            collection: collectionName,
+            docId: snap.id,
+            field: 'documentId',
+          };
+        }
+      }
+    } catch (err: any) {
+      console.warn('[CASYUM:SCAN] registration document read skipped', {
+        collection: collectionName,
+        docId: key,
+        error: String(err?.message || err),
+      });
+    }
+  }
+  return null;
+}
+
 async function resolveParticipantKey(db: Firestore, key: string): Promise<string | null> {
-  const direct = await getDoc(doc(db, 'participants', key));  if (direct.exists()) return key;
+  console.info('[CASYUM:SCAN] resolving participant key', { key });
 
+  // 1. The scanned token may itself be a participant document id.
   try {
-    const byRegId = await getDocs(
-      query(collection(db, 'registrations'), where('registration_id', '==', key), where('participant_id', '!=', ''))
-    );
-    const first = byRegId.docs.find((d) => {
-      const pid = String(d.data().participant_id || '');
-      return pid.length > 0;
+    const direct = await getDoc(doc(db, 'participants', key));
+    if (direct.exists()) {
+      console.info('[CASYUM:SCAN] resolved directly as participant document id', { participantId: key });
+      return key;
+    }
+  } catch (err: any) {
+    console.warn('[CASYUM:SCAN] participant document read skipped', {
+      docId: key,
+      error: String(err?.message || err),
     });
-    if (first) return String(first.data().participant_id || '');
-  } catch {
-    // rules may restrict this lookup — continue to next fallback
   }
 
-  try {
-    const byLegacyRegId = await getDocs(
-      query(collection(db, 'eventRegistrations'), where('registration_id', '==', key))
-    );
-    const legacy = byLegacyRegId.docs.find((d) => String(d.data().participant_id || '').length > 0);
-    if (legacy) return String(legacy.data().participant_id || '');
-  } catch {
-    // rules may restrict this lookup — continue to next fallback
+  // 2. The scanned token may be a registration document id (e.g. REG-22).
+  const byDocId = await findRegistrationByDocId(db, key);
+  if (byDocId) return byDocId.participantId;
+
+  // 3. Match the token against the stored registration-id fields in both the
+  //    `registrations` (legacy) and `eventRegistrations` (canonical) collections,
+  //    trying both the snake_case and camelCase field names.
+  const byField = await findRegistrationByFieldInAllCollections(db, key);
+  if (byField) return byField.participantId;
+
+  // 4. Case-insensitive fallback for REG- tokens (Firestore equality is
+  //    case-sensitive, but the parser already canonicalizes the prefix).
+  if (/^reg-/i.test(key)) {
+    const upperKey = key.toUpperCase();
+    if (upperKey !== key) {
+      const byUpper = await findRegistrationByFieldInAllCollections(db, upperKey);
+      if (byUpper) return byUpper.participantId;
+    }
   }
 
+  // 5. Legacy fallback: the scanned token may itself be a participant id.
   try {
     const byParticipantId = await getDocs(
       query(collection(db, 'registrations'), where('participant_id', '==', key))
     );
-    const byPid = byParticipantId.docs.find((d) => String(d.data().participant_id || '').length > 0);
-    if (byPid) return String(byPid.data().participant_id || '');
-  } catch {
-    // rules may restrict this lookup — ignore
+    const byPid = byParticipantId.docs.find((d) => readParticipantId(d.data()).length > 0);
+    if (byPid) return readParticipantId(byPid.data());
+  } catch (err: any) {
+    console.warn('[CASYUM:SCAN] participant-id query skipped', {
+      key,
+      error: String(err?.message || err),
+    });
   }
 
+  console.warn('[CASYUM:SCAN] no registration or participant matched the token', { key });
   return null;
 }

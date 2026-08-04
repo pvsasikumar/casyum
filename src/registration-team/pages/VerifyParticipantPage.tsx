@@ -173,6 +173,7 @@ export const VerifyParticipantPage: React.FC = () => {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [scanOpen, setScanOpen] = useState(false);
   const [scanBusy, setScanBusy] = useState(false);
+  const [scanResult, setScanResult] = useState<{ type: 'success' | 'error' | 'warning'; title: string; message: string } | null>(null);
   const [manualToken, setManualToken] = useState('');
 
   const verifier = useMemo(
@@ -324,31 +325,86 @@ export const VerifyParticipantPage: React.FC = () => {
 
   const handleScanResult = async (data: string) => {
     setScanBusy(true);
+    setScanResult(null);
     try {
       const outcome = await scanForDeskVerification(data);
-      if (outcome.status === 'invalid' || outcome.status === 'not_found') {
-        addToast('Invalid QR Code', outcome.message, 'error');
+      if (outcome.status === 'invalid') {
+        setScanResult({ type: 'error', title: 'Invalid QR Code', message: outcome.message });
         return;
       }
+      if (outcome.status === 'not_found') {
+        setScanResult({
+          type: 'error',
+          title: 'Participant Registration Not Found',
+          message: outcome.message,
+        });
+        return;
+      }
+
       const profile = outcome.profile;
-      let p = findById(profile.participantId) || findById(profile.registrationId);
+      const participantId = profile.participantId;
+      let p = findById(participantId) || findById(profile.registrationId);
       if (!p) {
         // The real-time list may be stale — assemble from the fresh profile.
         p = rowFromProfile(profile);
       }
-      setScanOpen(false);
-      setSelected(p);
-      if (outcome.status === 'already_verified') {
-        addToast('Participant already verified', outcome.message, 'warning');
-      } else if (outcome.status === 'payment_pending') {
+
+      if (outcome.status === 'payment_pending') {
+        setScanOpen(false);
+        setSelected(p);
         addToast('Payment pending', outcome.message, 'warning');
-      } else if (outcome.status === 'already_rejected') {
-        addToast('Participant was rejected', outcome.message, 'warning');
-      } else {
-        addToast('QR Scanned', `${p.full_name} matched.`, 'success');
+        return;
       }
-    } catch {
-      addToast('Error', 'Unable to fetch participant. Please try again.', 'error');
+
+      if (outcome.status === 'already_rejected') {
+        setScanOpen(false);
+        setSelected(p);
+        addToast('Participant was rejected', outcome.message, 'warning');
+        return;
+      }
+
+      if (outcome.status === 'already_verified') {
+        setScanOpen(false);
+        setSelected(p);
+        addToast('Registration Verified', outcome.message, 'success');
+        return;
+      }
+
+      // Payment verified and desk verification still pending — complete the
+      // Registration Team verification now and report the result.
+      try {
+        const res = await verifyParticipant(participantId, verifier);
+        await syncRegistrationDeskVerification(participantId, 'verified', verifier);
+        const verifiedRow: VerificationParticipantRow = {
+          ...p,
+          verificationStatus: 'Verified',
+          verifiedByName: verifier.name,
+          verifiedByUserId: verifier.userId,
+          verifiedAt: new Date().toISOString(),
+        };
+        setScanOpen(false);
+        setSelected(verifiedRow);
+        addToast('Registration Verified', res.message || 'Registration Verified', 'success');
+        console.info('[CASYUM:SCAN] verification update result', {
+          participantId,
+          status: 'verified',
+          message: res.message,
+        });
+      } catch (err: any) {
+        console.error('[CASYUM:SCAN] verification update failed', {
+          participantId,
+          error: String(err?.message || err),
+        });
+        setScanOpen(false);
+        setSelected(p);
+        addToast('Error', err?.message || 'Failed to complete registration verification.', 'error');
+      }
+    } catch (err: any) {
+      console.error('[CASYUM:SCAN] scan handler error', {
+        raw: data,
+        error: String(err?.message || err),
+      });
+      addToast('Error', err?.message || 'Unable to fetch participant. Please try again.', 'error');
     } finally {
       setScanBusy(false);
     }
@@ -376,7 +432,7 @@ export const VerifyParticipantPage: React.FC = () => {
             </p>
           </div>
           <button
-            onClick={() => setScanOpen(true)}
+            onClick={() => { setScanOpen(true); setScanResult(null); }}
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-violet-600/20 hover:bg-violet-600/30 border border-violet-500/30 text-violet-300 text-xs font-bold cursor-pointer transition-all"
           >
             <ScanLine className="w-3.5 h-3.5" />
@@ -810,7 +866,7 @@ export const VerifyParticipantPage: React.FC = () => {
                   <h3 className="text-base font-bold font-display text-white">Scan Participant QR</h3>
                 </div>
                 <button
-                  onClick={() => { setScanOpen(false); setScanBusy(false); setManualToken(''); }}
+                  onClick={() => { setScanOpen(false); setScanBusy(false); setScanResult(null); setManualToken(''); }}
                   className="p-1.5 rounded-lg text-white/50 hover:text-white bg-white/5 hover:bg-white/10 cursor-pointer"
                 >
                   <X className="w-4 h-4" />
@@ -822,6 +878,32 @@ export const VerifyParticipantPage: React.FC = () => {
               </p>
               <QRScanner onResult={handleScanResult} processing={scanBusy} />
 
+              {scanResult && (
+                <div
+                  className={`flex items-start gap-2.5 px-3.5 py-3 rounded-xl border ${
+                    scanResult.type === 'success'
+                      ? 'bg-emerald-500/10 border-emerald-500/30'
+                      : scanResult.type === 'warning'
+                        ? 'bg-amber-500/10 border-amber-500/30'
+                        : 'bg-rose-500/10 border-rose-500/30'
+                  }`}
+                >
+                  {scanResult.type === 'success' ? (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                  ) : scanResult.type === 'warning' ? (
+                    <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                  ) : (
+                    <XCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-xs font-bold ${scanResult.type === 'success' ? 'text-emerald-300' : scanResult.type === 'warning' ? 'text-amber-300' : 'text-rose-300'}`}>
+                      {scanResult.title}
+                    </p>
+                    <p className="text-[10px] text-white/50 mt-0.5 leading-relaxed">{scanResult.message}</p>
+                  </div>
+                </div>
+              )}
+
               <div className="flex flex-col gap-2 border-t border-white/10 pt-4">
                 <p className="text-[10px] text-white/40">
                   Camera unavailable? Enter the registration ID printed on the participant's pass instead.
@@ -830,9 +912,9 @@ export const VerifyParticipantPage: React.FC = () => {
                   <input
                     type="text"
                     value={manualToken}
-                    onChange={(e) => setManualToken(e.target.value)}
+                    onChange={(e) => { setManualToken(e.target.value); setScanResult(null); }}
                     onKeyDown={(e) => { if (e.key === 'Enter') handleManualLookup(); }}
-                    placeholder="e.g. REG-2026-000123"
+                    placeholder="e.g. REG-22"
                     className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white placeholder-white/30 focus:outline-none focus:border-violet-500/50"
                   />
                   <button

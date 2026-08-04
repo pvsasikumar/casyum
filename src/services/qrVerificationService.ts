@@ -34,8 +34,11 @@ export type DeskScanOutcome =
  *   4. the participant is not already verified/rejected at the desk.
  */
 export async function scanForDeskVerification(raw: string): Promise<DeskScanOutcome> {
+  console.info('[CASYUM:SCAN] raw decoded QR value', { raw });
   const id = decodeQRPayload(raw);
+  console.info('[CASYUM:SCAN] normalized registration id', { id });
   if (!id) {
+    console.warn('[CASYUM:SCAN] invalid QR payload', { raw });
     return {
       status: 'invalid',
       profile: null,
@@ -43,10 +46,26 @@ export async function scanForDeskVerification(raw: string): Promise<DeskScanOutc
     };
   }
 
-  const profile = await getScannedParticipant(id).catch(() => null);
+  const profile = await getScannedParticipant(id).catch((err: any) => {
+    console.error('[CASYUM:SCAN] participant lookup failed', {
+      id,
+      error: String(err?.message || err),
+    });
+    return null;
+  });
   if (!profile) {
+    console.warn('[CASYUM:SCAN] participant registration not found', { id });
     return { status: 'not_found', profile: null, message: 'No participant matches this QR code.' };
   }
+
+  console.info('[CASYUM:SCAN] participant profile resolved', {
+    participantId: profile.participantId,
+    registrationId: profile.registrationId,
+    paymentStatus: profile.paymentStatus,
+    paymentVerified: profile.paymentVerified,
+    verificationStatus: profile.verificationStatus,
+    registrationVerificationStatus: profile.registrationVerificationStatus,
+  });
 
   if (!profile.paymentVerified) {
     return {

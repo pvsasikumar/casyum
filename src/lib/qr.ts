@@ -631,6 +631,23 @@ export const QR_URI_PREFIX = 'casyum://checkin/';
 const REG_PREFIX_LEN = QR_PREFIX.length;
 const URI_PREFIX_LEN = QR_URI_PREFIX.length;
 
+/**
+ * Normalize a registration/participant identifier extracted from a QR payload
+ * or pasted token.
+ *
+ * CASYUM registration ids are of the form `REG-<number>` with NO fixed digit
+ * count and NO year embedded (e.g. `REG-22`, `REG-23`, `REG-24`). The id is
+ * never padded, re-formatted or re-generated — only surrounding whitespace is
+ * trimmed and a lower/mixed-case `REG-` prefix is canonicalized to uppercase
+ * so the value matches what is stored in Firestore (the stored ids are never
+ * rewritten).
+ */
+export function normalizeRegistrationId(id: string): string {
+  const trimmed = String(id || '').trim();
+  if (!trimmed) return '';
+  return /^reg-/i.test(trimmed) ? trimmed.replace(/^reg-/i, 'REG-') : trimmed;
+}
+
 export function encodeParticipantQR(identifier: string): string {
   const id = String(identifier || '').trim();
   if (!id) return '';
@@ -648,25 +665,25 @@ export function decodeQRPayload(data: string): string | null {
 
   if (lower.startsWith('casyum:reg:')) {
     const id = raw.slice(REG_PREFIX_LEN).trim();
-    return id || null;
+    return normalizeRegistrationId(id) || null;
   }
 
   if (lower.startsWith('casyum://checkin/')) {
     const id = raw.slice(URI_PREFIX_LEN).trim();
-    return id || null;
+    return normalizeRegistrationId(id) || null;
   }
 
   try {
     const decoded = atob(raw);
     if (decoded.startsWith('{')) {
       const parsed = JSON.parse(decoded) as { participantId?: string };
-      if (parsed && parsed.participantId) return String(parsed.participantId);
+      if (parsed && parsed.participantId) return normalizeRegistrationId(String(parsed.participantId));
     }
   } catch {
     // Not a base64 payload — fall through to treating it as a bare id.
   }
 
-  return raw;
+  return normalizeRegistrationId(raw);
 }
 
 export function generateQRMatrix(text: string): QRMatrix {
