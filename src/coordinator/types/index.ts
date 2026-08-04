@@ -2,6 +2,7 @@ export interface CoordinatorAttendanceRecord {
   attendanceId: string;
   eventId: string;
   participantId: string;
+  casyumId?: string;
   coordinatorId: string;
   status: 'Present' | 'Absent';
   checkInTime: string | null;
@@ -25,6 +26,7 @@ export type VerificationStatus = 'Pending' | 'Verified' | 'Rejected';
 export interface EventParticipant {
   registrationId: string;
   participantId: string;
+  casyumId?: string;
   participantName: string;
   college: string;
   city: string;

@@ -20,6 +20,7 @@ export interface RegisteredEventDetail {
 export interface ScannedParticipant {
   id: string;
   participantId: string;
+  casyumId: string;
   fullName: string;
   email: string;
   phone: string;
@@ -121,6 +122,7 @@ function buildProfile(
   return {
     id,
     participantId: id,
+    casyumId: String(data.casyum_id || ''),
     fullName: data.full_name || '',
     email: data.email || '',
     phone: data.phone || '',
@@ -164,15 +166,38 @@ export function resolveParticipantCode(data: string): string | null {
 }
 
 /**
+ * Resolve a CASYUM id (`CAS-01`) to the participant document id via the
+ * `casyum_id` field: `participants where casyum_id == "CAS-01"`. The scanned
+ * value is never used as a document id for this path.
+ */
+async function resolveByCasyumId(db: Firestore, casyumId: string): Promise<string | null> {
+  const id = String(casyumId || '').trim().toUpperCase();
+  if (!/^CAS-\d+$/i.test(id)) return null;
+  try {
+    const snap = await getDocs(query(collection(db, 'participants'), where('casyum_id', '==', id)));
+    if (snap.empty) return null;
+    return snap.docs[0].id;
+  } catch (err: any) {
+    console.warn('[CASYUM:SCAN] casyum_id query skipped', {
+      casyumId: id,
+      error: String(err?.message || err),
+    });
+    return null;
+  }
+}
+
+/**
  * Fetch a participant's full profile from Firestore by its unique identifier.
- * The identifier may be a participant document id, a registration id, or the
- * content decoded from a CASYUM QR code.
+ * The identifier may be a CASYUM id / participant document id, a registration
+ * id, or the content decoded from a CASYUM QR code.
  *
- * Participant-id QR payloads (`CASYUM:PARTICIPANT:<participantId>`) are resolved
- * directly against `participants/<participantId>` and never routed through a
- * registration lookup. Registration tokens are only searched for when the
- * decoded payload is confirmed to be a registration id (legacy `CASYUM:REG:` /
- * `casyum:reg:` / `REG-*` codes).
+ * Participant-id QR payloads (`CASYUM:PARTICIPANT:<casyumId>`) are resolved
+ * against the `casyum_id` field of the `participants` collection
+ * (`participants where casyum_id == "CAS-01"`) — never as a document id — with
+ * a legacy fallback to `participants/<casyumId>` so QRs printed before the
+ * CASYUM id system keep working. Registration tokens are only searched for
+ * when the decoded payload is confirmed to be a registration id (legacy
+ * `CASYUM:REG:` / `casyum:reg:` / `REG-*` codes).
  *
  * When `eventId` is provided the registration lookup is scoped to that event
  * only (required by Firestore rules: coordinators may only read registrations
@@ -189,9 +214,24 @@ export async function getScannedParticipant(
 
   const participantId = decodeParticipantQR(key);
   const isParticipantCode = participantId !== null;
-  const resolvedId = isParticipantCode
-    ? participantId
-    : await resolveParticipantKey(db, key);
+  let resolvedId: string | null = null;
+
+  if (isParticipantCode) {
+    // Canonical path: the payload suffix is a CASYUM id (`CAS-01`) resolved via
+    // the `casyum_id` field query. Fall back to the document id only for
+    // legacy QRs that encoded the raw participant id.
+    resolvedId = await resolveByCasyumId(db, participantId);
+    if (!resolvedId) {
+      const direct = await getDoc(doc(db, 'participants', participantId)).catch(() => null);
+      if (direct?.exists()) resolvedId = participantId;
+    }
+  } else if (/^CAS-\d+$/i.test(key)) {
+    // Manual entry of a bare CASYUM id (e.g. typed into the desk search box).
+    resolvedId = (await resolveByCasyumId(db, key)) || (await resolveParticipantKey(db, key));
+  } else {
+    resolvedId = await resolveParticipantKey(db, key);
+  }
+
   if (!resolvedId) {
     console.warn('[CASYUM:SCAN] lookup did not resolve to a participant', {
       identifier: key,

@@ -7,6 +7,7 @@ export type CertificateType = 'Participation' | 'Winner' | 'Coordinator' | 'Volu
 
 export interface Participant {
   id: string;
+  casyumId?: string;
   name: string;
   photo: string;
   college: string;

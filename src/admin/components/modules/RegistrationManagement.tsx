@@ -12,10 +12,12 @@ import {
   ChevronLeft,
   ChevronRight,
   ShieldAlert,
+  Loader2,
 } from 'lucide-react';
 import { useAdmin } from '../../context/AdminContext';
 import { ParticipantDrawer } from './ParticipantDrawer';
 import { exportToCSV } from '../../utils/exportUtils';
+import { migrateMissingCasyumIds } from '../../../services/casyumIdMigration';
 
 export const RegistrationManagement: React.FC = () => {
   const {
@@ -26,6 +28,8 @@ export const RegistrationManagement: React.FC = () => {
     bulkDeleteParticipants,
     bulkApprovePayments,
     addRegistration,
+    refreshParticipants,
+    addToast,
     selectedParticipant,
     setSelectedParticipant,
   } = useAdmin();
@@ -38,6 +42,8 @@ export const RegistrationManagement: React.FC = () => {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [repairOpen, setRepairOpen] = useState(false);
+  const [repairing, setRepairing] = useState(false);
 
   // Form state for manual registration modal (payment data is not fabricated:
   // payments are captured and reviewed through the per-event payment flow).
@@ -72,7 +78,8 @@ export const RegistrationManagement: React.FC = () => {
           p.registerNumber.toLowerCase().includes(search.toLowerCase()) ||
           p.college.toLowerCase().includes(search.toLowerCase()) ||
           p.city.toLowerCase().includes(search.toLowerCase()) ||
-          p.transactionId.toLowerCase().includes(search.toLowerCase());
+          p.transactionId.toLowerCase().includes(search.toLowerCase()) ||
+          (p.casyumId || '').toLowerCase().includes(search.toLowerCase());
 
         const matchesStatus = statusFilter === 'All' || p.paymentStatus === statusFilter;
         const matchesCollege = collegeFilter === 'All' || p.college === collegeFilter;
@@ -143,6 +150,26 @@ export const RegistrationManagement: React.FC = () => {
     }
   };
 
+  const handleRepairCasyumIds = async () => {
+    setRepairing(true);
+    try {
+      const result = await migrateMissingCasyumIds();
+      await refreshParticipants();
+      setRepairOpen(false);
+      addToast(
+        'CASYUM IDs Synced',
+        result.assigned > 0
+          ? `Assigned ${result.assigned} new CASYUM id${result.assigned === 1 ? '' : 's'}. ${result.alreadyAssigned} participant${result.alreadyAssigned === 1 ? '' : 's'} already had one.`
+          : `All ${result.total} participant${result.total === 1 ? '' : 's'} already have CASYUM ids.`,
+        'success'
+      );
+    } catch (err: any) {
+      addToast('CASYUM ID Repair Failed', err?.message || 'Unable to repair CASYUM ids.', 'error');
+    } finally {
+      setRepairing(false);
+    }
+  };
+
   return (
     <div className="flex flex-col gap-6 select-none pb-12">
       {/* Header & Main Controls */}
@@ -157,6 +184,14 @@ export const RegistrationManagement: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-3">
+          <button
+            onClick={() => setRepairOpen(true)}
+            className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white/80 hover:text-white text-xs font-bold transition-all cursor-pointer flex items-center gap-2"
+            title="Assign a unique CASYUM id to any participant missing one"
+          >
+            <ShieldAlert className="w-3.5 h-3.5" />
+            <span>Sync CASYUM IDs</span>
+          </button>
           <button
             onClick={handleBulkExport}
             className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white/80 hover:text-white text-xs font-bold transition-all cursor-pointer flex items-center gap-2"
@@ -334,7 +369,15 @@ export const RegistrationManagement: React.FC = () => {
                                 </span>
                               )}
                             </span>
-                            <span className="text-[10px] text-white/40">{p.id} · {p.registerNumber}</span>
+                            <span className="text-[10px] text-white/40">
+                              {p.casyumId ? (
+                                <span className="font-mono font-bold text-violet-300">{p.casyumId}</span>
+                              ) : (
+                                <span className="text-white/30">CAS —</span>
+                              )}
+                              {' · '}
+                              {p.id} · {p.registerNumber}
+                            </span>
                           </div>
                         </div>
                       </td>
@@ -447,6 +490,39 @@ export const RegistrationManagement: React.FC = () => {
           participant={selectedParticipant}
           onClose={() => setSelectedParticipant(null)}
         />
+      )}
+
+      {/* Sync CASYUM IDs Modal */}
+      {repairOpen && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-zinc-950 border border-white/20 rounded-3xl p-6 shadow-2xl flex flex-col gap-4">
+            <h3 className="text-lg font-bold font-display text-white">Sync CASYUM IDs</h3>
+            <p className="text-xs text-white/60 leading-relaxed">
+              Assigns a unique sequential CASYUM id (e.g. <span className="font-mono text-violet-300">CAS-01</span>) to every
+              participant that does not have one. Existing ids are never changed or overwritten, the sequence continues
+              from the highest existing number, and running this again is safe — it will simply report nothing to do.
+            </p>
+            <div className="flex justify-end gap-2 mt-1">
+              <button
+                type="button"
+                onClick={() => setRepairOpen(false)}
+                disabled={repairing}
+                className="px-4 py-2 rounded-xl text-white/60 hover:text-white disabled:opacity-40 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleRepairCasyumIds()}
+                disabled={repairing}
+                className="px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-700 text-white font-bold disabled:opacity-50 cursor-pointer flex items-center gap-2"
+              >
+                {repairing && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                {repairing ? 'Syncing…' : 'Sync CASYUM IDs'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Add Participant Modal */}

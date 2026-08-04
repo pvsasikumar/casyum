@@ -357,6 +357,7 @@ export async function listParticipantVerifications(): Promise<VerificationRecord
 export interface VerificationParticipantRow {
   id: string;
   participant_id: string;
+  casyumId: string;
   full_name: string;
   email: string;
   phone: string;
@@ -424,6 +425,7 @@ function mapVerificationParticipant(
   return {
     id,
     participant_id: id,
+    casyumId: String(data.casyum_id || ''),
     full_name: data.full_name || '',
     email: data.email || '',
     phone: data.phone || '',

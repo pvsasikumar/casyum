@@ -488,6 +488,7 @@ export const ParticipantDashboard: React.FC = () => {
 
               <ParticipantQRCard
                 participantId={participant.participant_id || participant.id}
+                casyumId={participant.casyum_id}
                 registrationId={participant.registered_events?.[0]?.registration_id}
                 participantName={participant.full_name}
                 paymentStatus={participant.registered_events?.[0]?.payment_status}

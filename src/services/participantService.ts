@@ -24,6 +24,7 @@ import {
 } from './registrationService';
 import { mapEventDoc } from './eventService';
 import { nextSequence, now } from './helpers';
+import { createParticipantWithCasyumId } from './casyumIdService';
 import {
   isGamingEvent,
   calculateRegistrationFee,
@@ -60,6 +61,7 @@ function mapParticipantRow(
   return {
     participant_id: record.id,
     id: record.id,
+    casyum_id: record.casyum_id || '',
     full_name: record.full_name,
     email: record.email || '',
     phone: record.phone || '',
@@ -455,7 +457,6 @@ export async function register(data: {
   if (!data.full_name || !data.email) {
     throw new Error('Name and email are required.');
   }
-  const db = getDb();
   const participantId = `part-${String(await nextSequence('participants'))}`;
   const record: ParticipantRecord = {
     id: participantId,
@@ -476,7 +477,8 @@ export async function register(data: {
     payment_amount: 0,
     event_ids: [],
   };
-  await setDoc(doc(db, 'participants', participantId), record);
+  // Create the participant document and mint its unique CASYUM id atomically.
+  await createParticipantWithCasyumId(participantId, record);
 
   const eventIds = (data.event_ids || []).map(String);
   for (const eventId of eventIds) {

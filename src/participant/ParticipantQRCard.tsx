@@ -6,6 +6,7 @@ import { decodeQRCImage, type QRDiagResult } from '../lib/qrDiag';
 
 interface ParticipantQRCardProps {
   participantId: string;
+  casyumId?: string;
   registrationId?: string;
   participantName: string;
   /** Raw payment_status for the registration backing this pass. */
@@ -78,6 +79,7 @@ const LockedPassPlaceholder: React.FC<{ rejected: boolean }> = ({ rejected }) =>
 
 export const ParticipantQRCard: React.FC<ParticipantQRCardProps> = ({
   participantId,
+  casyumId,
   registrationId,
   participantName,
   paymentStatus,
@@ -94,11 +96,13 @@ export const ParticipantQRCard: React.FC<ParticipantQRCardProps> = ({
   const paymentVerified = isPaymentVerified(paymentStatus);
   const paymentRejected = isPaymentRejected(paymentStatus);
 
-  // The QR encodes the participant's unique participant id
-  // (`CASYUM:PARTICIPANT:<participantId>`) — never participant PII, event
-  // objects or React state. The id is resolved to the full profile
-  // server-side after scanning.
-  const payload = encodeParticipantQR(participantId);
+  // The QR encodes the participant's unique CASYUM id
+  // (`CASYUM:PARTICIPANT:CAS-01`) — never participant PII, event objects or
+  // React state. The id is resolved to the full profile server-side after
+  // scanning via `participants where casyum_id == "CAS-01"`. Participants
+  // created before the CASYUM id system fall back to their participant id so
+  // their pass keeps working.
+  const payload = encodeParticipantQR(casyumId || participantId);
 
   // Dev-only self-check: re-decode the rendered QR with an independent decoder
   // (ZXing via html5-qrcode) and compare the decoded value to the token it
@@ -108,7 +112,7 @@ export const ParticipantQRCard: React.FC<ParticipantQRCardProps> = ({
     const canvas = canvasRef.current;
     if (!canvas) return;
     let cancelled = false;
-    decodeQRCImage(canvas, diagContainerId, participantId).then((result) => {
+    decodeQRCImage(canvas, diagContainerId, casyumId || participantId).then((result) => {
       if (cancelled) return;
       setDiag(result);
       if (import.meta.env.DEV) {
@@ -118,7 +122,7 @@ export const ParticipantQRCard: React.FC<ParticipantQRCardProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [devSelfCheck, paymentVerified, participantId, diagContainerId]);
+  }, [devSelfCheck, paymentVerified, casyumId, participantId, diagContainerId]);
 
   const downloadQR = useCallback(() => {
     const canvas = canvasRef.current;
@@ -128,13 +132,13 @@ export const ParticipantQRCard: React.FC<ParticipantQRCardProps> = ({
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `casyum-pass-${registrationId || participantId}.png`;
+      link.download = `casyum-pass-${casyumId || registrationId || participantId}.png`;
       document.body.appendChild(link);
       link.click();
       link.remove();
       URL.revokeObjectURL(url);
     }, 'image/png');
-  }, [participantId, registrationId]);
+  }, [casyumId, registrationId, participantId]);
 
   const badge = (() => {
     if (!paymentVerified) {
@@ -230,6 +234,11 @@ export const ParticipantQRCard: React.FC<ParticipantQRCardProps> = ({
 
       <div className="w-full flex flex-col items-center gap-1 text-center">
         <span className="text-sm font-bold text-white truncate max-w-full">{participantName}</span>
+        {casyumId && (
+          <span className="px-2 py-0.5 rounded-md bg-violet-500/15 border border-violet-500/30 text-[10px] font-bold font-mono text-violet-300 tracking-wide">
+            CASYUM ID {casyumId}
+          </span>
+        )}
         <span className="text-[10px] text-white/40 font-mono">{registrationId || participantId}</span>
         <span className={`text-[10px] mt-1 ${!paymentVerified ? (paymentRejected ? 'text-rose-400' : 'text-amber-400') : verificationStatus === 'Verified' ? 'text-emerald-400' : verificationStatus === 'Rejected' ? 'text-rose-400' : 'text-amber-400'}`}>
           {statusLine}

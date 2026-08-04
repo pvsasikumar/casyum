@@ -302,5 +302,14 @@ service cloud.firestore {
     match /counters/{key} {
       allow read, write: if isSignedIn();
     }
+
+    // The CASYUM id counter document (`systemCounters/participantCounter`) is
+    // read and incremented atomically inside the same transaction that creates
+    // a participant document, so signed-in participants and admins must be able
+    // to touch it. It only ever stores a single integer (`current`) — never
+    // participant data — mirroring the existing `/counters/{key}` rule.
+    match /systemCounters/{key} {
+      allow read, write: if isSignedIn();
+    }
   }
 }

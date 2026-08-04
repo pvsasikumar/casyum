@@ -128,6 +128,7 @@ function rowFromProfile(profile: ScannedParticipant): VerificationParticipantRow
   return {
     id: profile.id,
     participant_id: profile.participantId,
+    casyumId: profile.casyumId,
     full_name: profile.fullName,
     email: profile.email,
     phone: profile.phone,
@@ -214,21 +215,22 @@ export const VerifyParticipantPage: React.FC = () => {
     return participants
       .filter((p) => p.payment_verified === true)
       .filter((p) => {
-        if (
-          q &&
-          !(
-            p.full_name.toLowerCase().includes(q) ||
-            p.email.toLowerCase().includes(q) ||
-            p.phone.toLowerCase().includes(q) ||
-            p.city.toLowerCase().includes(q) ||
-            p.register_number.toLowerCase().includes(q) ||
-            p.registrationId.toLowerCase().includes(q) ||
-            p.participant_id.toLowerCase().includes(q) ||
-            p.id.toLowerCase().includes(q)
-          )
-        ) {
-          return false;
-        }
+          if (
+            q &&
+            !(
+              p.full_name.toLowerCase().includes(q) ||
+              p.email.toLowerCase().includes(q) ||
+              p.phone.toLowerCase().includes(q) ||
+              p.city.toLowerCase().includes(q) ||
+              p.register_number.toLowerCase().includes(q) ||
+              p.registrationId.toLowerCase().includes(q) ||
+              p.participant_id.toLowerCase().includes(q) ||
+              p.id.toLowerCase().includes(q) ||
+              p.casyumId.toLowerCase().includes(q)
+            )
+          ) {
+            return false;
+          }
         if (filterEvent && !p.eventNames.includes(filterEvent)) return false;
         if (filterDepartment && p.department !== filterDepartment) return false;
         if (filterCollege && p.college !== filterCollege) return false;
@@ -259,7 +261,7 @@ export const VerifyParticipantPage: React.FC = () => {
     if (!clean) return null;
     return (
       participants.find(
-        (p) => p.id === clean || p.participant_id === clean || p.registrationId === clean
+        (p) => p.id === clean || p.participant_id === clean || p.registrationId === clean || p.casyumId === clean
       ) || null
     );
   };
@@ -560,6 +562,11 @@ export const VerifyParticipantPage: React.FC = () => {
                           </td>
                           <td className="px-5 py-3">
                             <div className="flex flex-col min-w-0">
+                              {p.casyumId ? (
+                                <span className="text-[11px] font-mono font-bold text-violet-300 truncate">{p.casyumId}</span>
+                              ) : (
+                                <span className="text-[11px] text-white/30 truncate">CAS —</span>
+                              )}
                               <span className="text-[11px] text-white/80 truncate">{p.register_number || '—'}</span>
                               {p.registrationId && (
                                 <span className="text-[9px] text-white/35 truncate">{p.registrationId}</span>
@@ -699,6 +706,9 @@ export const VerifyParticipantPage: React.FC = () => {
               )}
 
               <div className="flex flex-col gap-3">
+                {selected.casyumId && (
+                  <InfoRow icon={BadgeCheck} label="CASYUM ID" value={selected.casyumId} valueClass="font-mono font-bold text-violet-300" />
+                )}
                 <InfoRow icon={GraduationCap} label="College" value={selected.college || '—'} />
                 <InfoRow icon={MapPin} label="City" value={selected.city || '—'} />
                 <InfoRow icon={IdCard} label="Register Number" value={selected.register_number || '—'} />
@@ -910,7 +920,7 @@ export const VerifyParticipantPage: React.FC = () => {
 
               <div className="flex flex-col gap-2 border-t border-white/10 pt-4">
                 <p className="text-[10px] text-white/40">
-                  Camera unavailable? Enter the registration ID printed on the participant's pass instead.
+                  Camera unavailable? Enter the CASYUM id (e.g. <span className="font-mono text-violet-300">CAS-01</span>) or registration ID printed on the participant's pass instead.
                 </p>
                 <div className="flex gap-2">
                   <input
@@ -918,7 +928,7 @@ export const VerifyParticipantPage: React.FC = () => {
                     value={manualToken}
                     onChange={(e) => { setManualToken(e.target.value); setScanResult(null); }}
                     onKeyDown={(e) => { if (e.key === 'Enter') handleManualLookup(); }}
-                    placeholder="e.g. REG-22"
+                    placeholder="e.g. CAS-01 or REG-22"
                     className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white placeholder-white/30 focus:outline-none focus:border-violet-500/50"
                   />
                   <button

@@ -20,6 +20,7 @@ export interface AttendanceRecordRow {
   attendance_id: string;
   event_id: string;
   participant_id: string;
+  casyum_id?: string;
   coordinator_id: string;
   status: 'Present' | 'Absent';
   check_in_time: string | null;
@@ -97,18 +98,23 @@ export async function getEventAttendanceLocked(eventId: string): Promise<boolean
 export async function upsertAttendance(record: {
   event_id: string;
   participant_id: string;
+  casyum_id?: string;
   coordinator_id: string;
   status: 'Present' | 'Absent';
   check_in_time?: string | null;
   remarks?: string;
 }): Promise<void> {
   const db = getDb();
+  // Deterministic document id keeps attendance unique per participant + event.
+  // A CASYUM id is 1:1 with a participant, so this also guarantees uniqueness
+  // per `casyum_id + event_id` while still recording the casyum_id itself.
   const id = attendanceDocId(record.event_id, record.participant_id);
   const row: AttendanceRecordRow = {
     id,
     attendance_id: id,
     event_id: record.event_id,
     participant_id: record.participant_id,
+    casyum_id: record.casyum_id || '',
     coordinator_id: record.coordinator_id,
     status: record.status,
     check_in_time: record.check_in_time ?? null,
@@ -137,6 +143,16 @@ export async function saveAttendanceBatch(
   const db = getDb();
   const batch = writeBatch(db);
   const nowIso = now();
+  // Blind batch.set replaces the whole document, so load existing casyum_id
+  // values first to avoid wiping them when re-marking participants.
+  const existing = new Map<string, string>();
+  const existingSnap = await getDocs(
+    query(collection(db, 'attendance'), where('event_id', '==', eventId))
+  );
+  existingSnap.docs.forEach((d) => {
+    const row = d.data();
+    if (row.casyum_id) existing.set(String(row.participant_id || ''), String(row.casyum_id));
+  });
   records.forEach((r) => {
     const id = attendanceDocId(eventId, r.participant_id);
     const row: AttendanceRecordRow = {
@@ -144,6 +160,7 @@ export async function saveAttendanceBatch(
       attendance_id: id,
       event_id: eventId,
       participant_id: r.participant_id,
+      casyum_id: existing.get(r.participant_id) || '',
       coordinator_id: coordinatorId,
       status: r.status,
       check_in_time: r.status === 'Present' ? nowIso : null,

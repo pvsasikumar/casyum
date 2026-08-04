@@ -139,6 +139,7 @@ interface AdminContextType {
   deleteParticipant: (id: string) => void;
   bulkDeleteParticipants: (ids: string[]) => void;
   bulkApprovePayments: (ids: string[]) => void;
+  refreshParticipants: () => Promise<void>;
 
   toggleEventStatus: (eventId: string) => void;
   markAttendance: (participantId: string, eventId: string, status: AttendanceStatus) => void;
@@ -258,6 +259,7 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const regs: any[] = row.registered_events || [];
     return {
       id: String(row.participant_id),
+      casyumId: String(row.casyum_id || ''),
       name: row.full_name || '',
       photo: row.photo || DEFAULT_PARTICIPANT_PHOTO,
       college: row.college || '',
@@ -885,6 +887,7 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         approvePayment,
         rejectPayment,
         addRegistration,
+        refreshParticipants,
         updateRegistration,
         deleteParticipant,
         bulkDeleteParticipants,

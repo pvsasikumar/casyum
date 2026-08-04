@@ -10,13 +10,15 @@ import {
  * Server-side (Firestore) verification layer shared by the Registration Desk
  * and Event Coordinator check-in flows.
  *
- * The QR code carries the participant's unique participant id
- * (`CASYUM:PARTICIPANT:<participantId>`). Every lookup below resolves that id
- * against `participants/<participantId>`, re-checks the workflow rules on the
- * server (payment verified, registration desk verified, event membership) and
- * returns a structured outcome with a user-facing message — the scanned data
- * itself is never trusted. Legacy registration-token QRs are still accepted
- * for backward compatibility and resolved through the registration lookup.
+ * The QR code carries the participant's unique CASYUM id
+ * (`CASYUM:PARTICIPANT:CAS-01`) — never PII. Every lookup below resolves that
+ * id against the `casyum_id` field of the `participants` collection
+ * (`participants where casyum_id == "CAS-01"`), re-checks the workflow rules on
+ * the server (payment verified, registration desk verified, event membership)
+ * and returns a structured outcome with a user-facing message — the scanned
+ * data itself is never trusted. Legacy registration-token QRs are still
+ * accepted for backward compatibility and resolved through the registration
+ * lookup.
  */
 
 export type DeskScanOutcome =

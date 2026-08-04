@@ -26,8 +26,9 @@ import {
 import { getFirebaseAuth } from '../firebase/auth';
 import { getDb } from '../firebase/firestore';
 import { firebaseConfig, googleClientId } from '../firebase/firebase';
-import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { now } from './helpers';
+import { createParticipantWithCasyumId } from './casyumIdService';
 import type { UserRole } from '../rbac/types';
 
 export interface LoginUser {
@@ -107,6 +108,7 @@ export interface ParticipantRecord {
   profile_picture?: string;
   profile_completed: boolean;
   google_id?: string;
+  casyum_id?: string;
   created_at: string;
   payment_status?: string;
   payment_screenshot_url?: string;
@@ -330,7 +332,6 @@ export async function googleLogin(credential: string): Promise<LoginResult> {
 }
 
 async function setDocParticipant(uid: string, data: Partial<ParticipantRecord>): Promise<void> {
-  const db = getDb();
   const record: Partial<ParticipantRecord> = {
     id: uid,
     profile_completed: false,
@@ -340,7 +341,9 @@ async function setDocParticipant(uid: string, data: Partial<ParticipantRecord>):
     event_ids: [],
     ...data,
   };
-  await setDoc(doc(db, 'participants', uid), record);
+  // The participant document is created and its unique CASYUM id minted in a
+  // single transaction so every participant always gets exactly one id.
+  await createParticipantWithCasyumId(uid, record);
 }
 
 export async function changePassword(

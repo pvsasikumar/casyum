@@ -612,13 +612,14 @@ export interface QRMatrix {
  *
  * SECURITY: the QR code never stores participant PII (name, email, phone,
  * verification status, college, department...). It only encodes the unique
- * participant id (the canonical Firebase document id under `participants/`).
- * All participant details are fetched securely from Firestore after a
- * successful scan and are never trusted from the QR data itself.
+ * CASYUM id (`CAS-01`, ...) minted on the participant document
+ * (`participants/{firebaseAuthUid}`). All participant details are fetched
+ * securely from Firestore after a successful scan and are never trusted from
+ * the QR data itself.
  *
- * Supported payload formats (all decode to a bare participant id):
- *   - CASYUM:PARTICIPANT:<participantId>   (canonical, current)
- *   - CASYUM:REG:<registrationId>          (legacy registration-token QR)
+ * Supported payload formats (all decode to a bare id):
+ *   - CASYUM:PARTICIPANT:<casyumId>   (canonical, current — e.g. CASYUM:PARTICIPANT:CAS-01)
+ *   - CASYUM:REG:<registrationId>     (legacy registration-token QR)
  *   - casyum://checkin/<id>                (URI style deep-link token)
  *   - casyum:reg:<id>                      (legacy prefix)
  *   - <participantId>                      (legacy bare id)
@@ -670,9 +671,10 @@ export function isParticipantPrefixed(data: string): boolean {
 }
 
 /**
- * Extract the participant id from a participant-id QR payload
- * (`CASYUM:PARTICIPANT:<participantId>`). Returns null for every other payload
- * format so callers never route a registration token through this path.
+ * Extract the value from a participant-id QR payload
+ * (`CASYUM:PARTICIPANT:<casyumId>`, e.g. `CASYUM:PARTICIPANT:CAS-01`). Returns
+ * null for every other payload format so callers never route a registration
+ * token through this path.
  */
 export function decodeParticipantQR(data: string): string | null {
   const raw = String(data || '').trim();

@@ -23,6 +23,7 @@ function toRecord(row: AttendanceRecordRow): CoordinatorAttendanceRecord {
     attendanceId: String(row.id || row.attendance_id),
     eventId: row.event_id,
     participantId: row.participant_id,
+    casyumId: row.casyum_id || '',
     coordinatorId: row.coordinator_id,
     status: row.status === 'Absent' ? 'Absent' : 'Present',
     checkInTime: row.check_in_time,
@@ -57,13 +58,15 @@ export const AttendanceService = {
     participantId: string,
     coordinatorId: string,
     status: 'Present' | 'Absent',
-    existing?: CoordinatorAttendanceRecord
+    existing?: CoordinatorAttendanceRecord,
+    casyumId?: string
   ): CoordinatorAttendanceRecord {
     const nowIso = now();
     return {
       attendanceId: existing?.attendanceId || attendanceDocId(eventId, participantId),
       eventId,
       participantId,
+      casyumId: casyumId || existing?.casyumId || '',
       coordinatorId,
       status,
       checkInTime: status === 'Present' ? (existing?.checkInTime || nowIso) : null,
@@ -128,6 +131,7 @@ export const AttendanceService = {
     await upsertAttendance({
       event_id: record.eventId,
       participant_id: record.participantId,
+      casyum_id: record.casyumId,
       coordinator_id: record.coordinatorId,
       status: record.status,
       check_in_time: record.checkInTime,

@@ -244,7 +244,7 @@ export const AttendancePage: React.FC<AttendancePageProps> = ({ eventId, eventNa
   }, [viewParticipants]);
 
   const updateAttendance = useCallback(
-    async (participantId: string, newStatus: 'Present' | 'Absent'): Promise<boolean> => {
+    async (participantId: string, newStatus: 'Present' | 'Absent', casyumId?: string): Promise<boolean> => {
       if (!user) return false;
       if (savingIds[participantId]) return false;
       if (!isVerified(participantId)) {
@@ -258,7 +258,8 @@ export const AttendancePage: React.FC<AttendancePageProps> = ({ eventId, eventNa
         participantId,
         user.id,
         newStatus,
-        existing
+        existing,
+        casyumId
       );
 
       // Optimistic UI update — never wait for Firebase.
@@ -472,7 +473,7 @@ export const AttendancePage: React.FC<AttendancePageProps> = ({ eventId, eventNa
   const handleCheckInScanned = useCallback(async () => {
     if (!scanResult || !scanResult.attendanceEligible || scanResult.attendanceStatus === 'Present') return;
     setMarking(true);
-    const ok = await updateAttendance(scanResult.profile.id, 'Present');
+    const ok = await updateAttendance(scanResult.profile.id, 'Present', scanResult.profile.casyumId);
     if (ok) {
       setScanResult((prev) =>
         prev
@@ -817,6 +818,7 @@ const ScanResultCard: React.FC<{
 
       {/* Details */}
       <div className="flex flex-col gap-2.5 p-4">
+        {profile.casyumId && <ScanResultRow label="CASYUM ID" value={profile.casyumId} valueCls="text-cyan-300 font-mono font-bold" />}
         <ScanResultRow label="Registration ID" value={profile.registrationId || profile.participantId || '—'} />
         <ScanResultRow label="Selected Event" value={eventName} />
         <ScanResultRow
