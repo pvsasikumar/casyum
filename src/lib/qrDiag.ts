@@ -51,9 +51,9 @@ function canvasToPng(canvas: HTMLCanvasElement): Promise<File | null> {
 export async function decodeQRCImage(
   canvas: HTMLCanvasElement,
   containerId: string,
-  registrationId?: string
+  participantId?: string
 ): Promise<QRDiagResult> {
-  const expected = encodeParticipantQR(registrationId || '');
+  const expected = encodeParticipantQR(participantId || '');
   const file = await canvasToPng(canvas);
   if (!file) {
     return { ok: false, decoded: '', expected, matches: false, error: 'Could not rasterize the QR canvas to a PNG image.' };

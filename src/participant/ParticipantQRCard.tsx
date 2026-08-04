@@ -94,10 +94,11 @@ export const ParticipantQRCard: React.FC<ParticipantQRCardProps> = ({
   const paymentVerified = isPaymentVerified(paymentStatus);
   const paymentRejected = isPaymentRejected(paymentStatus);
 
-  // The QR only encodes a registration token — never participant PII, event
-  // objects or React state. The registration id (or participant id as a
-  // fallback) is resolved to the full profile server-side after scanning.
-  const payload = encodeParticipantQR(registrationId || participantId);
+  // The QR encodes the participant's unique participant id
+  // (`CASYUM:PARTICIPANT:<participantId>`) — never participant PII, event
+  // objects or React state. The id is resolved to the full profile
+  // server-side after scanning.
+  const payload = encodeParticipantQR(participantId);
 
   // Dev-only self-check: re-decode the rendered QR with an independent decoder
   // (ZXing via html5-qrcode) and compare the decoded value to the token it
@@ -107,7 +108,7 @@ export const ParticipantQRCard: React.FC<ParticipantQRCardProps> = ({
     const canvas = canvasRef.current;
     if (!canvas) return;
     let cancelled = false;
-    decodeQRCImage(canvas, diagContainerId, registrationId).then((result) => {
+    decodeQRCImage(canvas, diagContainerId, participantId).then((result) => {
       if (cancelled) return;
       setDiag(result);
       if (import.meta.env.DEV) {
@@ -117,7 +118,7 @@ export const ParticipantQRCard: React.FC<ParticipantQRCardProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [devSelfCheck, paymentVerified, registrationId, diagContainerId]);
+  }, [devSelfCheck, paymentVerified, participantId, diagContainerId]);
 
   const downloadQR = useCallback(() => {
     const canvas = canvasRef.current;
@@ -201,8 +202,8 @@ export const ParticipantQRCard: React.FC<ParticipantQRCardProps> = ({
           }`}
         >
           {diag.matches
-            ? 'QR self-check PASSED — decoded value matches the registration token.'
-            : `QR self-check FAILED — ${diag.error || 'decoded value does not match the registration token.'}`}
+            ? 'QR self-check PASSED — decoded value matches the participant token.'
+            : `QR self-check FAILED — ${diag.error || 'decoded value does not match the participant token.'}`}
         </div>
       )}
 

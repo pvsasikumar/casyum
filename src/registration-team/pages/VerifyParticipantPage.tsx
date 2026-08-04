@@ -335,7 +335,7 @@ export const VerifyParticipantPage: React.FC = () => {
       if (outcome.status === 'not_found') {
         setScanResult({
           type: 'error',
-          title: 'Participant Registration Not Found',
+          title: 'Participant Not Found',
           message: outcome.message,
         });
         return;
@@ -352,7 +352,11 @@ export const VerifyParticipantPage: React.FC = () => {
       if (outcome.status === 'payment_pending') {
         setScanOpen(false);
         setSelected(p);
-        addToast('Payment pending', outcome.message, 'warning');
+        addToast(
+          'Payment Not Verified',
+          'Payment Not Verified. Faculty Coordinator approval is required.',
+          'warning'
+        );
         return;
       }
 
@@ -366,7 +370,7 @@ export const VerifyParticipantPage: React.FC = () => {
       if (outcome.status === 'already_verified') {
         setScanOpen(false);
         setSelected(p);
-        addToast('Registration Verified', outcome.message, 'success');
+        addToast('Already Verified', outcome.message, 'success');
         return;
       }
 

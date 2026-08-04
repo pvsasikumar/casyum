@@ -612,23 +612,25 @@ export interface QRMatrix {
  *
  * SECURITY: the QR code never stores participant PII (name, email, phone,
  * verification status, college, department...). It only encodes the unique
- * registration token (the canonical registration id, or the participant
- * identifier as a fallback). All participant details are fetched securely from
- * Firestore after a successful scan and are never trusted from the QR data
- * itself.
+ * participant id (the canonical Firebase document id under `participants/`).
+ * All participant details are fetched securely from Firestore after a
+ * successful scan and are never trusted from the QR data itself.
  *
- * Supported payload formats (all decode to a bare registration/participant id):
- *   - CASYUM:REG:<registrationId>    (canonical, current)
- *   - casyum://checkin/<id>          (URI style deep-link token)
- *   - casyum:reg:<participantId>     (legacy prefix)
- *   - <participantId>                (legacy bare id)
- *   - base64 {participantId,...}     (legacy coordinator check-in payload)
+ * Supported payload formats (all decode to a bare participant id):
+ *   - CASYUM:PARTICIPANT:<participantId>   (canonical, current)
+ *   - CASYUM:REG:<registrationId>          (legacy registration-token QR)
+ *   - casyum://checkin/<id>                (URI style deep-link token)
+ *   - casyum:reg:<id>                      (legacy prefix)
+ *   - <participantId>                      (legacy bare id)
+ *   - base64 {participantId,...}           (legacy coordinator check-in payload)
  */
 export const QR_PREFIX = 'casyum:reg:';
 export const QR_PREFIX_REG = 'CASYUM:REG:';
+export const QR_PREFIX_PARTICIPANT = 'CASYUM:PARTICIPANT:';
 export const QR_URI_PREFIX = 'casyum://checkin/';
 
 const REG_PREFIX_LEN = QR_PREFIX.length;
+const PARTICIPANT_PREFIX_LEN = QR_PREFIX_PARTICIPANT.length;
 const URI_PREFIX_LEN = QR_URI_PREFIX.length;
 
 /**
@@ -652,16 +654,41 @@ export function encodeParticipantQR(identifier: string): string {
   const id = String(identifier || '').trim();
   if (!id) return '';
   const lower = id.toLowerCase();
-  if (lower.startsWith('casyum:reg:') || lower.startsWith('casyum://checkin/')) {
+  if (
+    lower.startsWith('casyum:participant:') ||
+    lower.startsWith('casyum:reg:') ||
+    lower.startsWith('casyum://checkin/')
+  ) {
     return id;
   }
-  return `${QR_PREFIX_REG}${id}`;
+  return `${QR_PREFIX_PARTICIPANT}${id}`;
+}
+
+/** True when the payload is a participant-id QR (`CASYUM:PARTICIPANT:...`). */
+export function isParticipantPrefixed(data: string): boolean {
+  return String(data || '').toLowerCase().startsWith('casyum:participant:');
+}
+
+/**
+ * Extract the participant id from a participant-id QR payload
+ * (`CASYUM:PARTICIPANT:<participantId>`). Returns null for every other payload
+ * format so callers never route a registration token through this path.
+ */
+export function decodeParticipantQR(data: string): string | null {
+  const raw = String(data || '').trim();
+  if (!isParticipantPrefixed(raw)) return null;
+  const id = raw.slice(PARTICIPANT_PREFIX_LEN).trim();
+  return id || null;
 }
 
 export function decodeQRPayload(data: string): string | null {
   const raw = String(data || '').trim();
   if (!raw) return null;
   const lower = raw.toLowerCase();
+
+  if (lower.startsWith('casyum:participant:')) {
+    return decodeParticipantQR(raw);
+  }
 
   if (lower.startsWith('casyum:reg:')) {
     const id = raw.slice(REG_PREFIX_LEN).trim();

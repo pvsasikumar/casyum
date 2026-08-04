@@ -1,6 +1,6 @@
 import { collection, doc, getDoc, getDocs, query, where, type Firestore } from 'firebase/firestore';
 import { getDb } from '../firebase/firestore';
-import { decodeQRPayload } from '../lib/qr';
+import { decodeParticipantQR, decodeQRPayload } from '../lib/qr';
 import { listRegistrationsByParticipant, listRegistrationsByEvent } from './registrationService';
 import type { RegistrationRow } from './eventService';
 import type { VerificationStatus } from './verificationService';
@@ -168,6 +168,12 @@ export function resolveParticipantCode(data: string): string | null {
  * The identifier may be a participant document id, a registration id, or the
  * content decoded from a CASYUM QR code.
  *
+ * Participant-id QR payloads (`CASYUM:PARTICIPANT:<participantId>`) are resolved
+ * directly against `participants/<participantId>` and never routed through a
+ * registration lookup. Registration tokens are only searched for when the
+ * decoded payload is confirmed to be a registration id (legacy `CASYUM:REG:` /
+ * `casyum:reg:` / `REG-*` codes).
+ *
  * When `eventId` is provided the registration lookup is scoped to that event
  * only (required by Firestore rules: coordinators may only read registrations
  * for their assigned event).
@@ -180,22 +186,47 @@ export async function getScannedParticipant(
   if (!key) return null;
 
   const db = getDb();
-  const id = await resolveParticipantKey(db, key);
-  if (!id) {
-    console.warn('[CASYUM:SCAN] lookup did not resolve to a participant', { identifier: key });
+
+  const participantId = decodeParticipantQR(key);
+  const isParticipantCode = participantId !== null;
+  const resolvedId = isParticipantCode
+    ? participantId
+    : await resolveParticipantKey(db, key);
+  if (!resolvedId) {
+    console.warn('[CASYUM:SCAN] lookup did not resolve to a participant', {
+      identifier: key,
+      decodedId: decodeQRPayload(key),
+      isParticipantCode,
+    });
     return null;
   }
 
+  const id = resolvedId;
+  const participantPath = `participants/${id}`;
+  console.info('[CASYUM:SCAN] participant document path', {
+    collection: 'participants',
+    docId: id,
+    path: participantPath,
+    resolvedFrom: isParticipantCode ? 'participant-id QR' : 'legacy registration token',
+  });
+
   const snap = await getDoc(doc(db, 'participants', id));
   if (!snap.exists()) {
-    console.warn('[CASYUM:SCAN] participant document not found', { collection: 'participants', docId: id, identifier: key });
+    console.warn('[CASYUM:SCAN] participant document not found', {
+      collection: 'participants',
+      docId: id,
+      path: participantPath,
+      identifier: key,
+    });
     return null;
   }
   const data = snap.data();
   console.info('[CASYUM:SCAN] participant document found', {
     collection: 'participants',
     docId: id,
+    path: participantPath,
     participantId: id,
+    found: true,
   });
 
   let regs: RegistrationRow[] = [];
@@ -218,6 +249,7 @@ export async function getScannedParticipant(
     registrationIds: regs.map((r) => r.registration_id),
     paymentStatuses,
     paymentVerified: regs.length > 0 && paymentStatuses.length > 0 && paymentStatuses.every((s) => s === 'verified'),
+    eventIds: [...new Set(regs.flatMap((r) => regEventIds(r)))],
   });
 
   return buildProfile(id, data, regs, eventDetails);
