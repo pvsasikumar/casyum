@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { toDataURL as qrcodeToDataURL } from 'qrcode';
 import { QrCode, BadgeCheck, Clock, XCircle, Download, Maximize2, X, Lock } from 'lucide-react';
-import { generateQRMatrix, drawQRToCanvas, encodeParticipantQR } from '../lib/qr';
+import { encodeParticipantQR } from '../lib/qr';
 import { decodeQRCImage, type QRDiagResult } from '../lib/qrDiag';
 
 interface ParticipantQRCardProps {
@@ -18,7 +19,7 @@ interface ParticipantQRCardProps {
   devSelfCheck?: boolean;
 }
 
-/** Minimum render resolution for the participant pass (device pixels). */
+/** Render resolution for the participant pass (device pixels). */
 const QR_TARGET_PX = 1024;
 
 const isPaymentVerified = (status?: string): boolean => {
@@ -29,41 +30,23 @@ const isPaymentVerified = (status?: string): boolean => {
 const isPaymentRejected = (status?: string): boolean => String(status || '').toLowerCase() === 'rejected';
 
 /**
- * Draws the participant pass QR at high resolution onto its own canvas.
- * Reused by both the card and the full-screen view so each keeps its own
- * rendering and the two never fight over the same DOM node.
+ * Renders the participant pass QR at high resolution. The image is generated
+ * once with the `qrcode` package (`qrcodeToDataURL`) and reused by both the
+ * card and the full-screen view so each keeps its own node.
  */
-const PassQRCanvas: React.FC<{ payload: string; ref?: React.Ref<HTMLCanvasElement> }> = ({
-  payload,
-  ref,
-}) => {
-  const ownRef = useRef<HTMLCanvasElement>(null);
-
-  useEffect(() => {
-    const canvas = ownRef.current;
-    if (!canvas) return;
-    const matrix = generateQRMatrix(payload);
-    drawQRToCanvas(canvas, matrix, { targetSize: QR_TARGET_PX });
-  }, [payload]);
-
-  return (
-    <canvas
-      ref={(node) => {
-        ownRef.current = node;
-        if (typeof ref === 'function') ref(node);
-        else if (ref) (ref as React.MutableRefObject<HTMLCanvasElement | null>).current = node;
-      }}
-      className="w-full h-auto block"
-      style={{
-        aspectRatio: '1 / 1',
-        imageRendering: 'pixelated',
-        display: 'block',
-      }}
-      role="img"
-      aria-label="CASYUM participant registration QR code"
-    />
-  );
-};
+const PassQRImage: React.FC<{ src: string; ref?: React.Ref<HTMLImageElement> }> = ({ src, ref }) => (
+  <img
+    ref={ref}
+    src={src}
+    alt="CASYUM participant registration QR code"
+    className="w-full h-auto block"
+    style={{
+      aspectRatio: '1 / 1',
+      imageRendering: 'pixelated',
+      display: 'block',
+    }}
+  />
+);
 
 /** Locked placeholder shown until the payment gate passes. */
 const LockedPassPlaceholder: React.FC<{ rejected: boolean }> = ({ rejected }) => (
@@ -88,57 +71,82 @@ export const ParticipantQRCard: React.FC<ParticipantQRCardProps> = ({
   verifiedAt,
   devSelfCheck = false,
 }) => {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const imageRef = useRef<HTMLImageElement>(null);
   const [fullScreen, setFullScreen] = useState(false);
+  const [qrDataUrl, setQrDataUrl] = useState('');
   const [diag, setDiag] = useState<QRDiagResult | null>(null);
   const diagContainerId = useRef(`casyum-qr-diag-${Math.random().toString(36).slice(2, 9)}`).current;
 
   const paymentVerified = isPaymentVerified(paymentStatus);
   const paymentRejected = isPaymentRejected(paymentStatus);
 
-  // The QR encodes the participant's unique CASYUM id
-  // (`CASYUM:PARTICIPANT:CAS-01`) — never participant PII, event objects or
-  // React state. The id is resolved to the full profile server-side after
-  // scanning via `participants where casyum_id == "CAS-01"`. Participants
-  // created before the CASYUM id system fall back to their participant id so
-  // their pass keeps working.
-  const payload = encodeParticipantQR(casyumId || participantId);
+  // The QR encodes exactly the participant's unique CASYUM id (`CAS-02`) —
+  // never participant PII, event objects or React state. The id is resolved to
+  // the full profile server-side after scanning via
+  // `participants where casyum_id == "CAS-02"`.
+  const payload = encodeParticipantQR(casyumId || '');
+
+  // Payment gate: the QR is only generated (and therefore only active) after
+  // the Faculty Coordinator verifies the payment. No QR is produced while the
+  // payment is pending or rejected.
+  useEffect(() => {
+    if (!paymentVerified || !payload) {
+      setQrDataUrl('');
+      return;
+    }
+    let cancelled = false;
+    qrcodeToDataURL(payload, {
+      errorCorrectionLevel: 'M',
+      margin: 4,
+      width: QR_TARGET_PX,
+      color: {
+        dark: '#000000',
+        light: '#FFFFFF',
+      },
+    })
+      .then((url) => {
+        if (!cancelled) setQrDataUrl(url);
+      })
+      .catch(() => {
+        if (!cancelled) setQrDataUrl('');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [paymentVerified, payload]);
 
   // Dev-only self-check: re-decode the rendered QR with an independent decoder
   // (ZXing via html5-qrcode) and compare the decoded value to the token it
   // should carry. Entirely stripped out of production builds (import.meta.env.DEV).
   useEffect(() => {
-    if (!import.meta.env.DEV || !devSelfCheck || !paymentVerified) return;
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!import.meta.env.DEV || !devSelfCheck || !paymentVerified || !qrDataUrl) return;
     let cancelled = false;
-    decodeQRCImage(canvas, diagContainerId, casyumId || participantId).then((result) => {
+    const img = new Image();
+    img.onload = () => {
       if (cancelled) return;
-      setDiag(result);
-      if (import.meta.env.DEV) {
-        console.info('[CASYUM QR-DIAG]', result);
-      }
-    });
+      decodeQRCImage(img, diagContainerId, casyumId || participantId).then((result) => {
+        if (cancelled) return;
+        setDiag(result);
+        if (import.meta.env.DEV) {
+          console.info('[CASYUM QR-DIAG]', result);
+        }
+      });
+    };
+    img.src = qrDataUrl;
     return () => {
       cancelled = true;
     };
-  }, [devSelfCheck, paymentVerified, casyumId, participantId, diagContainerId]);
+  }, [devSelfCheck, paymentVerified, qrDataUrl, casyumId, participantId, diagContainerId]);
 
   const downloadQR = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    canvas.toBlob((blob) => {
-      if (!blob) return;
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `casyum-pass-${casyumId || registrationId || participantId}.png`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(url);
-    }, 'image/png');
-  }, [casyumId, registrationId, participantId]);
+    if (!qrDataUrl) return;
+    const link = document.createElement('a');
+    link.href = qrDataUrl;
+    link.download = `casyum-pass-${casyumId || registrationId || participantId}.png`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  }, [qrDataUrl, casyumId, registrationId, participantId]);
 
   const badge = (() => {
     if (!paymentVerified) {
@@ -180,6 +188,8 @@ export const ParticipantQRCard: React.FC<ParticipantQRCardProps> = ({
     return 'Payment verified. Show this QR at the registration desk to complete verification.';
   })();
 
+  const showQr = paymentVerified && !!qrDataUrl;
+
   return (
     <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 flex flex-col items-center gap-4">
       <div className="w-full flex items-center justify-between gap-3">
@@ -194,7 +204,7 @@ export const ParticipantQRCard: React.FC<ParticipantQRCardProps> = ({
       </div>
 
       <div className="w-full max-w-[340px] mx-auto bg-white rounded-xl p-3 sm:p-4">
-        {paymentVerified ? <PassQRCanvas payload={payload} ref={canvasRef} /> : <LockedPassPlaceholder rejected={paymentRejected} />}
+        {showQr ? <PassQRImage src={qrDataUrl} ref={imageRef} /> : <LockedPassPlaceholder rejected={paymentRejected} />}
       </div>
 
       {import.meta.env.DEV && devSelfCheck && diag && (
@@ -245,7 +255,7 @@ export const ParticipantQRCard: React.FC<ParticipantQRCardProps> = ({
         </span>
       </div>
 
-      {fullScreen && paymentVerified &&
+      {fullScreen && showQr &&
         createPortal(
           <div
             className="fixed inset-0 z-[10000] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4"
@@ -255,7 +265,7 @@ export const ParticipantQRCard: React.FC<ParticipantQRCardProps> = ({
           >
             <div className="relative flex flex-col items-center gap-4 w-full max-w-[min(90vw,560px)]">
               <div className="w-full bg-white rounded-2xl p-4 sm:p-6">
-                <PassQRCanvas payload={payload} />
+                <PassQRImage src={qrDataUrl} />
               </div>
               <div className="flex flex-wrap items-center justify-center gap-3">
                 <button

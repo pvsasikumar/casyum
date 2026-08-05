@@ -1,8 +1,8 @@
 /**
  * DEVELOPMENT-ONLY diagnostic for validating the participant QR pipeline.
  *
- * It re-reads the rendered QR image (canvas -> PNG -> File), decodes it with
- * the independent ZXing decoder shipped inside `html5-qrcode`, prints the
+ * It re-reads the rendered QR image (canvas/Image -> PNG -> File), decodes it
+ * with the independent ZXing decoder shipped inside `html5-qrcode`, prints the
  * decoded value and compares it against the expected payload. It confirms the
  * QR is not empty, malformed, truncated or different from the expected token.
  *
@@ -48,13 +48,32 @@ function canvasToPng(canvas: HTMLCanvasElement): Promise<File | null> {
   });
 }
 
+/** Rasterize a canvas or a fully-loaded image element to a PNG file. */
+async function elementToPng(input: HTMLCanvasElement | HTMLImageElement): Promise<File | null> {
+  if (input instanceof HTMLCanvasElement) {
+    return canvasToPng(input);
+  }
+  const width = input.naturalWidth || input.width;
+  const height = input.naturalHeight || input.height;
+  if (!width || !height) return null;
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, width, height);
+  ctx.drawImage(input, 0, 0, width, height);
+  return canvasToPng(canvas);
+}
+
 export async function decodeQRCImage(
-  canvas: HTMLCanvasElement,
+  input: HTMLCanvasElement | HTMLImageElement,
   containerId: string,
   participantId?: string
 ): Promise<QRDiagResult> {
   const expected = encodeParticipantQR(participantId || '');
-  const file = await canvasToPng(canvas);
+  const file = await elementToPng(input);
   if (!file) {
     return { ok: false, decoded: '', expected, matches: false, error: 'Could not rasterize the QR canvas to a PNG image.' };
   }

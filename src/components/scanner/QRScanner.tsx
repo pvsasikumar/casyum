@@ -168,14 +168,23 @@ export const QRScanner: React.FC<QRScannerProps> = ({ onResult, autoStart = fals
       );
     }
 
+    // Safely normalize the decoded value before handing it to the parent:
+    // strip zero-width / BOM characters, collapse line breaks and tabs into a
+    // single space, then trim surrounding whitespace. The parent receives the
+    // clean value (`CAS-02`) and runs the exact same lookup as manual entry.
+    const normalizedText = String(decodedText)
+      .replace(/[\u200B-\u200D\uFEFF]/g, '')
+      .replace(/[\r\n\t]/g, ' ')
+      .trim();
+
     // Suppress decoding while a verification request is being processed so the
     // same QR cannot be re-submitted repeatedly.
     if (processingRef.current) return;
     const now = Date.now();
     const isDuplicate =
-      decodedText === lastCodeRef.current && now - lastCodeTimeRef.current < DUPLICATE_WINDOW_MS;
+      normalizedText === lastCodeRef.current && now - lastCodeTimeRef.current < DUPLICATE_WINDOW_MS;
     if (isDuplicate) return;
-    lastCodeRef.current = decodedText;
+    lastCodeRef.current = normalizedText;
     lastCodeTimeRef.current = now;
 
     // Pause the engine immediately so the same code cannot re-fire while the
@@ -192,7 +201,7 @@ export const QRScanner: React.FC<QRScannerProps> = ({ onResult, autoStart = fals
       }
     }
 
-    onResultRef.current(decodedText);
+    onResultRef.current(normalizedText);
   }, []);
 
   const resumeScanning = useCallback(async () => {

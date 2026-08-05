@@ -14,7 +14,7 @@ import { getDb } from '../firebase/firestore';
  *
  * The Firebase Auth UID stays the internal document id and is never replaced;
  * `casyum_id` is the public identifier printed on the participant pass and
- * encoded inside the QR payload (`CASYUM:PARTICIPANT:<casyum_id>`).
+ * encoded inside the QR payload (`<casyum_id>`, e.g. `CAS-02`).
  */
 
 export const CASYUM_ID_REGEX = /^CAS-(\d+)$/i;
