@@ -1,6 +1,7 @@
-import { decodeParticipantQR, decodeQRPayload } from '../lib/qr';
+import { decodeQRPayload, normalizeCasyumQrValue } from '../lib/qr';
 import {
   getScannedParticipant,
+  lookupParticipantByCasyumId,
   searchEventParticipant,
   type ScannedParticipant,
   type RegisteredEventDetail,
@@ -56,37 +57,46 @@ export async function scanForDeskVerification(raw: string): Promise<DeskScanOutc
   try {
     devLog('raw decoded QR value', { raw });
 
-    const participantCode = decodeParticipantQR(raw);
-    const decoded = decodeQRPayload(raw);
-    participantId = participantCode || decoded || '';
-    devLog('parsed participant id', {
+    const normalizedId = normalizeCasyumQrValue(raw);
+    devLog('normalized CASYUM id', {
       raw,
-      decoded,
-      participantId,
-      isParticipantCode: participantCode !== null,
+      normalizedId,
+      isParticipantCode: normalizedId !== null,
     });
 
-    if (!participantId) {
-      console.warn('[CASYUM:SCAN] invalid QR payload', { raw });
-      return {
-        status: 'invalid',
-        profile: null,
-        message: 'Invalid QR Code.',
-      };
-    }
-
-    // Participant-id QRs are resolved directly against `participants/<id>` with
-    // no registration fallback. The raw payload is passed through so the
-    // lookup can detect the `CASYUM:PARTICIPANT:` prefix. Registration tokens
-    // (legacy `CASYUM:REG:` / `REG-*`) are passed as the decoded id so the
-    // registration lookup can resolve them.
-    profile = await getScannedParticipant(participantCode ? raw : participantId).catch((err: any) => {
-      devError('participant lookup failed', {
-        participantId,
-        error: String(err?.message || err),
+    if (normalizedId) {
+      // Canonical path: the same shared lookup used by manual entry of a bare
+      // CASYUM id (`CAS-01`). Resolves `participants where casyum_id == "CAS-01"`
+      // — never the raw QR payload as a document id.
+      participantId = normalizedId;
+      profile = await lookupParticipantByCasyumId(participantId).catch((err: any) => {
+        devError('participant lookup failed', {
+          participantId,
+          error: String(err?.message || err),
+        });
+        return null;
       });
-      return null;
-    });
+    } else {
+      // Legacy token path (registration tokens `CASYUM:REG:` / `REG-*`, base64
+      // payloads, raw document ids) — resolved through the registration lookup.
+      participantId = decodeQRPayload(raw) || '';
+      devLog('parsed legacy token', { raw, participantId });
+      if (!participantId) {
+        console.warn('[CASYUM:SCAN] invalid QR payload', { raw });
+        return {
+          status: 'invalid',
+          profile: null,
+          message: 'Invalid QR Code.',
+        };
+      }
+      profile = await getScannedParticipant(participantId).catch((err: any) => {
+        devError('participant lookup failed', {
+          participantId,
+          error: String(err?.message || err),
+        });
+        return null;
+      });
+    }
 
     devLog('participant found', {
       participantId,
@@ -251,11 +261,12 @@ export function buildAttendanceCheck(eventId: string, profile: ScannedParticipan
 export async function checkEventAttendance(eventId: string, identifier: string): Promise<AttendanceCheck> {
   try {
     devLog('raw decoded QR value (coordinator)', { raw: identifier });
-    const participantCode = decodeParticipantQR(identifier);
-    const decoded = decodeQRPayload(identifier);
-    const id = participantCode || decoded || '';
+    const normalizedId = normalizeCasyumQrValue(identifier);
+    const decoded = normalizedId ? '' : decodeQRPayload(identifier) || '';
+    const id = normalizedId || decoded || '';
     devLog('parsed participant id (coordinator)', {
       raw: identifier,
+      normalizedId,
       decoded,
       participantId: id,
       coordinatorEventId: eventId,
@@ -271,16 +282,23 @@ export async function checkEventAttendance(eventId: string, identifier: string):
         message: 'Invalid QR Code.',
       };
     }
-    const profile = await getScannedParticipant(participantCode ? identifier : id, { eventId }).catch(
-      (err: any) => {
-        devError('coordinator participant lookup failed', {
-          coordinatorEventId: eventId,
-          participantId: id,
-          error: String(err?.message || err),
+    const profile = normalizedId
+      ? await lookupParticipantByCasyumId(normalizedId, { eventId }).catch((err: any) => {
+          devError('coordinator participant lookup failed', {
+            coordinatorEventId: eventId,
+            participantId: id,
+            error: String(err?.message || err),
+          });
+          return null;
+        })
+      : await getScannedParticipant(id, { eventId }).catch((err: any) => {
+          devError('coordinator participant lookup failed', {
+            coordinatorEventId: eventId,
+            participantId: id,
+            error: String(err?.message || err),
+          });
+          return null;
         });
-        return null;
-      }
-    );
     return buildAttendanceCheck(eventId, profile);
   } catch (err: any) {
     devError('coordinator scan handler error', {

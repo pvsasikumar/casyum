@@ -157,6 +157,17 @@ export const QRScanner: React.FC<QRScannerProps> = ({ onResult, autoStart = fals
   }, [readActiveTrack]);
 
   const handleDecoded = useCallback((decodedText: string) => {
+    // Development-only: inspect the exact value html5-qrcode decoded from the
+    // QR before any normalization. Stripped from production by Vite.
+    if (import.meta.env.DEV) {
+      console.log('[QR DEBUG] Raw camera decoded value:', JSON.stringify(decodedText));
+      console.log('[QR DEBUG] Length:', decodedText.length);
+      console.log(
+        '[QR DEBUG] Character codes:',
+        [...decodedText].map((character) => character.charCodeAt(0))
+      );
+    }
+
     // Suppress decoding while a verification request is being processed so the
     // same QR cannot be re-submitted repeatedly.
     if (processingRef.current) return;

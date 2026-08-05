@@ -715,6 +715,71 @@ export function decodeQRPayload(data: string): string | null {
   return normalizeRegistrationId(raw);
 }
 
+/** Zero-width / invisible characters injected around QR payloads by some
+ * encoders (BOM, soft hyphens, word-joiner, zero-width space/joiner/non-joiner). */
+const QR_INVISIBLE_CHARS =
+  /\u200B|\u200C|\u200D|\u2060|\u2061|\u2062|\u2063|\uFEFF/g;
+/** Line separators / carriage returns embedded by some QR encoders. */
+const QR_LINE_BREAKS = /\r\n|[\r\n\u0085\u2028\u2029]+/g;
+
+const CASYUM_PARTICIPANT_PREFIX = 'casyum:participant:';
+const CASYUM_REG_PREFIX = 'casyum:reg:';
+const CASYUM_URI_PREFIX = 'casyum://checkin/';
+
+/**
+ * Normalize a raw QR payload (or a pasted/manual token) into the canonical
+ * CASYUM participant id form (`CAS-01`, `CAS-100`, ...).
+ *
+ * Handles — all case-insensitively:
+ *   - `CAS-01`
+ *   - `cas-01`
+ *   - ` CAS-01 ` / `CAS-01\n` / trailing CR / zero-width / BOM characters
+ *   - `CASYUM:PARTICIPANT:CAS-01` / `casyum:participant:cas-01`
+ *   - `CASYUM:REG:CAS-01` (a CAS id carried by a legacy registration prefix)
+ *   - `casyum://checkin/CAS-01` and nested prefixes
+ *
+ * The `CAS-` prefix is never stripped or rewritten and no new id is generated.
+ * Returns null when the payload does not contain a valid CASYUM id
+ * (`^CAS-\d+$`, so `CAS-100` / `CAS-800` remain valid). Legacy registration
+ * tokens (`REG-*`, base64 payloads, raw document ids) are intentionally left
+ * untouched so the registration-token fallback paths can still resolve them.
+ */
+export function normalizeCasyumQrValue(rawValue: unknown): string | null {
+  let raw = String(rawValue ?? '');
+  if (!raw) return null;
+
+  // Remove hidden zero-width / BOM characters anywhere in the payload.
+  raw = raw.replace(QR_INVISIBLE_CHARS, '');
+  // Remove hidden line breaks and carriage returns, then trim whitespace.
+  raw = raw.replace(QR_LINE_BREAKS, '').trim();
+  if (!raw) return null;
+
+  const lower = raw.toLowerCase();
+
+  let token = raw;
+  if (lower.startsWith(CASYUM_PARTICIPANT_PREFIX)) {
+    token = raw.slice(CASYUM_PARTICIPANT_PREFIX.length);
+  } else if (lower.startsWith(CASYUM_REG_PREFIX)) {
+    token = raw.slice(CASYUM_REG_PREFIX.length);
+  } else if (lower.startsWith(CASYUM_URI_PREFIX)) {
+    token = raw.slice(CASYUM_URI_PREFIX.length);
+  }
+
+  // A prefix may itself wrap another known prefix
+  // (e.g. `casyum://checkin/CASYUM:PARTICIPANT:CAS-01`).
+  if (/^casyum[:/]/i.test(token.trim())) {
+    return normalizeCasyumQrValue(token);
+  }
+
+  // Strip stray separators/artifacts left around the id.
+  token = token.replace(/^[\s:]+/, '').trim();
+  if (!token) return null;
+
+  const normalized = token.toUpperCase();
+  if (!/^CAS-\d+$/.test(normalized)) return null;
+  return normalized;
+}
+
 export function generateQRMatrix(text: string): QRMatrix {
   const utf8 = unescape(encodeURIComponent(text));
   const typeNumber = getTypeNumber(utf8.length);

@@ -1,6 +1,6 @@
 import { collection, doc, getDoc, getDocs, query, where, type Firestore } from 'firebase/firestore';
 import { getDb } from '../firebase/firestore';
-import { decodeParticipantQR, decodeQRPayload } from '../lib/qr';
+import { decodeParticipantQR, decodeQRPayload, normalizeCasyumQrValue } from '../lib/qr';
 import { listRegistrationsByParticipant, listRegistrationsByEvent } from './registrationService';
 import type { RegistrationRow } from './eventService';
 import type { VerificationStatus } from './verificationService';
@@ -184,6 +184,23 @@ async function resolveByCasyumId(db: Firestore, casyumId: string): Promise<strin
     });
     return null;
   }
+}
+
+/**
+ * Shared participant lookup used by BOTH camera scans and manual entry. It
+ * normalizes any raw value (bare id, prefixed QR payload, whitespace/newline
+ * artifacts, lower-case) to the canonical CASYUM id (`CAS-01`) and resolves it
+ * through the exact same Firestore path the working manual lookup uses
+ * (`participants where casyum_id == "CAS-01"`). Returns null for payloads that
+ * do not contain a valid CASYUM id (`^CAS-\d+$`).
+ */
+export async function lookupParticipantByCasyumId(
+  casyumId: string,
+  opts?: { eventId?: string }
+): Promise<ScannedParticipant | null> {
+  const id = normalizeCasyumQrValue(casyumId);
+  if (!id) return null;
+  return getScannedParticipant(id, opts);
 }
 
 /**
