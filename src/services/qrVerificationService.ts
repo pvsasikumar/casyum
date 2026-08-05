@@ -1,4 +1,4 @@
-import { decodeQRPayload, normalizeCasyumQrValue } from '../lib/qr';
+import { decodeQRPayload, normalizeCasyumQrValue, parseCasyumQRPayload } from '../lib/qr';
 import {
   getScannedParticipant,
   lookupParticipantByCasyumId,
@@ -12,19 +12,25 @@ import {
  * and Event Coordinator check-in flows.
  *
  * The QR code carries the participant's unique CASYUM id
- * (`CASYUM:PARTICIPANT:CAS-01`) — never PII. Every lookup below resolves that
+ * (`CASYUM:PARTICIPANT:CAS-02`) — never PII. Every lookup below resolves that
  * id against the `casyum_id` field of the `participants` collection
- * (`participants where casyum_id == "CAS-01"`), re-checks the workflow rules on
+ * (`participants where casyum_id == "CAS-02"`), re-checks the workflow rules on
  * the server (payment verified, registration desk verified, event membership)
  * and returns a structured outcome with a user-facing message — the scanned
  * data itself is never trusted. Legacy registration-token QRs are still
  * accepted for backward compatibility and resolved through the registration
  * lookup.
+ *
+ * Camera scans and manual CASYUM id entry both land here: the decoded camera
+ * value goes through the same shared parser (`parseCasyumQRPayload`) and the
+ * same CASYUM id lookup (`lookupParticipantByCasyumId`) as a manually typed
+ * `CAS-02`, so the two paths always resolve to the same participant.
  */
 
 export type DeskScanOutcome =
   | { status: 'invalid'; profile: null; message: string }
   | { status: 'not_found'; profile: null; message: string }
+  | { status: 'network_error'; profile: null; message: string }
   | { status: 'payment_pending'; profile: ScannedParticipant; message: string }
   | { status: 'pending'; profile: ScannedParticipant; message: string }
   | { status: 'already_verified'; profile: ScannedParticipant; message: string }
@@ -44,12 +50,36 @@ function devError(message: string, data: Record<string, unknown>): void {
 }
 
 /**
+ * True when the cleaned payload still looks like a CASYUM QR even though it
+ * carried no extractable `CAS-` / `REG-` id — i.e. a legacy payload the
+ * registration-token fallback can still resolve:
+ *   - any `casyum:` / `casyum://` prefixed value (`CASYUM:PARTICIPANT:<uid>`)
+ *   - a bare Firebase Auth UID / long raw document id
+ *   - a base64 `{participantId,...}` check-in payload
+ */
+function looksLikeCasyumCode(cleanedRaw: string): boolean {
+  const t = String(cleanedRaw || '').trim();
+  if (!t) return false;
+  if (/^casyum[:/]/i.test(t)) return true;
+  if (/^[A-Za-z0-9_-]{20,}$/.test(t)) return true;
+  try {
+    return atob(t).startsWith('{');
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Registration Desk scan flow. Enforces, in order:
  *   1. the QR is a valid CASYUM code;
  *   2. the participant exists;
  *   3. the payment is already verified — desk verification is not allowed
  *      otherwise;
  *   4. the participant is not already verified/rejected at the desk.
+ *
+ * The same shared parser and CASYUM id lookup used by manual entry run here,
+ * so a camera scan of `CAS-02` / `CASYUM:PARTICIPANT:CAS-02` / `CAS-02, REG-25`
+ * resolves to the exact same participant as typing `CAS-02` manually.
  */
 export async function scanForDeskVerification(raw: string): Promise<DeskScanOutcome> {
   let participantId = '';
@@ -57,29 +87,40 @@ export async function scanForDeskVerification(raw: string): Promise<DeskScanOutc
   try {
     devLog('raw decoded QR value', { raw });
 
-    const normalizedId = normalizeCasyumQrValue(raw);
-    devLog('normalized CASYUM id', {
-      raw,
-      normalizedId,
-      isParticipantCode: normalizedId !== null,
+    const parsed = parseCasyumQRPayload(raw);
+    devLog('parsed QR payload', {
+      raw: parsed.raw,
+      casyumId: parsed.casyumId,
+      registrationId: parsed.registrationId,
     });
 
-    if (normalizedId) {
+    // Lookup priority: 1) CASYUM id, 2) registration id, 3) legacy token.
+    if (parsed.casyumId) {
       // Canonical path: the same shared lookup used by manual entry of a bare
-      // CASYUM id (`CAS-01`). Resolves `participants where casyum_id == "CAS-01"`
+      // CASYUM id (`CAS-02`). Resolves `participants where casyum_id == "CAS-02"`
       // — never the raw QR payload as a document id.
-      participantId = normalizedId;
+      participantId = parsed.casyumId;
       profile = await lookupParticipantByCasyumId(participantId).catch((err: any) => {
         devError('participant lookup failed', {
           participantId,
           error: String(err?.message || err),
         });
-        return null;
+        throw err;
       });
-    } else {
+    } else if (parsed.registrationId) {
+      participantId = parsed.registrationId;
+      profile = await getScannedParticipant(participantId).catch((err: any) => {
+        devError('participant lookup failed', {
+          participantId,
+          error: String(err?.message || err),
+        });
+        throw err;
+      });
+    } else if (looksLikeCasyumCode(parsed.raw)) {
       // Legacy token path (registration tokens `CASYUM:REG:` / `REG-*`, base64
-      // payloads, raw document ids) — resolved through the registration lookup.
-      participantId = decodeQRPayload(raw) || '';
+      // payloads, raw participant ids / document ids) — resolved through the
+      // registration lookup.
+      participantId = decodeQRPayload(parsed.raw) || '';
       devLog('parsed legacy token', { raw, participantId });
       if (!participantId) {
         console.warn('[CASYUM:SCAN] invalid QR payload', { raw });
@@ -94,8 +135,13 @@ export async function scanForDeskVerification(raw: string): Promise<DeskScanOutc
           participantId,
           error: String(err?.message || err),
         });
-        return null;
+        throw err;
       });
+    } else {
+      // The QR payload carries no recognizable CASYUM / registration id and is
+      // not a legacy CASYUM code — it cannot be parsed.
+      console.warn('[CASYUM:SCAN] invalid QR payload', { raw });
+      return { status: 'invalid', profile: null, message: 'Invalid QR Code.' };
     }
 
     devLog('participant found', {
@@ -155,7 +201,11 @@ export async function scanForDeskVerification(raw: string): Promise<DeskScanOutc
       participantId,
       error: String(err?.message || err),
     });
-    return { status: 'invalid', profile: null, message: 'Invalid QR Code.' };
+    return {
+      status: 'network_error',
+      profile: null,
+      message: 'Unable to verify participant. Please check the connection and try again.',
+    };
   } finally {
     devLog('desk scan completed', { raw, participantId, participantFound: profile !== null });
   }

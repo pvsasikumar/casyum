@@ -32,6 +32,12 @@ export interface EventSelectionLike {
   type?: string;
   event_type?: string;
   is_gaming?: boolean;
+  /** ISO date (`YYYY-MM-DD`) used to scope time-clash detection. */
+  event_date?: string;
+  /** Legacy alias for `event_date` used by the admin event model. */
+  date?: string;
+  /** Free-text display time, e.g. `10:00 AM - 4:00 PM`. */
+  time?: string;
 }
 
 export interface SelectedEventRef {
@@ -174,4 +180,112 @@ export function validateEventSelection(
     return 'Please select at least one event to register.';
   }
   return null;
+}
+
+/** A resolved event time range, in minutes from midnight. */
+export interface EventTimeRange {
+  start: number;
+  end: number;
+}
+
+/** Two selected events whose scheduled times overlap on the same date. */
+export interface EventClash {
+  eventA: EventSelectionLike;
+  eventB: EventSelectionLike;
+  eventDate?: string;
+}
+
+/**
+ * Parse a single clock time (`10:00 AM`, `4pm`, `13:30`) into minutes from
+ * midnight. Returns `null` when the value is not a recognizable time.
+ */
+function parseSingleTime(value: string): number | null {
+  const match = String(value || '')
+    .trim()
+    .match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/i);
+  if (!match) return null;
+  let hours = parseInt(match[1], 10);
+  const minutes = parseInt(match[2] || '0', 10);
+  const meridiem = (match[3] || '').toLowerCase();
+  if (hours > 23 || minutes > 59) return null;
+  if (meridiem === 'am' && hours === 12) hours = 0;
+  if (meridiem === 'pm' && hours !== 12) hours += 12;
+  return hours * 60 + minutes;
+}
+
+/**
+ * Tolerant parser for the free-text `time` field (e.g. `10:00 AM - 4:00 PM`).
+ *
+ * Accepts `-`, `–`, `—`, `to` and `until` separators, 12-hour times with an
+ * AM/PM suffix and 24-hour times. Parenthesized suffixes such as `(IST)` are
+ * stripped. A bare 12-hour range like `10:00 - 4:00` is interpreted as ending
+ * in the PM when the end would otherwise be earlier than the start.
+ *
+ * Returns `null` when no reliable range can be extracted — callers must then
+ * skip the pair rather than guess, so unparseable event times never produce a
+ * false scheduling conflict.
+ */
+export function parseEventTimeRange(time: string): EventTimeRange | null {
+  const cleaned = String(time || '')
+    .replace(/\([^)]*\)/g, ' ')
+    .replace(/–|—|to|until/gi, '-');
+  const parts = cleaned
+    .split('-')
+    .map((p) => p.trim())
+    .filter(Boolean);
+  if (parts.length !== 2) return null;
+
+  const start = parseSingleTime(parts[0]);
+  const end = parseSingleTime(parts[1]);
+  if (start === null || end === null) return null;
+
+  let resolvedEnd = end;
+  const startHasMeridiem = /[ap]m\b/i.test(parts[0]);
+  const endHasMeridiem = /[ap]m\b/i.test(parts[1]);
+  if (!startHasMeridiem && !endHasMeridiem && end <= start && end < 12 * 60) {
+    resolvedEnd = end + 12 * 60;
+  }
+  if (resolvedEnd <= start) return null;
+  return { start, end };
+}
+
+/**
+ * Find pairs of selected events whose scheduled times overlap on the same
+ * date. Both events must expose a parseable `time` (see `parseEventTimeRange`);
+ * otherwise the pair is skipped. Returns an empty array when nothing clashes.
+ */
+export function findEventTimeClashes(
+  events: Array<EventSelectionLike | null | undefined>
+): EventClash[] {
+  const list = (events || []).filter((e): e is EventSelectionLike => Boolean(e));
+  const clashes: EventClash[] = [];
+  for (let i = 0; i < list.length; i++) {
+    for (let j = i + 1; j < list.length; j++) {
+      const a = list[i];
+      const b = list[j];
+      const dateA = String(a.event_date || a.date || '').trim();
+      const dateB = String(b.event_date || b.date || '').trim();
+      if (dateA && dateB && dateA !== dateB) continue;
+      if (dateA && !dateB) continue;
+      if (!dateA && dateB) continue;
+
+      const rangeA = parseEventTimeRange(String(a.time || ''));
+      const rangeB = parseEventTimeRange(String(b.time || ''));
+      if (!rangeA || !rangeB) continue;
+
+      if (rangeA.start < rangeB.end && rangeB.start < rangeA.end) {
+        clashes.push({ eventA: a, eventB: b, eventDate: dateA || undefined });
+      }
+    }
+  }
+  return clashes;
+}
+
+/** Human-readable warning for a detected scheduling conflict. */
+export function eventTimeClashMessage(clash: EventClash): string {
+  const aName = String(clash.eventA.name || clash.eventA.eventName || 'Event');
+  const bName = String(clash.eventB.name || clash.eventB.eventName || 'Event');
+  const aTime = String(clash.eventA.time || '').trim();
+  const bTime = String(clash.eventB.time || '').trim();
+  return `"${aName}" (${aTime || 'time not set'}) overlaps with "${bName}" (${bTime || 'time not set'})`;
 }

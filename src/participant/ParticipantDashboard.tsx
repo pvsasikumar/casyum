@@ -42,6 +42,8 @@ import {
   MAX_REGULAR_EVENTS,
   REGULAR_EVENT_FEE,
   GAMING_EVENT_FEE,
+  findEventTimeClashes,
+  eventTimeClashMessage,
   type EventSelectionLike,
 } from '../services/eventSelection';
 
@@ -195,6 +197,13 @@ export const ParticipantDashboard: React.FC = () => {
     }
     return breakdown;
   }, [selectedEvents]);
+
+  /**
+   * Scheduling conflicts among the currently selected events. Advisory only —
+   * the participant is still allowed to register, but is shown which events
+   * overlap so they can adjust the selection before paying.
+   */
+  const timeClashes = useMemo(() => findEventTimeClashes(selectedEvents), [selectedEvents]);
 
   const handleLogout = () => {
     logout();
@@ -746,6 +755,19 @@ export const ParticipantDashboard: React.FC = () => {
                         </span>
                       </div>
                     </div>
+                    {timeClashes.length > 0 && (
+                      <div className="flex flex-col gap-2 px-3 py-2.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs">
+                        <div className="flex items-start gap-2">
+                          <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                          <span className="font-bold uppercase tracking-widest text-[10px]">Scheduling conflict detected</span>
+                        </div>
+                        <ul className="flex flex-col gap-1 pl-5 list-disc">
+                          {timeClashes.map((clash, idx) => (
+                            <li key={idx}>{eventTimeClashMessage(clash)}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
                     {(selectionNotice || feeBreakdown.total === 0) && (
                       <div className="flex items-start gap-2 px-3 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/25 text-amber-300 text-xs">
                         <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />

@@ -344,6 +344,14 @@ export const VerifyParticipantPage: React.FC = () => {
       }
 
       const profile = outcome.profile;
+      if (!profile) {
+        setScanResult({
+          type: 'error',
+          title: 'Unable to Verify',
+          message: outcome.message || 'Unable to verify participant. Please check the connection and try again.',
+        });
+        return;
+      }
       const participantId = profile.participantId;
       let p = findById(participantId) || findById(profile.registrationId);
       if (!p) {
