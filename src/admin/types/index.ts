@@ -179,6 +179,7 @@ export type ActiveTabModule =
   | 'Event Cards'
   | 'Payments'
   | 'Payment Settings'
+  | 'Communication Settings'
   | 'Attendance'
   | 'Analytics'
   | 'Export Center'

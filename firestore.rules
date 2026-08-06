@@ -18,6 +18,10 @@ service cloud.firestore {
       return getUserRole() in ['Super Admin', 'Admin'];
     }
 
+    function isSuperAdmin() {
+      return getUserRole() == 'Super Admin';
+    }
+
     function isCoordinator() {
       return getUserRole() in [
         'Event Coordinator',
@@ -292,10 +296,22 @@ service cloud.firestore {
     // App-wide configuration (settings/app) is admin-only. Payment collection
     // settings (settings/payment) hold the QR/UPI/bank instructions shown on
     // the participant payment form, so they must be publicly readable; only
-    // admins may change them.
+    // admins may change them. Communication settings (settings/communication)
+    // are handled by their own dedicated rule below, so they are explicitly
+    // excluded here to avoid granting broader write access via overlapping
+    // match statements.
     match /settings/{docId} {
-      allow read: if docId == 'payment' || isAdmin();
-      allow write: if isAdmin();
+      allow read: if docId == 'payment' || (docId != 'communication' && isAdmin());
+      allow write: if docId != 'communication' && isAdmin();
+    }
+
+    // Communication settings (settings/communication) drive the WhatsApp group
+    // invitation popup shown to participants after a successful registration.
+    // Participants must be able to read them, but only the Super Admin may edit
+    // the group name, invite link, description or enable/disable the popup.
+    match /settings/communication {
+      allow read: if isSignedIn();
+      allow write: if isSuperAdmin();
     }
 
     // Sequence counters are read and incremented when participants register.

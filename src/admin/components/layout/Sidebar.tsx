@@ -22,6 +22,7 @@ import {
   Trophy,
   GraduationCap,
   Wallet,
+  MessageSquare,
 } from 'lucide-react';
 import type { ActiveTabModule } from '../../types';
 import { useAdmin } from '../../context/AdminContext';
@@ -57,6 +58,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onCloseMobile, onExitAdmin }) 
     { name: 'Registrations', icon: ClipboardList, permission: 'registrations.view' },
     { name: 'Payments', icon: CreditCard, permission: 'payments.view' },
     { name: 'Payment Settings', icon: Wallet, permission: 'settings.view' },
+    { name: 'Communication Settings', icon: MessageSquare, permission: 'settings.view' },
     { name: 'Attendance', icon: UserCheck, permission: 'attendance.view' },
     { name: 'Certificates', icon: Award, permission: 'certificates.view' },
     { name: 'Gallery', icon: Image, permission: 'gallery.view' },

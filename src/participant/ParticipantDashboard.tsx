@@ -36,6 +36,11 @@ import {
   registerEventBundle,
   resubmitRegistrationPayment,
 } from '../services/participantService';
+import { readCommunicationSettings } from '../services/communicationSettingsService';
+import {
+  WhatsAppInviteModal,
+  type RegistrationSuccessInfo,
+} from './WhatsAppInviteModal';
 import {
   isGamingEvent,
   calculateRegistrationFee,
@@ -76,6 +81,10 @@ export const ParticipantDashboard: React.FC = () => {
   const [selectedRegularIds, setSelectedRegularIds] = useState<string[]>([]);
   const [selectedGamingId, setSelectedGamingId] = useState<string | null>(null);
   const [selectionNotice, setSelectionNotice] = useState('');
+  const [whatsAppInvite, setWhatsAppInvite] = useState<{
+    settings: { groupName: string; description: string; inviteLink: string };
+    registration: RegistrationSuccessInfo;
+  } | null>(null);
 
   const loadAll = useCallback(async () => {
     try {
@@ -296,6 +305,31 @@ export const ParticipantDashboard: React.FC = () => {
     });
   };
 
+  /**
+   * Fetches the admin-managed communication settings and, if the WhatsApp
+   * group invitation is enabled, opens the success popup with the freshly
+   * fetched invite link. Runs exactly once per registration submission —
+   * never on login, refresh or profile update.
+   */
+  const openWhatsAppInvite = async (registration: RegistrationSuccessInfo) => {
+    try {
+      const settings = await readCommunicationSettings();
+      const whatsapp = settings?.whatsapp;
+      if (whatsapp?.enabled && whatsapp.inviteLink) {
+        setWhatsAppInvite({
+          settings: {
+            groupName: whatsapp.groupName,
+            description: whatsapp.description,
+            inviteLink: whatsapp.inviteLink,
+          },
+          registration,
+        });
+      }
+    } catch {
+      // Never block the participant if the popup settings cannot be loaded.
+    }
+  };
+
   const handleBundleSubmit = async (payment: { payment_method: string; transaction_id: string; payment_date: string }) => {
     if (!registerTarget?.bundle) return;
     setError('');
@@ -319,6 +353,15 @@ export const ParticipantDashboard: React.FC = () => {
       setSelectedRegularIds([]);
       setSelectedGamingId(null);
       await loadAll();
+      await openWhatsAppInvite({
+        registrationId: res.registrationId,
+        events: [
+          ...res.regular.map((r) => r.eventName),
+          ...(res.gaming ? [res.gaming.eventName] : []),
+        ],
+        amount: res.fee,
+        paymentStatus: 'Pending Faculty Verification',
+      });
     } catch (err) {
       setRegisterError(err instanceof Error ? err.message : 'Failed to register for the selected events.');
     } finally {
@@ -341,6 +384,12 @@ export const ParticipantDashboard: React.FC = () => {
       setNotice(res.message);
       setRegisterTarget(null);
       await loadAll();
+      await openWhatsAppInvite({
+        registrationId: res.registrationId,
+        events: [res.event.name],
+        amount: Number(registerTarget.fee) || 0,
+        paymentStatus: 'Pending Faculty Verification',
+      });
     } catch (err) {
       setRegisterError(err instanceof Error ? err.message : 'Failed to register for the event.');
     } finally {
@@ -992,6 +1041,15 @@ export const ParticipantDashboard: React.FC = () => {
             />
           </div>
         </div>
+      )}
+
+      {whatsAppInvite && (
+        <WhatsAppInviteModal
+          open
+          settings={whatsAppInvite.settings}
+          registration={whatsAppInvite.registration}
+          onContinue={() => setWhatsAppInvite(null)}
+        />
       )}
     </div>
   );

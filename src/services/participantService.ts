@@ -205,7 +205,7 @@ export interface RegisterPaymentInput {
 export async function registerEvent(
   eventId: string | number,
   payment?: RegisterPaymentInput
-): Promise<{ message: string; event: any }> {
+): Promise<{ message: string; event: any; registrationId: string }> {
   const user = await ensureSignedIn();
   if (!user) {
     throw new Error('You must be signed in to register.');
@@ -271,6 +271,7 @@ export async function registerEvent(
   return {
     message: 'You have been registered for the event. Your payment will be reviewed by the CASYUM team.',
     event: { id, name: event.name },
+    registrationId: regId,
   };
 }
 
@@ -286,6 +287,7 @@ export interface RegisterEventBundleResult {
   gamingFee: number;
   regular: SelectedEventRef[];
   gaming: SelectedGamingRef | null;
+  registrationId: string;
 }
 
 /**
@@ -383,7 +385,7 @@ export async function registerEventBundle(
 
   const fee = calculateRegistrationFee([...regular, ...(gaming ? [gaming] : [])]);
 
-  await createBundleRegistration({
+  const reg = await createBundleRegistration({
     regular,
     gaming,
     participant_id: user.uid,
@@ -411,6 +413,7 @@ export async function registerEventBundle(
     gamingFee: fee.gamingFee,
     regular,
     gaming,
+    registrationId: reg.registration_id,
   };
 }
 

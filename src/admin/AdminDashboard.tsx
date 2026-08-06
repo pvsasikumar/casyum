@@ -27,6 +27,7 @@ import { CasyumFacultyCoordinatorManagement } from './components/modules/CasyumF
 import { ParticipantsModule } from './components/modules/ParticipantsModule';
 import { SettingsModule } from './components/modules/SettingsModule';
 import { PaymentSettingsModule } from './components/modules/PaymentSettingsModule';
+import { CommunicationSettingsModule } from './components/modules/CommunicationSettingsModule';
 import { AuditLogs } from './components/modules/AuditLogs';
 import { EmployeeManagement } from './components/modules/EmployeeManagement';
 import { EmailLogs } from './components/modules/EmailLogs';
@@ -50,6 +51,8 @@ const ModuleRouter: React.FC = () => {
       return <PaymentVerification />;
     case 'Payment Settings':
       return <PaymentSettingsModule />;
+    case 'Communication Settings':
+      return <CommunicationSettingsModule />;
     case 'Attendance':
       return <AttendanceModule />;
     case 'Analytics':
