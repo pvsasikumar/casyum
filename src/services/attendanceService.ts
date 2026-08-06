@@ -9,6 +9,7 @@ import {
   updateDoc,
   writeBatch,
   onSnapshot,
+  serverTimestamp,
   type QuerySnapshot,
   type DocumentData,
 } from 'firebase/firestore';
@@ -46,6 +47,78 @@ export async function listAttendanceByEvent(eventId: string): Promise<Attendance
     query(collection(db, 'attendance'), where('event_id', '==', eventId))
   );
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as any);
+}
+
+/**
+ * Look up a single attendance record for one participant + event. Implemented
+ * as a query (not `getDoc`) so it stays safe under the Firestore read rules:
+ * rules are only evaluated against documents that already exist, so this never
+ * dereferences a null `resource` when the document has not been created yet.
+ */
+export async function getAttendanceByEventAndParticipant(
+  eventId: string,
+  participantId: string
+): Promise<AttendanceRecordRow | null> {
+  const db = getDb();
+  const snap = await getDocs(
+    query(
+      collection(db, 'attendance'),
+      where('event_id', '==', eventId),
+      where('participant_id', '==', participantId)
+    )
+  );
+  if (snap.empty) return null;
+  const d = snap.docs[0];
+  return { id: d.id, ...d.data() } as any;
+}
+
+/**
+ * Duplicate-safe attendance write used by the Event Coordinator scan flow.
+ *
+ * The attendance document id is deterministic (`att-<eventId>-<participantId>`),
+ * so a participant + event always maps to a single document — a second scan can
+ * never create a duplicate record. When the record already exists the existing
+ * document is returned untouched (the caller shows "Already Checked In").
+ *
+ * The write is awaited before any success is shown to the user.
+ */
+export async function markAttendance(record: {
+  event_id: string;
+  participant_id: string;
+  casyum_id?: string;
+  coordinator_id: string;
+}): Promise<{ created: boolean; existing: AttendanceRecordRow | null }> {
+  const existing = await getAttendanceByEventAndParticipant(
+    record.event_id,
+    record.participant_id
+  );
+  if (existing) {
+    return { created: false, existing };
+  }
+
+  const db = getDb();
+  const id = attendanceDocId(record.event_id, record.participant_id);
+  const nowIso = now();
+  const row: AttendanceRecordRow = {
+    id,
+    attendance_id: id,
+    event_id: record.event_id,
+    participant_id: record.participant_id,
+    casyum_id: record.casyum_id || '',
+    coordinator_id: record.coordinator_id,
+    status: 'Present',
+    check_in_time: nowIso,
+    remarks: '',
+    updated_at: nowIso,
+  };
+  // Keep the existing field naming conventions used by every attendance reader
+  // and also store the requested `attendance_status` / `checked_in_at` fields.
+  await setDoc(doc(db, 'attendance', id), {
+    ...row,
+    attendance_status: 'Present',
+    checked_in_at: serverTimestamp(),
+  });
+  return { created: true, existing: null };
 }
 
 // Firestore real-time listener for all attendance records (CASYUM Faculty

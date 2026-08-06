@@ -11,6 +11,7 @@ import {
   Search,
   ScanLine,
   Loader2,
+  RefreshCcw,
 } from 'lucide-react';
 import { AttendanceTable } from '../components/AttendanceTable';
 import { AttendanceSummary } from '../components/AttendanceSummary';
@@ -29,7 +30,6 @@ import type {
   EventAttendanceStats,
   EventParticipant,
   CoordinatorAttendanceRecord,
-  VerificationStatus,
 } from '../types';
 import type { ParticipantVerificationInfo } from '../services/ParticipantService';
 
@@ -39,15 +39,18 @@ interface AttendancePageProps {
 }
 
 interface ScanResultView {
+  status: 'success' | 'already_checked_in' | 'not_registered';
   profile: ScannedParticipant;
-  registered: boolean;
-  paymentVerified: boolean;
-  deskVerified: boolean;
-  attendanceStatus: 'Present' | 'Absent' | 'Not Marked';
-  verificationStatus: VerificationStatus;
-  attendanceEligible: boolean;
+  checkInTime: string | null;
   registeredEvents: RegisteredEventDetail[];
-  message: string;
+}
+
+/** Development-only logging for the Event Coordinator attendance flow. No PII
+ * (email, phone, payment proof) is ever logged. Stripped from production. */
+function devLog(message: string, data?: Record<string, unknown>): void {
+  if (import.meta.env.DEV) {
+    console.info(`[ATTENDANCE] ${message}`, data ?? {});
+  }
 }
 
 /** Attendance is only unlocked when the payment is verified by the Faculty
@@ -58,7 +61,7 @@ function isAttendanceEligible(p?: Partial<EventParticipant> | null): boolean {
 
 export const AttendancePage: React.FC<AttendancePageProps> = ({ eventId, eventName }) => {
   const navigate = useNavigate();
-  const { user, addToast } = useCoordinator();
+  const { user, addToast, assignedEvents } = useCoordinator();
   const [baseParticipants, setBaseParticipants] = useState<EventParticipant[]>([]);
   const [dbAttendance, setDbAttendance] = useState<Record<string, CoordinatorAttendanceRecord>>({});
   const [pendingAttendance, setPendingAttendance] = useState<Record<string, CoordinatorAttendanceRecord>>({});
@@ -78,6 +81,7 @@ export const AttendancePage: React.FC<AttendancePageProps> = ({ eventId, eventNa
   const [scanError, setScanError] = useState('');
   const [scanResult, setScanResult] = useState<ScanResultView | null>(null);
   const [marking, setMarking] = useState(false);
+  const [resumeSignal, setResumeSignal] = useState(0);
 
   // Firestore real-time listeners for the coordinator's assigned event only.
   useEffect(() => {
@@ -405,47 +409,140 @@ export const AttendancePage: React.FC<AttendancePageProps> = ({ eventId, eventNa
     }
   }, [eventId, user, viewParticipants, addToast]);
 
-  const applyCheck = useCallback(
-    (check: AttendanceCheck) => {
-      if (!check.profile) {
-        setScanError(check.message);
-        setScanResult(null);
+  const handleScanNext = useCallback(() => {
+    setScanResult(null);
+    setScanError('');
+    setScanBusy(false);
+    setMarking(false);
+    setResumeSignal((signal) => signal + 1);
+  }, []);
+
+  /**
+   * Event Coordinator QR attendance flow. The scanner pauses immediately on
+   * detection (the QRScanner's `processing` prop stays true while this runs),
+   * so nothing re-scans until "Scan Next Participant" explicitly resumes it.
+   * Attendance is written atomically and awaited before any success is shown.
+   */
+  const runAttendanceCheck = useCallback(
+    async (identifier: string, searchFirst: boolean) => {
+      if (!user) {
+        setScanError('You are not assigned to this event.');
         return;
       }
-      const profile = check.profile;
-      const existing = pendingAttendance[profile.id] || dbAttendance[profile.id];
-      const attendanceStatus = existing
-        ? AttendanceService.normalizeAttendanceStatus(existing.status)
-        : 'Not Marked';
-      setScanResult({
-        profile,
-        registered: check.registered,
-        paymentVerified: check.paymentVerified,
-        deskVerified: check.deskVerified,
-        attendanceStatus,
-        verificationStatus: profile.verificationStatus,
-        attendanceEligible: check.eligible,
-        registeredEvents: check.registeredEvents || [],
-        message: check.message,
-      });
-    },
-    [pendingAttendance, dbAttendance]
-  );
-
-  const processScanData = useCallback(
-    async (data: string) => {
       setScanBusy(true);
+      setMarking(false);
       setScanError('');
+      setScanResult(null);
       try {
-        applyCheck(await checkEventAttendance(eventId, data));
-      } catch {
-        setScanError('Unable to fetch participant. Please try again.');
-        setScanResult(null);
+        // [ATTENDANCE] QR decoded (identifier only — never PII)
+        devLog('QR decoded', { identifier });
+        devLog('Selected event ID', { eventId });
+        devLog('Coordinator ID', { coordinatorId: user.id });
+
+        // Validate coordinator event access: only assigned events may be marked.
+        const isAssigned = assignedEvents.some((e) => String(e.id) === String(eventId));
+        if (!isAssigned) {
+          devLog('Event assignment validated', { assigned: false });
+          setScanError('You are not assigned to this event.');
+          return;
+        }
+        devLog('Event assignment validated', { assigned: true });
+
+        // [ATTENDANCE] Participant resolved (payment + desk gates also checked).
+        let check: AttendanceCheck = await checkEventAttendance(eventId, identifier);
+        if (searchFirst && !check.profile) {
+          check = await searchEventAttendance(eventId, identifier);
+        }
+        devLog('Participant resolved', { participantFound: check.profile !== null });
+        if (!check.profile) {
+          const message = /invalid/i.test(check.message) ? 'Invalid QR Code' : 'Participant Not Found';
+          setScanError(message);
+          return;
+        }
+        const profile = check.profile;
+        devLog('Participant ID', { participantId: profile.id });
+
+        // [ATTENDANCE] Participant event registration validated.
+        if (!check.registered) {
+          devLog('Participant event registration validated', { registered: false });
+          setScanResult({
+            status: 'not_registered',
+            profile,
+            checkInTime: null,
+            registeredEvents: check.registeredEvents || [],
+          });
+          return;
+        }
+        devLog('Participant event registration validated', { registered: true });
+
+        // [ATTENDANCE] Payment validated.
+        if (!check.paymentVerified) {
+          devLog('Payment validated', { verified: false });
+          setScanError('Payment Not Verified\nFaculty Coordinator approval is required.');
+          return;
+        }
+        devLog('Payment validated', { verified: true });
+
+        // [ATTENDANCE] Registration Team verification validated.
+        if (!check.deskVerified || !check.eligible) {
+          devLog('Registration verification validated', { verified: false });
+          setScanError(
+            'Registration Verification Pending\nPlease complete verification at the Registration Desk.'
+          );
+          return;
+        }
+        devLog('Registration verification validated', { verified: true });
+
+        // [ATTENDANCE] Existing attendance checked + atomic Firestore write.
+        setMarking(true);
+        devLog('Firestore write started', { participantId: profile.id, eventId });
+        const attendanceResult = await AttendanceService.markAttendance({
+          eventId,
+          participantId: profile.id,
+          casyumId: profile.casyumId,
+          coordinatorId: user.id,
+        });
+        devLog('Firestore write completed', {
+          created: attendanceResult.created,
+          participantId: profile.id,
+          eventId,
+        });
+
+        if (!attendanceResult.created) {
+          devLog('Attendance result', { status: 'already_checked_in' });
+          setScanResult({
+            status: 'already_checked_in',
+            profile,
+            checkInTime: attendanceResult.existing?.checkInTime ?? null,
+            registeredEvents: check.registeredEvents || [],
+          });
+          return;
+        }
+        devLog('Attendance result', { status: 'success' });
+        setScanResult({
+          status: 'success',
+          profile,
+          checkInTime: attendanceResult.record?.checkInTime ?? null,
+          registeredEvents: check.registeredEvents || [],
+        });
+      } catch (error) {
+        devLog('Attendance write failed', { error: String((error as Error)?.message || error) });
+        console.error('[ATTENDANCE] attendance write failed', error);
+        setScanError('Attendance could not be saved.\nPlease check the connection and try again.');
       } finally {
+        setMarking(false);
         setScanBusy(false);
       }
     },
-    [eventId, applyCheck]
+    [user, eventId, assignedEvents]
+  );
+
+  const processScanData = useCallback(
+    (data: string) => {
+      if (scanBusy || marking) return;
+      void runAttendanceCheck(data, false);
+    },
+    [runAttendanceCheck, scanBusy, marking]
   );
 
   const handleManualSearch = useCallback(async () => {
@@ -454,42 +551,15 @@ export const AttendancePage: React.FC<AttendancePageProps> = ({ eventId, eventNa
       setScanError('Enter a name, email, phone or registration ID first.');
       return;
     }
-    setScanBusy(true);
-    setScanError('');
-    try {
-      // Try as an ID/code first, then fall back to name/email/phone matching
-      // across the event's registrations.
-      let check = await checkEventAttendance(eventId, query);
-      if (!check.profile) check = await searchEventAttendance(eventId, query);
-      applyCheck(check);
-    } catch {
-      setScanError('Unable to fetch participant. Please try again.');
-      setScanResult(null);
-    } finally {
-      setScanBusy(false);
-    }
-  }, [eventId, manualInput, applyCheck]);
-
-  const handleCheckInScanned = useCallback(async () => {
-    if (!scanResult || !scanResult.attendanceEligible || scanResult.attendanceStatus === 'Present') return;
-    setMarking(true);
-    const ok = await updateAttendance(scanResult.profile.id, 'Present', scanResult.profile.casyumId);
-    if (ok) {
-      setScanResult((prev) =>
-        prev
-          ? { ...prev, attendanceStatus: 'Present' as const, attendanceEligible: false }
-          : prev
-      );
-      addToast('QR Check-In', 'Attendance marked successfully.', 'success');
-    }
-    setMarking(false);
-  }, [scanResult, updateAttendance, addToast]);
+    await runAttendanceCheck(query, true);
+  }, [manualInput, runAttendanceCheck]);
 
   const closeQrDialog = useCallback(() => {
     setQrDialogOpen(false);
     setQrTab('scan');
     setManualInput('');
     setScanBusy(false);
+    setMarking(false);
     setScanError('');
     setScanResult(null);
   }, []);
@@ -616,7 +686,12 @@ export const AttendancePage: React.FC<AttendancePageProps> = ({ eventId, eventNa
                   Point the camera at a participant's QR code. The QR only encodes a unique registration token — all
                   details are fetched securely from Firestore after scanning.
                 </p>
-                <QRScanner onResult={processScanData} processing={scanBusy || marking} />
+                <QRScanner
+                  onResult={processScanData}
+                  processing={scanBusy || marking}
+                  autoResumeAfterProcessing={false}
+                  resumeSignal={resumeSignal}
+                />
               </>
             ) : (
               <div className="flex flex-col gap-3">
@@ -645,26 +720,48 @@ export const AttendancePage: React.FC<AttendancePageProps> = ({ eventId, eventNa
               </div>
             )}
 
-            {scanBusy && (
-              <div className="flex items-center gap-2 px-3.5 py-3 rounded-xl bg-white/5 border border-white/10 text-xs text-white/70">
-                <Loader2 className="w-3.5 h-3.5 animate-spin text-cyan-400" />
-                Fetching participant details from Firestore...
+            {scanBusy && !marking && (
+              <div className="flex items-center gap-2.5 px-3.5 py-3 rounded-xl bg-cyan-500/10 border border-cyan-500/25 text-xs">
+                <Loader2 className="w-4 h-4 animate-spin text-cyan-400" />
+                <div>
+                  <p className="font-bold text-cyan-300">QR Captured</p>
+                  <p className="text-[10px] text-cyan-200/60 mt-0.5">Verifying participant...</p>
+                </div>
+              </div>
+            )}
+
+            {marking && (
+              <div className="flex items-center gap-2.5 px-3.5 py-3 rounded-xl bg-emerald-500/10 border border-emerald-500/25 text-xs">
+                <Loader2 className="w-4 h-4 animate-spin text-emerald-400" />
+                <div>
+                  <p className="font-bold text-emerald-300">Marking Attendance</p>
+                  <p className="text-[10px] text-emerald-200/60 mt-0.5">Saving to Firestore...</p>
+                </div>
               </div>
             )}
 
             {scanError && (
-              <div className="flex items-center gap-2 px-3.5 py-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs">
-                <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
-                <span>{scanError}</span>
+              <div className="flex flex-col gap-3 px-3.5 py-3 rounded-xl bg-rose-500/10 border border-rose-500/25 text-xs whitespace-pre-line">
+                <div className="flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                  <span className="font-bold text-rose-300">{scanError}</span>
+                </div>
+                <button
+                  onClick={handleScanNext}
+                  className="w-full py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <RefreshCcw className="w-3.5 h-3.5" />
+                  {qrTab === 'scan' ? 'Scan Next Participant' : 'New Search'}
+                </button>
               </div>
             )}
 
             {scanResult && (
-              <ScanResultCard
+              <ScanOutcomeCard
                 result={scanResult}
                 eventName={eventName}
-                marking={marking}
-                onMarkAttendance={handleCheckInScanned}
+                buttonLabel={qrTab === 'scan' ? 'Scan Next Participant' : 'New Search'}
+                onScanNext={handleScanNext}
               />
             )}
           </div>
@@ -745,18 +842,6 @@ const ToastContainerCoordinator: React.FC = () => {
   );
 };
 
-const VERIFICATION_BADGE: Record<string, { label: string; cls: string }> = {
-  Verified: { label: 'Verified', cls: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' },
-  Rejected: { label: 'Rejected', cls: 'bg-rose-500/20 text-rose-300 border-rose-500/30' },
-  Pending: { label: 'Pending', cls: 'bg-amber-500/20 text-amber-300 border-amber-500/30' },
-};
-
-const ATTENDANCE_BADGE: Record<string, { label: string; cls: string }> = {
-  Present: { label: 'Present', cls: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' },
-  Absent: { label: 'Absent', cls: 'bg-rose-500/20 text-rose-300 border-rose-500/30' },
-  'Not Marked': { label: 'Not Marked', cls: 'bg-white/5 text-white/50 border-white/15' },
-};
-
 const ScanResultRow: React.FC<{ label: string; value: string; valueCls?: string }> = ({ label, value, valueCls }) => (
   <div className="flex items-center justify-between gap-3 text-xs">
     <span className="text-white/40 shrink-0">{label}</span>
@@ -764,25 +849,15 @@ const ScanResultRow: React.FC<{ label: string; value: string; valueCls?: string 
   </div>
 );
 
-const ScanResultCard: React.FC<{
+/** Result card shown after the Event Coordinator scan flow completes. The
+ * scanner stays paused until "Scan Next Participant" is pressed. */
+const ScanOutcomeCard: React.FC<{
   result: ScanResultView;
   eventName: string;
-  marking: boolean;
-  onMarkAttendance: () => void;
-}> = ({ result, eventName, marking, onMarkAttendance }) => {
-  const {
-    profile,
-    registered,
-    paymentVerified,
-    deskVerified,
-    attendanceStatus,
-    verificationStatus,
-    attendanceEligible,
-    registeredEvents,
-  } = result;
-  const verifyBadge = VERIFICATION_BADGE[verificationStatus] || VERIFICATION_BADGE.Pending;
-  const attendanceBadge = ATTENDANCE_BADGE[attendanceStatus] || ATTENDANCE_BADGE['Not Marked'];
-  const canMark = attendanceEligible && attendanceStatus !== 'Present' && !marking;
+  buttonLabel: string;
+  onScanNext: () => void;
+}> = ({ result, eventName, buttonLabel, onScanNext }) => {
+  const { status, profile, checkInTime, registeredEvents } = result;
 
   return (
     <div className="rounded-2xl border border-white/15 bg-white/[0.03] overflow-hidden">
@@ -806,14 +881,6 @@ const ScanResultCard: React.FC<{
           <p className="text-sm font-bold text-white truncate">{profile.fullName || 'Participant'}</p>
           <p className="text-[10px] text-white/40 font-mono truncate">{profile.registrationId || profile.participantId}</p>
         </div>
-        <div className="flex flex-col items-end gap-1">
-          <span className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold border whitespace-nowrap ${verifyBadge.cls}`}>
-            {verifyBadge.label}
-          </span>
-          <span className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold border whitespace-nowrap ${attendanceBadge.cls}`}>
-            {attendanceBadge.label}
-          </span>
-        </div>
       </div>
 
       {/* Details */}
@@ -821,81 +888,67 @@ const ScanResultCard: React.FC<{
         {profile.casyumId && <ScanResultRow label="CASYUM ID" value={profile.casyumId} valueCls="text-cyan-300 font-mono font-bold" />}
         <ScanResultRow label="Registration ID" value={profile.registrationId || profile.participantId || '—'} />
         <ScanResultRow label="Selected Event" value={eventName} />
-        <ScanResultRow
-          label="Verification Status"
-          value={verificationStatus}
-          valueCls={verificationStatus === 'Verified' ? 'text-emerald-400 font-bold' : verificationStatus === 'Rejected' ? 'text-rose-400 font-bold' : 'text-amber-400 font-bold'}
-        />
-        <ScanResultRow
-          label="Attendance Status"
-          value={attendanceStatus}
-          valueCls={attendanceStatus === 'Present' ? 'text-emerald-400 font-bold' : attendanceStatus === 'Absent' ? 'text-rose-400 font-bold' : 'text-white/60'}
-        />
       </div>
 
-      {/* Rules / messages */}
-      {!registered && (
-        <div className="mx-4 mb-4 px-3.5 py-3 rounded-xl bg-rose-500/10 border border-rose-500/25 text-rose-300 text-xs flex items-start gap-2">
-          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-          <div className="flex flex-col gap-1">
-            <span className="font-bold">Wrong Event — this QR is for a different event.</span>
-            <span>Participant is scanned against: {eventName}</span>
-            {registeredEvents.length > 0 && (
-              <div className="mt-1 flex flex-col gap-1.5">
-                <span className="text-white/60">Registered for:</span>
-                {registeredEvents.map((e) => (
-                  <span key={e.eventId} className="flex items-center gap-1.5 text-emerald-300">
-                    <CheckCircle2 className="w-3 h-3 shrink-0" />
-                    {e.name}
-                    {e.date || e.time ? ` — ${[e.date, e.time].filter(Boolean).join(' · ')}` : ''}
-                    {e.venue ? ` (${e.venue})` : ''}
-                  </span>
-                ))}
-              </div>
-            )}
+      {/* Outcome */}
+      {status === 'success' && (
+        <div className="mx-4 mb-4 flex flex-col gap-2.5 px-4 py-5 rounded-2xl bg-emerald-500/15 border border-emerald-500/40 text-center">
+          <div className="flex items-center justify-center gap-2">
+            <CheckCircle2 className="w-8 h-8 text-emerald-400" />
+            <span className="text-lg font-black text-emerald-300 tracking-wider">ATTENDANCE MARKED</span>
           </div>
+          <p className="text-[11px] text-emerald-200/70">
+            {checkInTime ? `Checked in at ${checkInTime}` : 'Attendance saved to Firestore.'}
+          </p>
         </div>
       )}
-      {registered && attendanceStatus === 'Present' && (
-        <div className="mx-4 mb-4 px-3.5 py-3 rounded-xl bg-emerald-500/10 border border-emerald-500/25 text-emerald-300 text-xs flex items-start gap-2">
-          <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
-          <span>Attendance already recorded.</span>
+
+      {status === 'already_checked_in' && (
+        <div className="mx-4 mb-4 flex flex-col gap-2.5 px-4 py-5 rounded-2xl bg-violet-500/15 border border-violet-500/40 text-center">
+          <div className="flex items-center justify-center gap-2">
+            <ShieldCheck className="w-8 h-8 text-violet-400" />
+            <span className="text-lg font-black text-violet-300 tracking-wider">ALREADY CHECKED IN</span>
+          </div>
+          <p className="text-[11px] text-violet-200/70">
+            {checkInTime ? `Attendance was recorded at ${checkInTime}.` : 'Attendance was recorded earlier.'}
+          </p>
         </div>
       )}
-      {registered && attendanceStatus !== 'Present' && !attendanceEligible && (
-        <div className="mx-4 mb-4 px-3.5 py-3 rounded-xl bg-amber-500/10 border border-amber-500/25 text-amber-300 text-xs flex items-start gap-2">
-          <Lock className="w-4 h-4 shrink-0 mt-0.5" />
-          <span>
-            {!paymentVerified
-              ? 'Payment Not Verified. Attendance is not allowed yet.'
-              : !deskVerified
-                ? 'Registration Verification Pending. Please complete verification at the Registration Desk.'
-                : 'Participant must complete verification before attendance.'}
-          </span>
+
+      {status === 'not_registered' && (
+        <div className="mx-4 mb-4 flex flex-col gap-2.5 px-4 py-5 rounded-2xl bg-rose-500/15 border border-rose-500/40">
+          <div className="flex items-start gap-2">
+            <AlertCircle className="w-5 h-5 shrink-0 mt-0.5 text-rose-400" />
+            <div className="flex flex-col gap-1">
+              <span className="text-sm font-black text-rose-300">Participant is not registered for this event.</span>
+              <span className="text-[11px] text-rose-200/70">Scanned against: {eventName}</span>
+            </div>
+          </div>
+          {registeredEvents.length > 0 && (
+            <div className="mt-1 flex flex-col gap-1.5">
+              <span className="text-[10px] text-white/50">Registered for:</span>
+              {registeredEvents.map((e) => (
+                <span key={e.eventId} className="flex items-center gap-1.5 text-emerald-300 text-[11px]">
+                  <CheckCircle2 className="w-3 h-3 shrink-0" />
+                  {e.name}
+                  {e.date || e.time ? ` — ${[e.date, e.time].filter(Boolean).join(' · ')}` : ''}
+                  {e.venue ? ` (${e.venue})` : ''}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
       {/* Action */}
       <div className="p-4 border-t border-white/10">
-        {registered && attendanceStatus === 'Present' ? (
-          <div className="w-full py-3 rounded-xl bg-emerald-600/15 border border-emerald-500/30 text-emerald-300 text-xs font-bold flex items-center justify-center gap-2">
-            <CheckCircle2 className="w-4 h-4" />
-            Checked In
-          </div>
-        ) : (
-          <button
-            onClick={onMarkAttendance}
-            disabled={!canMark}
-            className={`w-full py-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
-              canMark
-                ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                : 'bg-white/5 text-white/30 cursor-not-allowed'
-            }`}
-          >
-            {marking ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-            Mark Attendance
-          </button>
-        )}
+        <button
+          onClick={onScanNext}
+          className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center justify-center gap-2 cursor-pointer"
+        >
+          <RefreshCcw className="w-4 h-4" />
+          {buttonLabel}
+        </button>
       </div>
     </div>
   );

@@ -13,6 +13,7 @@ import {
   listAttendanceByEvent,
   subscribeAttendanceByEvent,
   attendanceDocId,
+  markAttendance as markAttendanceRecord,
 } from '../../services/attendanceService';
 import { ParticipantService, type ParticipantVerificationInfo } from './ParticipantService';
 
@@ -137,6 +138,40 @@ export const AttendanceService = {
       check_in_time: record.checkInTime,
       remarks: record.remarks,
     });
+  },
+
+  /**
+   * Duplicate-safe attendance write for the Event Coordinator QR flow. Awaits
+   * the Firestore write before resolving, so the caller can show success only
+   * after the record is actually saved. If the participant already has
+   * attendance for this event the existing record is returned (`created: false`)
+   * instead of creating a duplicate.
+   */
+  async markAttendance(args: {
+    eventId: string;
+    participantId: string;
+    casyumId?: string;
+    coordinatorId: string;
+  }): Promise<{ created: boolean; existing: CoordinatorAttendanceRecord | null; record: CoordinatorAttendanceRecord | null }> {
+    const result = await markAttendanceRecord({
+      event_id: args.eventId,
+      participant_id: args.participantId,
+      casyum_id: args.casyumId,
+      coordinator_id: args.coordinatorId,
+    });
+    if (result.created) {
+      const record = this.createRecord(
+        args.eventId,
+        args.participantId,
+        args.coordinatorId,
+        'Present',
+        undefined,
+        args.casyumId
+      );
+      return { created: true, existing: null, record };
+    }
+    const existing = toRecord(result.existing!);
+    return { created: false, existing, record: existing };
   },
 
   async markAllPresent(eventId: string, coordinatorId: string, participantIds: string[]): Promise<void> {

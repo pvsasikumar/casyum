@@ -20,6 +20,19 @@ interface QRScannerProps {
   /** When true, scan results are suppressed (e.g. while a verification request
    * is still being processed) so the same QR cannot be scanned repeatedly. */
   processing?: boolean;
+  /**
+   * When false, the scanner does NOT automatically resume after `processing`
+   * flips back to false — it stays paused until the parent explicitly resumes
+   * it by incrementing `resumeSignal`. Defaults to true so existing flows
+   * (Registration Team) keep their current auto-resume behavior.
+   */
+  autoResumeAfterProcessing?: boolean;
+  /**
+   * Incrementing this value resumes a paused scanner. Used together with
+   * `autoResumeAfterProcessing={false}` so the parent controls exactly when
+   * scanning restarts (e.g. after a "Scan Next Participant" button).
+   */
+  resumeSignal?: number;
 }
 
 /** Decode rate (frames per second) handed to the ZXing engine. */
@@ -46,7 +59,13 @@ interface ScannerCamera {
  * The camera (and therefore the permission prompt) is only ever requested when
  * the user explicitly clicks a Start/Scan button — never on mount.
  */
-export const QRScanner: React.FC<QRScannerProps> = ({ onResult, autoStart = false, processing = false }) => {
+export const QRScanner: React.FC<QRScannerProps> = ({
+  onResult,
+  autoStart = false,
+  processing = false,
+  autoResumeAfterProcessing = true,
+  resumeSignal = 0,
+}) => {
   // html5-qrcode resolves its container by id, so give every instance a unique
   // one (StrictMode-safe even when several scanners mount over a session).
   const containerId = useId().replace(/:/g, '');
@@ -61,6 +80,7 @@ export const QRScanner: React.FC<QRScannerProps> = ({ onResult, autoStart = fals
   const activeDeviceIdRef = useRef('');
   const onResultRef = useRef(onResult);
   const startCameraRef = useRef<(deviceId?: string) => Promise<void>>(async () => {});
+  const autoResumeRef = useRef(autoResumeAfterProcessing);
 
   const [cameras, setCameras] = useState<ScannerCamera[]>([]);
   const [activeDeviceId, setActiveDeviceId] = useState('');
@@ -83,6 +103,10 @@ export const QRScanner: React.FC<QRScannerProps> = ({ onResult, autoStart = fals
   }, []);
 
   useEffect(() => {
+    autoResumeRef.current = autoResumeAfterProcessing;
+  }, [autoResumeAfterProcessing]);
+
+  useEffect(() => {
     processingRef.current = processing;
     // Once the pending request finishes, allow the same QR to be scanned again
     // (used after a failed verification attempt).
@@ -90,7 +114,10 @@ export const QRScanner: React.FC<QRScannerProps> = ({ onResult, autoStart = fals
       lastCodeRef.current = '';
       lastCodeTimeRef.current = 0;
       // Restart scanning after the parent finished handling the decoded code.
-      if (pausedRef.current) {
+      // Only when the parent opted in: the Event Coordinator flow keeps the
+      // scanner paused after a result until the coordinator explicitly presses
+      // "Scan Next Participant" (which increments `resumeSignal`).
+      if (pausedRef.current && autoResumeRef.current) {
         pausedRef.current = false;
         if (mountedRef.current) setPaused(false);
         const instance = instanceRef.current;
@@ -217,6 +244,16 @@ export const QRScanner: React.FC<QRScannerProps> = ({ onResult, autoStart = fals
       await startCameraRef.current(activeDeviceIdRef.current || undefined);
     }
   }, []);
+
+  // Parent-controlled resume (Event Coordinator "Scan Next Participant"): every
+  // change of `resumeSignal` explicitly restarts a paused scanner without the
+  // component auto-resuming on its own.
+  useEffect(() => {
+    if (resumeSignal === 0) return;
+    if (pausedRef.current) {
+      void resumeScanning();
+    }
+  }, [resumeSignal, resumeScanning]);
 
   const errorMessage = useCallback((err: any): string => {
     const name = err?.name || '';
@@ -511,13 +548,15 @@ export const QRScanner: React.FC<QRScannerProps> = ({ onResult, autoStart = fals
             </div>
             <p className="text-xs font-bold text-white/80">QR captured</p>
             <p className="text-[10px] text-white/50">Processing scan result...</p>
-            <button
-              onClick={() => void resumeScanning()}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-700 text-white text-[11px] font-bold cursor-pointer"
-            >
-              <RefreshCcw className="w-3 h-3" />
-              Resume Scanning
-            </button>
+            {autoResumeRef.current && (
+              <button
+                onClick={() => void resumeScanning()}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-700 text-white text-[11px] font-bold cursor-pointer"
+              >
+                <RefreshCcw className="w-3 h-3" />
+                Resume Scanning
+              </button>
+            )}
           </div>
         )}
 
