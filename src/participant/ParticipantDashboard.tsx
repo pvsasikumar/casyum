@@ -138,9 +138,15 @@ export const ParticipantDashboard: React.FC = () => {
     );
     const wantsSelect = searchParams.get('select') === '1';
     const wantsAlreadyNotice = searchParams.get('status') === 'already_registered';
+    const hasSubmitted = (participant.registered_events || []).length > 0;
 
     pendingEventProcessedRef.current = true;
     setSearchParams({}, { replace: true });
+
+    if (hasSubmitted) {
+      setNotice('You have already submitted your registration for CASYUM. Duplicate registrations are not allowed.');
+      return;
+    }
 
     if (already || wantsAlreadyNotice) {
       setNotice('You are already registered for this event.');
@@ -166,7 +172,7 @@ export const ParticipantDashboard: React.FC = () => {
         setSelectedRegularIds((prev) => {
           if (prev.includes(String(ev.id))) return prev;
           if (prev.length >= MAX_REGULAR_EVENTS) {
-            setNotice('You can select a maximum of 3 regular events.');
+            setNotice(`You can select a maximum of ${MAX_REGULAR_EVENTS} regular events.`);
             return prev;
           }
           return [...prev, String(ev.id)];
@@ -261,21 +267,27 @@ export const ParticipantDashboard: React.FC = () => {
     }
   };
 
+  const regularLimit = selectedGamingId ? 1 : MAX_REGULAR_EVENTS;
+  const gamingBlocked = selectedRegularIds.length >= MAX_REGULAR_EVENTS;
+
   const toggleRegularEvent = (eventId: string | number) => {
     setError('');
     setNotice('');
     setSelectionNotice('');
     const id = String(eventId);
-    setSelectedRegularIds((prev) => {
-      if (prev.includes(id)) {
-        return prev.filter((x) => x !== id);
-      }
-      if (prev.length >= MAX_REGULAR_EVENTS) {
-        setSelectionNotice(`You can select a maximum of ${MAX_REGULAR_EVENTS} regular events.`);
-        return prev;
-      }
-      return [...prev, id];
-    });
+    if (selectedRegularIds.includes(id)) {
+      setSelectedRegularIds((prev) => prev.filter((x) => x !== id));
+      return;
+    }
+    if (selectedRegularIds.length >= regularLimit) {
+      setSelectionNotice(
+        selectedGamingId
+          ? 'A gaming event can be combined with only one regular event.'
+          : `You can select a maximum of ${MAX_REGULAR_EVENTS} regular events.`
+      );
+      return;
+    }
+    setSelectedRegularIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
   };
 
   const toggleGamingEvent = (eventId: string | number) => {
@@ -283,6 +295,14 @@ export const ParticipantDashboard: React.FC = () => {
     setNotice('');
     setSelectionNotice('');
     const id = String(eventId);
+    if (selectedGamingId && selectedGamingId !== id) {
+      setSelectionNotice('You can participate in only one gaming event.');
+      return;
+    }
+    if (selectedRegularIds.length >= MAX_REGULAR_EVENTS) {
+      setSelectionNotice('Two regular events cannot be combined with a gaming event.');
+      return;
+    }
     setSelectedGamingId((prev) => (prev === id ? null : id));
   };
 
@@ -294,6 +314,10 @@ export const ParticipantDashboard: React.FC = () => {
     const gamingCount = selectedGamingId ? 1 : 0;
     if (regularCount === 0 && gamingCount === 0) {
       setSelectionNotice('Select at least one event to continue.');
+      return;
+    }
+    if (gamingCount === 1 && regularCount >= MAX_REGULAR_EVENTS) {
+      setSelectionNotice('Two regular events cannot be combined with a gaming event.');
       return;
     }
     setRegisterError('');
@@ -450,6 +474,7 @@ export const ParticipantDashboard: React.FC = () => {
   const profileComplete = participant.profile_completed === 1;
   const registeredEventIds = new Set((participant.event_ids || []).map((x: any) => Number(x)));
   const myRegistrations = participant.registered_events || [];
+  const hasSubmitted = myRegistrations.length > 0;
   const avatar = participant.profile_picture || '';
 
   const regularEvents = openEvents.filter((ev) => !isGamingEvent(ev));
@@ -556,7 +581,9 @@ export const ParticipantDashboard: React.FC = () => {
                 devSelfCheck={import.meta.env.DEV && searchParams.get('qrdiag') === '1'}
               />
 
-              {openEvents.length === 0 ? (
+              {hasSubmitted ? (
+                <RegistrationSubmittedPanel registration={myRegistrations[0]} />
+              ) : openEvents.length === 0 ? (
                 <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-10 text-center text-white/40 text-sm">
                   No events are currently open for registration.
                 </div>
@@ -583,6 +610,17 @@ export const ParticipantDashboard: React.FC = () => {
                       </span>
                     </div>
 
+                    {selectedRegularIds.length >= regularLimit && regularLimit > 0 && (
+                      <div className="flex items-start gap-2 px-3 py-2.5 rounded-xl bg-violet-500/10 border border-violet-500/30 text-violet-300 text-xs">
+                        <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                        <span>
+                          {selectedGamingId
+                            ? 'A gaming event can be combined with only one regular event.'
+                            : `You can select a maximum of ${MAX_REGULAR_EVENTS} regular events.`}
+                        </span>
+                      </div>
+                    )}
+
                     {regularEvents.length === 0 ? (
                       <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-center text-white/40 text-sm">
                         No regular events are currently open for registration.
@@ -594,7 +632,8 @@ export const ParticipantDashboard: React.FC = () => {
                           const isFull = Number(ev.registered_count) >= Number(ev.max_participants);
                           const isRegistered = registeredEventIds.has(Number(ev.id));
                           const isSelected = selectedRegularIds.includes(id);
-                          const selectable = !isRegistered && !isFull;
+                          const atRegularLimit = selectedRegularIds.length >= regularLimit;
+                          const selectable = !isRegistered && !isFull && (isSelected || !atRegularLimit);
                           return (
                             <div
                               key={ev.id}
@@ -666,7 +705,7 @@ export const ParticipantDashboard: React.FC = () => {
                                     : isSelected
                                       ? 'bg-violet-600 text-white shadow-lg shadow-violet-500/20'
                                       : 'bg-gradient-to-r from-violet-500 to-indigo-600 hover:from-violet-600 hover:to-indigo-700 text-white shadow-lg shadow-violet-500/20'
-                                } ${isFull && !isRegistered ? 'opacity-50' : ''}`}
+                                } ${!selectable ? 'opacity-50' : ''}`}
                               >
                                 {isRegistered ? (
                                   <>
@@ -711,6 +750,20 @@ export const ParticipantDashboard: React.FC = () => {
                       )}
                     </div>
 
+                    {selectedGamingEvent && (
+                      <div className="flex items-start gap-2 px-3 py-2.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs">
+                        <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                        <span>You can participate in only one gaming event.</span>
+                      </div>
+                    )}
+
+                    {gamingBlocked && !selectedGamingEvent && (
+                      <div className="flex items-start gap-2 px-3 py-2.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs">
+                        <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                        <span>Two regular events cannot be combined with a gaming event.</span>
+                      </div>
+                    )}
+
                     {gamingEvents.length === 0 ? (
                       <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-center text-white/40 text-sm">
                         No gaming events are currently open for registration.
@@ -722,7 +775,7 @@ export const ParticipantDashboard: React.FC = () => {
                           const isFull = Number(ev.registered_count) >= Number(ev.max_participants);
                           const isRegistered = registeredEventIds.has(Number(ev.id));
                           const isSelected = selectedGamingId === id;
-                          const selectable = !isRegistered && !isFull;
+                          const selectable = !isRegistered && !isFull && (isSelected || !selectedGamingId) && !gamingBlocked;
                           return (
                             <div
                               key={ev.id}
@@ -774,36 +827,57 @@ export const ParticipantDashboard: React.FC = () => {
 
                   {/* Selection summary */}
                   <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 flex flex-col gap-4">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="flex flex-col gap-1">
-                        <span className="text-[10px] font-bold uppercase tracking-widest text-white/40">Your Selection</span>
-                        <div className="flex flex-wrap gap-1.5 text-[10px]">
-                          {selectedRegularNames.length === 0 && !selectedGamingEvent && (
-                            <span className="text-white/30">Nothing selected yet.</span>
-                          )}
-                          {selectedRegularNames.map((name) => (
-                            <span key={name} className="px-2 py-1 rounded-lg bg-violet-500/10 border border-violet-500/25 text-violet-300">
-                              {name}
-                            </span>
-                          ))}
-                          {selectedGamingEvent && (
-                            <span className="px-2 py-1 rounded-lg bg-rose-500/10 border border-rose-500/25 text-rose-300">
-                              {selectedGamingEvent.name}
-                            </span>
-                          )}
-                        </div>
+                    <div className="flex flex-col gap-1">
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-white/40">Selected Events</span>
+                      <div className="flex flex-wrap gap-1.5 text-[10px]">
+                        {selectedRegularNames.length === 0 && !selectedGamingEvent && (
+                          <span className="text-white/30">Nothing selected yet.</span>
+                        )}
+                        {selectedRegularNames.map((name) => (
+                          <span key={name} className="px-2 py-1 rounded-lg bg-violet-500/10 border border-violet-500/25 text-violet-300">
+                            {name}
+                          </span>
+                        ))}
+                        {selectedGamingEvent && (
+                          <span className="px-2 py-1 rounded-lg bg-rose-500/10 border border-rose-500/25 text-rose-300">
+                            {selectedGamingEvent.name}
+                          </span>
+                        )}
                       </div>
-                      <div className="flex flex-col items-end gap-0.5">
-                        <span className="text-[10px] text-white/40">
-                          {feeBreakdown.regularFee > 0 && `${feeBreakdown.regularFee} (regular)`}
-                          {feeBreakdown.regularFee > 0 && feeBreakdown.gamingFee > 0 && ' + '}
-                          {feeBreakdown.gamingFee > 0 && `${feeBreakdown.gamingFee} (gaming)`}
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="rounded-xl border border-violet-500/20 bg-violet-500/[0.06] px-4 py-3 flex items-center justify-between gap-2">
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-white/50">Regular Events</span>
+                        <span className={`text-xs font-extrabold ${selectedRegularIds.length > 0 ? 'text-violet-300' : 'text-white/40'}`}>
+                          {selectedRegularIds.length}/{MAX_REGULAR_EVENTS} Selected
                         </span>
-                        <span className="text-xl font-extrabold font-display text-gradient">
-                          ₹{feeBreakdown.total}
+                      </div>
+                      <div className="rounded-xl border border-rose-500/20 bg-rose-500/[0.06] px-4 py-3 flex items-center justify-between gap-2">
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-white/50">Gaming Event</span>
+                        <span className={`text-xs font-extrabold ${selectedGamingEvent ? 'text-rose-300' : 'text-white/40'}`}>
+                          {selectedGamingEvent ? 1 : 0}/1 Selected
                         </span>
                       </div>
                     </div>
+
+                    <div className="flex flex-col gap-1.5 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-white/40">Payment Summary</span>
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="text-white/60">Regular Fee</span>
+                        <span className="text-emerald-300 font-bold">₹{feeBreakdown.regularFee}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="text-white/60">Gaming Fee</span>
+                        <span className="text-emerald-300 font-bold">₹{feeBreakdown.gamingFee}</span>
+                      </div>
+                      <div className="h-px bg-white/10" />
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="font-bold text-white">Total Amount</span>
+                        <span className="font-extrabold font-display text-gradient">₹{feeBreakdown.total}</span>
+                      </div>
+                    </div>
+
                     {timeClashes.length > 0 && (
                       <div className="flex flex-col gap-2 px-3 py-2.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs">
                         <div className="flex items-start gap-2">
@@ -1123,6 +1197,132 @@ const RegistrationStatusTracker: React.FC<RegistrationStatusTrackerProps> = ({
           </div>
         );
       })}
+    </div>
+  );
+};
+
+interface StatusItemProps {
+  label: string;
+  value: string;
+  state: 'done' | 'pending' | 'rejected' | 'info';
+}
+
+const statusItemIcon = (state: StatusItemProps['state']) =>
+  state === 'done' ? (
+    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+  ) : state === 'rejected' ? (
+    <XCircle className="w-4 h-4 text-rose-400" />
+  ) : state === 'pending' ? (
+    <Clock className="w-4 h-4 text-amber-400" />
+  ) : (
+    <AlertCircle className="w-4 h-4 text-violet-400" />
+  );
+
+/**
+ * Read-only summary shown after a participant has submitted their single
+ * registration for CASYUM. The event selection and payment flow are hidden and
+ * the dashboard only reports the stored registration state. All data comes from
+ * the registration document — nothing here can create a second registration.
+ */
+const RegistrationSubmittedPanel: React.FC<{ registration: any }> = ({ registration }) => {
+  const paymentStatus = registration?.payment_status || 'submitted';
+  const paymentVerified = paymentStatus === 'verified';
+  const paymentRejected = paymentStatus === 'rejected';
+  const deskVerified = (registration?.registration_verification_status || 'locked') === 'verified';
+  const attendanceEligible = registration?.attendance_eligibility === true;
+  const attendanceStatus = registration?.attendance_status || 'not_marked';
+  const attendanceMarked = !!attendanceStatus && attendanceStatus !== 'not_marked';
+
+  const selectedEventNames = (() => {
+    const names: string[] = [];
+    const sel = registration?.selectedEvents;
+    if (sel?.regular && Array.isArray(sel.regular)) {
+      sel.regular.forEach((ev: any) => {
+        if (ev?.eventName) names.push(String(ev.eventName));
+      });
+    }
+    if (sel?.gaming?.eventName) names.push(String(sel.gaming.eventName));
+    if (names.length === 0 && registration?.event_name) names.push(String(registration.event_name));
+    return names;
+  })();
+
+  const items: Array<{ label: string; value: string; state: StatusItemProps['state'] }> = [
+    {
+      label: 'Registration ID',
+      value: registration?.registration_id || '—',
+      state: 'info',
+    },
+    {
+      label: 'Selected Event(s)',
+      value: selectedEventNames.length > 0 ? selectedEventNames.join(', ') : '—',
+      state: 'info',
+    },
+    {
+      label: 'Payment Status',
+      value: paymentVerified ? 'Payment Verified' : paymentRejected ? 'Payment Rejected' : 'Pending Verification',
+      state: paymentVerified ? 'done' : paymentRejected ? 'rejected' : 'pending',
+    },
+    {
+      label: 'Faculty Payment Verification',
+      value: paymentVerified ? 'Approved by Faculty' : paymentRejected ? 'Rejected' : 'Pending Faculty Verification',
+      state: paymentVerified ? 'done' : paymentRejected ? 'rejected' : 'pending',
+    },
+    {
+      label: 'Registration Team Verification',
+      value: deskVerified ? 'Verified at Registration Desk' : 'Pending Registration Desk',
+      state: deskVerified ? 'done' : 'pending',
+    },
+    {
+      label: 'Attendance Status',
+      value: attendanceMarked
+        ? `Attendance Marked (${attendanceStatus})`
+        : attendanceEligible
+          ? 'Attendance Eligible — not yet marked'
+          : 'Attendance Not Marked',
+      state: attendanceMarked || attendanceEligible ? 'done' : attendanceEligible ? 'pending' : 'info',
+    },
+  ];
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-3 rounded-2xl border border-emerald-500/30 bg-emerald-500/[0.06] p-5">
+        <div className="flex items-center gap-3">
+          <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-[10px] font-bold uppercase tracking-widest">
+            <CheckCircle2 className="w-3.5 h-3.5" />
+            Registration Submitted
+          </span>
+        </div>
+        <p className="text-xs text-white/60 leading-relaxed">
+          You have already submitted your registration for CASYUM. Duplicate registrations are not
+          allowed. Your dashboard is now read-only — if you need to correct any details, please
+          contact the event administration.
+        </p>
+      </div>
+
+      <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 flex flex-col gap-1.5">
+        <span className="text-[10px] font-bold uppercase tracking-widest text-white/40 mb-2">Registration Status</span>
+        {items.map((item) => (
+          <div key={item.label} className="flex items-center justify-between gap-3 py-1.5">
+            <div className="flex items-center gap-2.5 min-w-0">
+              {statusItemIcon(item.state)}
+              <span className="text-[11px] text-white/50">{item.label}</span>
+            </div>
+            <span
+              className={`text-[11px] font-bold text-right ${
+                item.state === 'done'
+                  ? 'text-emerald-300'
+                  : item.state === 'rejected'
+                    ? 'text-rose-300'
+                    : item.state === 'pending'
+                      ? 'text-amber-300'
+                      : 'text-white/80'
+              }`}
+            >
+              {item.value}
+            </span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 };

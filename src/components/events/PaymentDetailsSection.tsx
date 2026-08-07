@@ -19,6 +19,7 @@ import {
 import { PAYMENT_CONFIG } from '../../config/paymentConfig';
 import {
   calculateRegistrationFee,
+  MAX_REGULAR_EVENTS,
   type EventSelectionLike,
 } from '../../services/eventSelection';
 
@@ -204,7 +205,7 @@ export const PaymentDetailsSection: React.FC<PaymentDetailsSectionProps> = ({
               <span className="text-[9px] font-bold uppercase tracking-widest text-white/40">Payment Breakdown</span>
               {displayRegularFee > 0 && (
                 <div className="flex items-center justify-between text-[11px]">
-                  <span className="text-white/60">Regular Events (1–3)</span>
+                  <span className="text-white/60">Regular Events (1–{MAX_REGULAR_EVENTS})</span>
                   <span className="text-emerald-300 font-bold">₹{displayRegularFee}</span>
                 </div>
               )}

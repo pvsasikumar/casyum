@@ -1,17 +1,17 @@
 /**
  * Shared rules for CASYUM event selection & fees.
  *
- * Regular events: a participant may select up to 3 events for a flat fee of
+ * Regular events: a participant may select up to 2 events for a flat fee of
  * ₹150. Gaming events (Free Fire / BGMI) are special: a participant may select
  * exactly one gaming event for ₹250. The two categories are combined into a
  * single bundled registration with only three possible totals: ₹150, ₹250 or
- * ₹400. Selecting both gaming events, more than 3 regular events, or a zero
- * selection is always rejected.
+ * ₹400. Selecting both gaming events, more than 2 regular events, two regular
+ * events plus a gaming event, or a zero selection is always rejected.
  */
 
 export const GAMING_EVENT_NAMES = ['Free Fire', 'BGMI'] as const;
 
-export const MAX_REGULAR_EVENTS = 3;
+export const MAX_REGULAR_EVENTS = 2;
 export const REGULAR_EVENT_FEE = 150;
 export const GAMING_EVENT_FEE = 250;
 export const REGULAR_PLUS_GAMING_FEE = REGULAR_EVENT_FEE + GAMING_EVENT_FEE;
@@ -174,7 +174,10 @@ export function validateEventSelection(
     return `You can select a maximum of ${MAX_REGULAR_EVENTS} regular events.`;
   }
   if (gaming && !isGamingEvent(gaming)) {
-    return 'Only one gaming event can be selected. Please choose either Free Fire or BGMI.';
+    return 'You can participate in only one gaming event.';
+  }
+  if (gaming && regular.length >= MAX_REGULAR_EVENTS) {
+    return 'Two regular events cannot be combined with a gaming event.';
   }
   if (regular.length === 0 && !gaming) {
     return 'Please select at least one event to register.';

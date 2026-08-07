@@ -15,7 +15,7 @@ import {
   serverTimestamp,
 } from 'firebase/firestore';
 import { getDb } from '../firebase/firestore';
-import { nextSequence, now } from './helpers';
+import { now } from './helpers';
 import type { RegistrationRow } from './eventService';
 import { mapRegDoc } from './eventService';
 import { normalizeTransactionId, validateTransactionId } from './paymentProofService';
@@ -300,13 +300,22 @@ export async function createRegistration(input: CreateRegistrationInput): Promis
   const db = getDb();
   const eventId = input.event_id;
 
+  // A participant may submit exactly one registration for CASYUM. The
+  // registration document is keyed deterministically by the participant so a
+  // second attempt is structurally impossible (the same document would be
+  // overwritten, and the rules only ever allow payment-field updates on it).
+  const existing = await listRegistrationsByParticipant(input.participant_id);
+  if (existing.length > 0) {
+    throw new Error('Participant has already registered.');
+  }
+
   const eventSnap = await getDoc(doc(db, 'events', eventId));
   if (!eventSnap.exists()) {
     throw new Error('Event not found.');
   }
   const eventData = eventSnap.data();
 
-  const regId = input.registration_id || `reg-${String(await nextSequence('registrations'))}`;
+  const regId = `reg-${String(input.participant_id)}`;
 
   if (input.payment_info) {
     const txnError = validateTransactionId(input.payment_info.transaction_id);
@@ -355,7 +364,7 @@ export interface CreateBundleRegistrationInput {
 }
 
 /**
- * Server-side creation of a bundled registration (up to 3 regular events plus
+ * Server-side creation of a bundled registration (up to 2 regular events plus
  * one gaming event). The fee is always recomputed from the selection here and
  * never trusted from the client. Rejects invalid selections including both
  * gaming events being submitted together.
@@ -363,7 +372,7 @@ export interface CreateBundleRegistrationInput {
 export async function createBundleRegistration(
   input: CreateBundleRegistrationInput
 ): Promise<RegistrationRow> {
-  const regular = (input.regular || []).slice(0, MAX_REGULAR_EVENTS);
+  const regular = input.regular || [];
   const gaming = input.gaming || null;
 
   if (regular.length === 0 && !gaming) {
@@ -373,13 +382,26 @@ export async function createBundleRegistration(
     throw new Error(`You can select a maximum of ${MAX_REGULAR_EVENTS} regular events.`);
   }
   if (gaming && !isGamingEvent(gaming)) {
-    throw new Error('Only one gaming event can be selected. Please choose either Free Fire or BGMI.');
+    throw new Error('You can participate in only one gaming event.');
+  }
+  if (regular.some((r) => isGamingEvent(r))) {
+    throw new Error('You can participate in only one gaming event.');
+  }
+  if (gaming && regular.length >= MAX_REGULAR_EVENTS) {
+    throw new Error('Two regular events cannot be combined with a gaming event.');
   }
 
   const fee = calculateRegistrationFee([...regular, ...(gaming ? [gaming] : [])]);
 
   const db = getDb();
-  const regId = input.registration_id || `reg-${String(await nextSequence('registrations'))}`;
+  const regId = `reg-${String(input.participant_id)}`;
+
+  // Single registration per participant: reject a second submission before any
+  // write happens (enforced again in firestore.rules for direct client writes).
+  const existing = await listRegistrationsByParticipant(input.participant_id);
+  if (existing.length > 0) {
+    throw new Error('Participant has already registered.');
+  }
 
   if (input.payment_info) {
     const txnError = validateTransactionId(input.payment_info.transaction_id);

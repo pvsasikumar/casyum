@@ -49,7 +49,7 @@ export function useEventRegistration(eventId: string) {
     if (record) {
       const regs = await listRegistrationsByParticipant(current.uid);
       setAlreadyRegistered(
-        regs.some((r) => r.event_id === eventId) || (record.event_ids || []).includes(eventId)
+        regs.length > 0 || (record.event_ids || []).includes(eventId)
       );
     } else {
       setAlreadyRegistered(false);
@@ -80,10 +80,7 @@ export function useEventRegistration(eventId: string) {
     const record = await readParticipantRecord(current.uid);
     if (!record) return false;
     const regs = await listRegistrationsByParticipant(current.uid);
-    return (
-      regs.some((r) => r.event_id === eventId) ||
-      (record.event_ids || []).includes(eventId)
-    );
+    return regs.length > 0 || (record.event_ids || []).includes(eventId);
   }, [eventId]);
 
   const finishRegistrationFlow = useCallback(async () => {

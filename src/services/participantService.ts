@@ -29,6 +29,7 @@ import {
   isGamingEvent,
   calculateRegistrationFee,
   validateEventSelection,
+  MAX_REGULAR_EVENTS,
   type SelectedEventRef,
   type SelectedGamingRef,
 } from './eventSelection';
@@ -218,6 +219,10 @@ export async function registerEvent(
   if (!record.profile_completed) {
     throw new Error('Please complete your profile before registering for events.');
   }
+  const existingRegs = await listRegistrationsByParticipant(user.uid);
+  if (existingRegs.length > 0) {
+    throw new Error('You have already submitted your registration for CASYUM. Duplicate registrations are not allowed.');
+  }
 
   const db = getDb();
   const eventSnap = await getDoc(doc(db, 'events', id));
@@ -234,12 +239,22 @@ export async function registerEvent(
   if ((record.event_ids || []).includes(id)) {
     throw new Error('You have already registered for this event.');
   }
+  if (isGamingEvent(event)) {
+    const regs = await listRegistrationsByParticipant(user.uid);
+    const existingIds = [...new Set(regs.flatMap((r) => registrationEventIds(r)))].filter(
+      (existingId) => existingId !== id
+    );
+    for (const existingId of existingIds) {
+      const snap = await getDoc(doc(db, 'events', existingId));
+      if (snap.exists() && isGamingEvent({ id: snap.id, ...snap.data() })) {
+        throw new Error('You can participate in only one gaming event.');
+      }
+    }
+  }
 
   if (!payment) {
     throw new Error('Payment details are required to register for this event.');
   }
-
-  const regId = `reg-${String(await nextSequence('registrations'))}`;
 
   const singleFee = calculateRegistrationFee([event]);
 
@@ -260,7 +275,6 @@ export async function registerEvent(
     payment_amount: singleFee.total,
     regular_fee: singleFee.regularFee,
     gaming_fee: singleFee.gamingFee,
-    registration_id: regId,
     payment_info: {
       payment_method: payment.payment_method,
       transaction_id: payment.transaction_id,
@@ -271,7 +285,7 @@ export async function registerEvent(
   return {
     message: 'You have been registered for the event. Your payment will be reviewed by the CASYUM team.',
     event: { id, name: event.name },
-    registrationId: regId,
+    registrationId: `reg-${user.uid}`,
   };
 }
 
@@ -291,7 +305,7 @@ export interface RegisterEventBundleResult {
 }
 
 /**
- * Registers a participant for a bundled selection (up to 3 regular events plus
+ * Registers a participant for a bundled selection (up to 2 regular events plus
  * one gaming event) with a single payment. The fee is recomputed server-side
  * from the event documents and never trusted from the caller.
  */
@@ -310,6 +324,10 @@ export async function registerEventBundle(
   if (!record.profile_completed) {
     throw new Error('Please complete your profile before registering for events.');
   }
+  const existingRegs = await listRegistrationsByParticipant(user.uid);
+  if (existingRegs.length > 0) {
+    throw new Error('You have already submitted your registration for CASYUM. Duplicate registrations are not allowed.');
+  }
 
   const regularEventIds = (data.regularEventIds || []).map(String).filter(Boolean);
   const gamingEventId = data.gamingEventId == null || String(data.gamingEventId) === ''
@@ -319,11 +337,14 @@ export async function registerEventBundle(
   if (regularEventIds.length === 0 && !gamingEventId) {
     throw new Error('Please select at least one event to register.');
   }
-  if (regularEventIds.length > 3) {
-    throw new Error('You can select a maximum of 3 regular events.');
+  if (regularEventIds.length > MAX_REGULAR_EVENTS) {
+    throw new Error(`You can select a maximum of ${MAX_REGULAR_EVENTS} regular events.`);
   }
   if (gamingEventId && regularEventIds.includes(gamingEventId)) {
-    throw new Error('Only one gaming event can be selected. Please choose either Free Fire or BGMI.');
+    throw new Error('You can participate in only one gaming event.');
+  }
+  if (gamingEventId && regularEventIds.length >= MAX_REGULAR_EVENTS) {
+    throw new Error('Two regular events cannot be combined with a gaming event.');
   }
 
   const db = getDb();
@@ -341,7 +362,7 @@ export async function registerEventBundle(
     const ev = eventDocs.get(eventId);
     if (!ev) continue;
     if (isGamingEvent(ev)) {
-      throw new Error('Only one gaming event can be selected. Please choose either Free Fire or BGMI.');
+      throw new Error('You can participate in only one gaming event.');
     }
     const event = mapEventDoc(eventId, ev);
     if (event.status === 'Closed') {
@@ -363,7 +384,7 @@ export async function registerEventBundle(
       throw new Error('The selected gaming event could not be found.');
     }
     if (!isGamingEvent(ev)) {
-      throw new Error('Only one gaming event can be selected. Please choose either Free Fire or BGMI.');
+      throw new Error('You can participate in only one gaming event.');
     }
     const event = mapEventDoc(gamingEventId, ev);
     if (event.status === 'Closed') {
@@ -483,23 +504,56 @@ export async function register(data: {
   // Create the participant document and mint its unique CASYUM id atomically.
   await createParticipantWithCasyumId(participantId, record);
 
+  // A participant owns exactly one registration record, so all selected events
+  // are folded into a single bundle registration (never one record per event).
   const eventIds = (data.event_ids || []).map(String);
-  for (const eventId of eventIds) {
-    await createRegistration({
-      event_id: eventId,
-      participant_id: participantId,
-      participant_email: data.email,
-      user_full_name: data.full_name,
-      user_department: data.department,
-      user_phone: data.phone,
-      college: data.college,
-      city: data.city,
-      department: data.department,
-      year_of_study: data.year_of_study,
-      gender: data.gender,
-      register_number: data.register_number,
-      status: 'Confirmed',
-    });
+  if (eventIds.length > 0) {
+    const db = getDb();
+    const eventDocs = new Map<string, any>();
+    for (const eventId of eventIds) {
+      const snap = await getDoc(doc(db, 'events', eventId));
+      if (snap.exists()) eventDocs.set(eventId, { id: eventId, ...snap.data() });
+    }
+
+    const regular: SelectedEventRef[] = [];
+    let gaming: SelectedGamingRef | null = null;
+    for (const eventId of eventIds) {
+      const ev = eventDocs.get(eventId);
+      if (!ev) continue;
+      const eventName = String(ev.name || eventId);
+      if (isGamingEvent(ev)) {
+        if (gaming) {
+          throw new Error('A participant can select only one gaming event.');
+        }
+        gaming = { eventId, eventName };
+      } else {
+        if (regular.length >= MAX_REGULAR_EVENTS) {
+          throw new Error(`A participant can select a maximum of ${MAX_REGULAR_EVENTS} regular events.`);
+        }
+        regular.push({ eventId, eventName });
+      }
+    }
+    if (gaming && regular.length >= MAX_REGULAR_EVENTS) {
+      throw new Error('Two regular events cannot be combined with a gaming event.');
+    }
+
+    if (regular.length > 0 || gaming) {
+      await createBundleRegistration({
+        regular,
+        gaming,
+        participant_id: participantId,
+        participant_email: data.email,
+        user_full_name: data.full_name,
+        user_department: data.department,
+        user_phone: data.phone,
+        college: data.college,
+        city: data.city,
+        department: data.department,
+        year_of_study: data.year_of_study,
+        gender: data.gender,
+        register_number: data.register_number,
+      });
+    }
   }
 
   const row = await loadParticipantRow(participantId);

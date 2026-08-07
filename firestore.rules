@@ -56,25 +56,93 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/participants/$(participantId)).data.verificationStatus == 'Verified';
     }
 
-    // Bundled selection rules: at most 3 regular events and a single gaming
-    // event object (never an array). Only the three allowed totals may be
-    // stored: 150 (regular only), 250 (gaming only) or 400 (regular + gaming).
+    // Gaming events (Free Fire / BGMI) form a separate category. A participant
+    // may choose exactly one gaming event, never both, and gaming events may
+    // never be submitted inside the regular selection.
+    function isGamingEventName(name) {
+      return name == 'Free Fire' || name == 'BGMI';
+    }
+
+    function isGamingEventDoc(eventId) {
+      let ev = get(/databases/$(database)/documents/events/$(eventId)).data;
+      return ev.is_gaming == true
+        || ev.category == 'gaming'
+        || ev.type == 'gaming'
+        || ev.event_type == 'gaming'
+        || isGamingEventName(ev.name);
+    }
+
+    function isGamingRef(ref) {
+      if (ref is map && 'eventId' in ref && ref.eventId is string) {
+        return isGamingEventDoc(ref.eventId);
+      }
+      if (ref is string) {
+        return isGamingEventDoc(ref);
+      }
+      return false;
+    }
+
+    function isValidRegularList(regular) {
+      return regular is list
+        && regular.size() <= 2
+        && !regular.any(e => isGamingRef(e));
+    }
+
+    function isValidGamingSelection(gaming) {
+      return gaming == null
+        || (gaming is map
+          && 'eventId' in gaming
+          && gaming.eventId is string
+          && isGamingEventDoc(gaming.eventId));
+    }
+
+    // Bundled selection rules: at most 2 regular events, a single gaming event
+    // object (never an array), gaming events excluded from the regular list,
+    // and no selection of two regular events combined with a gaming event.
     function isValidSelectedEvents(sel) {
       return sel is map
         && 'regular' in sel
-        && sel.regular is list
-        && sel.regular.size() <= 3
-        && (!('gaming' in sel) || sel.gaming == null || sel.gaming is map);
+        && isValidRegularList(sel.regular)
+        && (!('gaming' in sel) || isValidGamingSelection(sel.gaming))
+        && (!('gaming' in sel) || sel.gaming == null || sel.regular.size() < 2);
     }
 
-    function isValidFeeTotal(data) {
+    // The fee owed for a selection: 150 (regular only), 250 (gaming only) or
+    // 400 (regular + gaming). A single-event registration (no selection map)
+    // is priced from its event document instead. This makes it impossible to
+    // store a manipulated payment amount.
+    function expectedFee(data) {
+      if ('selectedEvents' in data && data.selectedEvents != null) {
+        let sel = data.selectedEvents;
+        let hasRegular = 'regular' in sel && sel.regular.size() > 0;
+        let hasGaming = 'gaming' in sel && sel.gaming != null;
+        if (hasRegular && hasGaming) return 400;
+        if (hasRegular) return 150;
+        if (hasGaming) return 250;
+        return 0;
+      }
+      if ('event_id' in data && data.event_id is string) {
+        return isGamingEventDoc(data.event_id) ? 250 : 150;
+      }
+      return 0;
+    }
+
+    function isValidCanonicalFee(data) {
       return 'registrationFee' in data
-        && data.registrationFee in [150, 250, 400];
+        && data.registrationFee is number
+        && data.registrationFee == expectedFee(data);
+    }
+
+    function isValidLegacyFee(data) {
+      return 'payment_amount' in data
+        && data.payment_amount is number
+        && data.payment_amount == expectedFee(data);
     }
 
     function hasValidSelection(data) {
       return !('selectedEvents' in data)
-        || (isValidSelectedEvents(data.selectedEvents) && isValidFeeTotal(data));
+        || data.selectedEvents == null
+        || isValidSelectedEvents(data.selectedEvents);
     }
 
     // Only the fields below may change when a participant registers for an
@@ -218,7 +286,10 @@ service cloud.firestore {
 
     // Registrations: participants may read and create their own; coordinators
     // read registrations for their assigned events; admins and payment
-    // reviewers have full access.
+    // reviewers have full access. A participant may hold exactly ONE
+    // registration: the document id is always `reg-{participant_id}` (a create
+    // with any other id is denied) and a participant may only ever apply
+    // payment-resubmission field updates to it, never a second create.
     match /registrations/{registrationId} {
       allow read: if isSignedIn() && (
         isAdmin()
@@ -231,11 +302,14 @@ service cloud.firestore {
       );
       allow create: if isSignedIn()
         && request.resource.data.participant_id == request.auth.uid
+        && request.resource.id == 'reg-' + request.resource.data.participant_id
         && request.resource.data.event_id != null
-        && hasValidSelection(request.resource.data);
+        && hasValidSelection(request.resource.data)
+        && isValidLegacyFee(request.resource.data);
       allow update: if isAdmin() || isPaymentReviewer()
         || (isCoordinator() && isAssignedEvent(resource.data.event_id))
-        || (isRegistrationTeam() && isDeskVerificationUpdate() && isPaymentAlreadyVerified());
+        || (isRegistrationTeam() && isDeskVerificationUpdate() && isPaymentAlreadyVerified())
+        || (request.auth.uid == resource.data.participant_id && isParticipantPaymentUpdate());
       allow delete: if isAdmin();
     }
 
@@ -255,8 +329,10 @@ service cloud.firestore {
       );
       allow create: if isSignedIn()
         && request.resource.data.participant_id == request.auth.uid
+        && request.resource.id == 'reg-' + request.resource.data.participant_id
         && request.resource.data.event_id != null
-        && hasValidSelection(request.resource.data);
+        && hasValidSelection(request.resource.data)
+        && isValidCanonicalFee(request.resource.data);
       allow update: if isSignedIn() && (
         isAdmin()
         || isPaymentReviewer()
