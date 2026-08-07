@@ -39,6 +39,13 @@ service cloud.firestore {
       return getUserRole() in ['casyum_faculty_coordinator'];
     }
 
+    // Observers have strictly read-only access across the system. They are
+    // granted read rules only; no write rule ever includes isObserver(), so
+    // every create/update/delete attempt by an observer is denied by Firestore.
+    function isObserver() {
+      return getUserRole() in ['Observer'];
+    }
+
     function isAssignedEvent(eventId) {
       return isSignedIn() && eventId in getUserData().assigned_event_ids;
     }
@@ -148,7 +155,10 @@ service cloud.firestore {
     }
 
     match /users/{userId} {
-      allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      // Observers need to read coordinator, faculty and registration team
+      // profile summaries for the Observer portal monitoring view. They can
+      // never modify any user record.
+      allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin() || isObserver());
       allow write: if isAdmin();
     }    match /events/{eventId} {
       // Public event pages and the public bento grid read the published
@@ -170,9 +180,10 @@ service cloud.firestore {
     }
 
     // Draft event content: never public. Only admins and the assigned
-    // coordinator may read or edit the draft.
+    // coordinator may read or edit the draft. Observers may read drafts so the
+    // Observer portal can surface event details before publication.
     match /event_drafts/{eventId} {
-      allow read: if isAdmin() || (isCoordinator() && isAssignedEvent(eventId));
+      allow read: if isAdmin() || isCoordinator() || isObserver();
       allow write: if isAdmin() || (isCoordinator() && isAssignedEvent(eventId));
     }
 
@@ -182,7 +193,7 @@ service cloud.firestore {
     // the participant. Registration Desk staff read participants to verify
     // them and may only touch the verification fields.
     match /participants/{participantId} {
-      allow read: if isSignedIn() && (isAdmin() || isCoordinator() || isRegistrationTeam() || isPaymentReviewer() || request.auth.uid == participantId);
+      allow read: if isSignedIn() && (isAdmin() || isCoordinator() || isRegistrationTeam() || isPaymentReviewer() || isObserver() || request.auth.uid == participantId);
       allow create: if isSignedIn() && request.auth.uid == participantId;
       allow update: if isSignedIn() && (
         isAdmin()
@@ -213,6 +224,7 @@ service cloud.firestore {
         isAdmin()
         || isPaymentReviewer()
         || isRegistrationTeam()
+        || isObserver()
         || (isCoordinator() && isAssignedEvent(resource.data.event_id))
         || request.auth.uid == resource.data.participant_id
         || request.auth.uid == resource.data.participant_user_id
@@ -236,6 +248,7 @@ service cloud.firestore {
         isAdmin()
         || isPaymentReviewer()
         || isRegistrationTeam()
+        || isObserver()
         || (isCoordinator() && isAssignedEvent(resource.data.event_id))
         || request.auth.uid == resource.data.participant_id
         || request.auth.uid == resource.data.participant_user_id
@@ -259,7 +272,7 @@ service cloud.firestore {
     // complete at the Registration Desk. Admins and payment reviewers have
     // full read access.
     match /attendance/{attendanceId} {
-      allow read: if isSignedIn() && (isAdmin() || isPaymentReviewer() || isCoordinator() && isAssignedEvent(resource.data.event_id));
+      allow read: if isSignedIn() && (isAdmin() || isPaymentReviewer() || isObserver() || isCoordinator() && isAssignedEvent(resource.data.event_id));
       allow create: if isSignedIn() && (isAdmin() || (isCoordinator() && isAssignedEvent(request.resource.data.event_id) && isVerifiedParticipant(request.resource.data.participant_id)));
       allow update: if isSignedIn() && (isAdmin() || (isCoordinator() && isAssignedEvent(resource.data.event_id) && isAssignedEvent(request.resource.data.event_id) && isVerifiedParticipant(request.resource.data.participant_id)));
       allow delete: if isSignedIn() && (isAdmin() || isCoordinator() && isAssignedEvent(resource.data.event_id));
@@ -267,29 +280,35 @@ service cloud.firestore {
 
     // Registration Desk verification records and audit logs.
     match /verification_logs/{logId} {
-      allow read: if isSignedIn() && (isAdmin() || isRegistrationTeam() || isPaymentReviewer());
+      allow read: if isSignedIn() && (isAdmin() || isRegistrationTeam() || isPaymentReviewer() || isObserver());
       allow write: if isAdmin() || isRegistrationTeam();
     }
 
     match /participant_verifications/{recordId} {
-      allow read: if isSignedIn() && (isAdmin() || isRegistrationTeam() || isPaymentReviewer());
+      allow read: if isSignedIn() && (isAdmin() || isRegistrationTeam() || isPaymentReviewer() || isObserver());
       allow write: if isAdmin() || isRegistrationTeam();
     }
 
     match /registration_team_logs/{logId} {
-      allow read: if isSignedIn() && (isAdmin() || isRegistrationTeam());
+      allow read: if isSignedIn() && (isAdmin() || isRegistrationTeam() || isObserver());
       allow write: if isAdmin() || isRegistrationTeam();
     }
 
     // CASYUM Faculty Coordinator account logs: only admins may read/write.
     match /casyum_faculty_logs/{logId} {
+      allow read: if isSignedIn() && (isAdmin() || isObserver());
+      allow write: if isSignedIn() && isAdmin();
+    }
+
+    // CASYUM Observer account logs: only admins may read/write.
+    match /observer_logs/{logId} {
       allow read: if isSignedIn() && isAdmin();
       allow write: if isSignedIn() && isAdmin();
     }
 
     // Payment review audit trail written by the CASYUM Faculty portal.
     match /payment_verification_logs/{logId} {
-      allow read: if isSignedIn() && (isAdmin() || isPaymentReviewer());
+      allow read: if isSignedIn() && (isAdmin() || isPaymentReviewer() || isObserver());
       allow write: if isSignedIn() && (isAdmin() || isPaymentReviewer());
     }
 
@@ -303,6 +322,18 @@ service cloud.firestore {
     match /settings/{docId} {
       allow read: if docId == 'payment' || (docId != 'communication' && isAdmin());
       allow write: if docId != 'communication' && isAdmin();
+    }
+
+    // Certificates and event results: admins manage them; observers may read
+    // the status summary but can never modify anything.
+    match /certificates/{certificateId} {
+      allow read: if isSignedIn() && (isAdmin() || isObserver());
+      allow write: if isAdmin();
+    }
+
+    match /results/{resultId} {
+      allow read: if isSignedIn() && (isAdmin() || isObserver());
+      allow write: if isAdmin();
     }
 
     // Communication settings (settings/communication) drive the WhatsApp group

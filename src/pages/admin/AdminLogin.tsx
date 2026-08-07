@@ -5,13 +5,14 @@ import { Sparkles, Lock, Eye, EyeOff, Loader2, AlertCircle, ShieldCheck, Mail, A
 import { useRBAC } from '../../rbac/context/RBACContext';
 import { api } from '../../services/api';
 import { signOut } from '../../services/authService';
-import { ADMIN_PORTAL_ROLES, REGISTRATION_TEAM_ROLE, CASYUM_FACULTY_COORDINATOR_ROLE } from '../../rbac/constants';
+import { ADMIN_PORTAL_ROLES, REGISTRATION_TEAM_ROLE, CASYUM_FACULTY_COORDINATOR_ROLE, OBSERVER_ROLE } from '../../rbac/constants';
 import type { UserRole } from '../../rbac/types';
 
 function dashboardPathFor(role: string): string {
   if (role === 'Super Admin') return '/admin/dashboard';
   if (role === REGISTRATION_TEAM_ROLE) return '/registration-team/dashboard';
   if (role === CASYUM_FACULTY_COORDINATOR_ROLE) return '/casyum-faculty/dashboard';
+  if (role === OBSERVER_ROLE) return '/observer/dashboard';
   return '/coordinator/dashboard';
 }
 
@@ -53,6 +54,11 @@ export const AdminLogin: React.FC = () => {
         if (location.pathname !== target && location.pathname !== '/create-password') {
           navigate(target, { replace: true });
         }
+      } else if (role === OBSERVER_ROLE) {
+        const target = dashboardPathFor(role);
+        if (location.pathname !== target && location.pathname !== '/create-password') {
+          navigate(target, { replace: true });
+        }
       } else {
         setError('Unauthorized Access. This portal is restricted to authorized staff only.');
       }
@@ -83,11 +89,12 @@ export const AdminLogin: React.FC = () => {
       if (
         !ADMIN_PORTAL_ROLES.includes(userRole) &&
         userRole !== REGISTRATION_TEAM_ROLE &&
-        userRole !== CASYUM_FACULTY_COORDINATOR_ROLE
+        userRole !== CASYUM_FACULTY_COORDINATOR_ROLE &&
+        userRole !== OBSERVER_ROLE
       ) {
         await signOut();
         setPassword('');
-        setError('Unauthorized Access. Only Super Admin, Event Coordinators, Registration Team and CASYUM Faculty Coordinators may access this portal.');
+        setError('Unauthorized Access. Only authorized staff may access this portal.');
         return;
       }
 
@@ -155,7 +162,7 @@ export const AdminLogin: React.FC = () => {
         </div>
 
         <div className="flex flex-wrap gap-1.5 mb-5">
-          {['Super Admin', 'Event Coordinator (Student)', 'Event Coordinator (Faculty)', 'Registration Team'].map((label) => (
+          {['Super Admin', 'Event Coordinator (Student)', 'Event Coordinator (Faculty)', 'Registration Team', 'CASYUM Faculty', 'Observer'].map((label) => (
             <span key={label} className="px-2 py-0.5 rounded-md bg-violet-500/10 border border-violet-500/20 text-[9px] text-violet-300/70 font-medium">
               {label}
             </span>

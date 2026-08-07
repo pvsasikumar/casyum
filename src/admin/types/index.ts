@@ -190,6 +190,7 @@ export type ActiveTabModule =
   | 'Coordinators'
   | 'Registration Team'
   | 'CASYUM Faculty Coordinators'
+  | 'Observers'
   | 'Participants'
   | 'Settings'
   | 'Audit Logs'

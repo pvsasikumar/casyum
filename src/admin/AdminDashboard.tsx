@@ -24,6 +24,7 @@ import { CertificateManagement } from './components/modules/CertificateManagemen
 import { CoordinatorManagement } from './components/modules/CoordinatorManagement';
 import { RegistrationTeamManagement } from './components/modules/RegistrationTeamManagement';
 import { CasyumFacultyCoordinatorManagement } from './components/modules/CasyumFacultyCoordinatorManagement';
+import { ObserverManagement } from './components/modules/ObserverManagement';
 import { ParticipantsModule } from './components/modules/ParticipantsModule';
 import { SettingsModule } from './components/modules/SettingsModule';
 import { PaymentSettingsModule } from './components/modules/PaymentSettingsModule';
@@ -73,6 +74,8 @@ const ModuleRouter: React.FC = () => {
       return <RegistrationTeamManagement />;
     case 'CASYUM Faculty Coordinators':
       return <CasyumFacultyCoordinatorManagement />;
+    case 'Observers':
+      return <ObserverManagement />;
     case 'Participants':
       return <ParticipantsModule />;
     case 'Settings':

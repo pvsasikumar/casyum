@@ -12,6 +12,7 @@ export const ALL_ROLES: UserRole[] = [
   'Certificate Manager',
   'Finance Manager',
   'casyum_faculty_coordinator',
+  'Observer',
 ];
 
 export const ROLE_LABELS: Record<UserRole, string> = {
@@ -27,6 +28,7 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   'Finance Manager': 'Finance Manager',
   'Participant': 'Participant',
   'casyum_faculty_coordinator': 'CASYUM Faculty Coordinator',
+  'Observer': 'Observer',
 };
 
 export const SUPER_ADMIN_ROLE: UserRole = 'Super Admin';
@@ -34,6 +36,8 @@ export const SUPER_ADMIN_ROLE: UserRole = 'Super Admin';
 export const REGISTRATION_TEAM_ROLE: UserRole = 'Registration Team';
 
 export const CASYUM_FACULTY_COORDINATOR_ROLE: UserRole = 'casyum_faculty_coordinator';
+
+export const OBSERVER_ROLE: UserRole = 'Observer';
 
 export const ADMIN_PORTAL_ROLES: UserRole[] = [
   'Super Admin',
@@ -50,10 +54,13 @@ export const REGISTRATION_TEAM_PORTAL_ROLES: UserRole[] = ['Registration Team'];
 
 export const CASYUM_FACULTY_PORTAL_ROLES: UserRole[] = [CASYUM_FACULTY_COORDINATOR_ROLE];
 
+export const OBSERVER_PORTAL_ROLES: UserRole[] = [OBSERVER_ROLE];
+
 export const STAFF_PORTAL_ROLES: UserRole[] = [
   ...ADMIN_PORTAL_ROLES,
   ...REGISTRATION_TEAM_PORTAL_ROLES,
   ...CASYUM_FACULTY_PORTAL_ROLES,
+  ...OBSERVER_PORTAL_ROLES,
 ];
 
 export const ROLE_HIERARCHY: Record<UserRole, number> = {
@@ -69,6 +76,7 @@ export const ROLE_HIERARCHY: Record<UserRole, number> = {
   'Finance Manager': 5,
   'Participant': 6,
   'casyum_faculty_coordinator': 2,
+  'Observer': 6,
 };
 
 const all = (domain: PermissionDomain): Permission[] => [
@@ -98,6 +106,7 @@ export const ROLE_PERMISSIONS: RolePermission[] = [
       ...all('coordinators'),
       ...all('registration_team'),
       ...all('casyum_faculty_coordinators'),
+      ...all('observers'),
       ...all('verification'),
       ...all('announcements'),
       ...all('gallery'),
@@ -304,6 +313,29 @@ export const ROLE_PERMISSIONS: RolePermission[] = [
       'registrations.create',
       'attendance.view',
       'certificates.view',
+    ],
+  },
+  {
+    role: 'Observer',
+    permissions: [
+      'dashboard.view',
+      'events.view',
+      'events.export',
+      'participants.view',
+      'registrations.view',
+      'attendance.view',
+      'payments.view',
+      'reports.view',
+      'reports.export',
+      'export.view',
+      'export.export',
+      'coordinators.view',
+      'registration_team.view',
+      'casyum_faculty_coordinators.view',
+      'verification.view',
+      'certificates.view',
+      'results.view',
+      'profile.view',
     ],
   },
 ];

@@ -10,7 +10,8 @@ export type UserRole =
   | 'Certificate Manager'
   | 'Finance Manager'
   | 'Participant'
-  | 'casyum_faculty_coordinator';
+  | 'casyum_faculty_coordinator'
+  | 'Observer';
 
 export type PermissionAction = 'view' | 'create' | 'edit' | 'delete' | 'export' | 'approve' | 'reject' | 'verify' | 'refund' | 'assign' | 'generate' | 'reissue' | 'manage';
 
@@ -36,6 +37,7 @@ export type PermissionDomain =
   | 'activity_logs'
   | 'emails'
   | 'results'
+  | 'observers'
   | 'profile';
 
 export type Permission = `${PermissionDomain}.${PermissionAction}`;

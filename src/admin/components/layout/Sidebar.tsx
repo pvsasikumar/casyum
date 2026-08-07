@@ -23,6 +23,7 @@ import {
   GraduationCap,
   Wallet,
   MessageSquare,
+  Eye,
 } from 'lucide-react';
 import type { ActiveTabModule } from '../../types';
 import { useAdmin } from '../../context/AdminContext';
@@ -54,6 +55,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onCloseMobile, onExitAdmin }) 
     { name: 'Coordinators', icon: UserCheck, permission: 'coordinators.view' },
     { name: 'Registration Team', icon: UserCheck, permission: 'registration_team.view' },
     { name: 'CASYUM Faculty Coordinators', icon: GraduationCap, permission: 'casyum_faculty_coordinators.view' },
+    { name: 'Observers', icon: Eye, permission: 'observers.view' },
     { name: 'Participants', icon: Users, permission: 'participants.view', badge: participants.length },
     { name: 'Registrations', icon: ClipboardList, permission: 'registrations.view' },
     { name: 'Payments', icon: CreditCard, permission: 'payments.view' },
