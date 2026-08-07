@@ -500,6 +500,24 @@ const DetailsEditor: React.FC<{ content: CmsEventDetails; onChange: (patch: Part
               </option>
             ))}
           </CmsSelect>
+        ) : f.key === 'category' ? (
+          <CmsSelect value={details[f.key]} onChange={(e) => onChange({ [f.key]: e.target.value })}>
+            <option value="" className="bg-zinc-900">Select category</option>
+            {CATEGORIES.map((c) => (
+              <option key={c} value={c} className="bg-zinc-900">
+                {c}
+              </option>
+            ))}
+          </CmsSelect>
+        ) : f.key === 'registrationStatus' ? (
+          <CmsSelect value={details[f.key]} onChange={(e) => onChange({ [f.key]: e.target.value })}>
+            <option value="" className="bg-zinc-900">Select status</option>
+            {STATUSES.map((s) => (
+              <option key={s} value={s} className="bg-zinc-900">
+                {s}
+              </option>
+            ))}
+          </CmsSelect>
         ) : (
           <CmsInput value={details[f.key]} onChange={(e) => onChange({ [f.key]: e.target.value })} placeholder={f.placeholder} />
         )}

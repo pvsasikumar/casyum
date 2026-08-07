@@ -5,21 +5,22 @@ import {
   CalendarDays,
   CheckCircle2,
   Clock,
+  IndianRupee,
   Loader2,
   MapPin,
   RefreshCw,
+  Tag,
   Ticket,
+  UserRound,
   Users,
 } from 'lucide-react';
-import type { EventCmsData } from '../cms/types';
+import type { CmsEventDetails, EventCmsData } from '../cms/types';
 import { emptyCmsData, hasContent, sortSections } from '../cms/types';
 import { loadEventCms } from '../cms/eventCmsService';
 import { fetchEventBySlug, type PublicEvent } from '../../services/publicEventService';
-import { DEFAULT_EVENT_IMAGE, isValidStoredImage } from '../../services/eventSlug';
 import { useEventRegistration } from '../../hooks/useEventRegistration';
 import { PublicEventRenderer } from './PublicEventRenderer';
 import { ProfileCompletionModal } from './ProfileCompletionModal';
-import { SmartImage } from '../ui/SmartImage';
 import {
   MAX_REGULAR_EVENTS,
   isGamingEvent,
@@ -33,6 +34,69 @@ const statusStyles: Record<string, string> = {
   'Registration Closed': 'bg-amber-500/15 text-amber-300 border-amber-500/30',
   'Event Full': 'bg-rose-500/15 text-rose-300 border-rose-500/30',
   Completed: 'bg-sky-500/15 text-sky-300 border-sky-500/30',
+};
+
+interface EventInformationSectionProps {
+  details?: CmsEventDetails;
+  event: PublicEvent;
+  defaultFee: number;
+}
+
+const EventInformationSection: React.FC<EventInformationSectionProps> = ({ details, event, defaultFee }) => {
+  const rows = [
+    { key: 'date', label: 'Date', icon: CalendarDays, value: details?.date || event.date },
+    { key: 'time', label: 'Time', icon: Clock, value: details?.time || '' },
+    { key: 'venue', label: 'Venue', icon: MapPin, value: details?.venue || event.venue },
+    { key: 'teamSize', label: 'Team Size', icon: UserRound, value: details?.teamSize || '' },
+    { key: 'category', label: 'Category', icon: Tag, value: details?.category || event.category },
+    {
+      key: 'registrationFee',
+      label: 'Registration Fee',
+      icon: IndianRupee,
+      value: details?.registrationFee || (defaultFee > 0 ? `₹${defaultFee}` : ''),
+    },
+    {
+      key: 'maxParticipants',
+      label: 'Maximum Participants / Slots',
+      icon: Users,
+      value: details?.participantLimit || (event.maxParticipants > 0 ? String(event.maxParticipants) : ''),
+    },
+    {
+      key: 'registrationStatus',
+      label: 'Registration Status',
+      icon: Ticket,
+      value: details?.registrationStatus || event.registrationStatus,
+    },
+  ].filter((r) => String(r.value || '').trim() !== '');
+
+  if (rows.length === 0) return null;
+
+  return (
+    <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-6">
+      <h2 className="text-xl sm:text-2xl font-extrabold font-display text-white mb-5">Event Information</h2>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {rows.map((row) => {
+          const Icon = row.icon;
+          const isStatus = row.key === 'registrationStatus';
+          return (
+            <div key={row.key} className="flex items-start gap-2.5 rounded-xl bg-white/[0.03] border border-white/10 p-3">
+              <Icon className="w-4 h-4 text-violet-400 mt-0.5 flex-shrink-0" />
+              <div className="flex flex-col min-w-0">
+                <span className="text-[9px] font-bold uppercase tracking-widest text-white/40">{row.label}</span>
+                {isStatus ? (
+                  <span className={`w-fit mt-0.5 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border ${statusStyles[row.value] || statusStyles['Registration Open']}`}>
+                    {row.value}
+                  </span>
+                ) : (
+                  <span className="text-xs text-white/85 break-words">{row.value}</span>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 };
 
 export const EventDetailsPage: React.FC = () => {
@@ -146,6 +210,8 @@ export const EventDetailsPage: React.FC = () => {
 
   const isGaming = isGamingEvent(event);
   const registrationFee = singleEventRegistrationFee(event);
+  const detailsSection = cms.sections.find((s) => s.sectionType === 'details');
+  const details = detailsSection?.content as CmsEventDetails | undefined;
 
   const registerPanel = (
     <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-6 flex flex-col gap-4 sticky top-24">
@@ -229,10 +295,6 @@ export const EventDetailsPage: React.FC = () => {
     </div>
   );
 
-  const heroImage = isValidStoredImage(event.heroImage) ? event.heroImage : event.cardImage || DEFAULT_EVENT_IMAGE;
-  const heroFallback = event.cardImage && event.cardImage !== heroImage ? event.cardImage : DEFAULT_EVENT_IMAGE;
-  const heroAlt = event.heroImageAlt || event.name;
-
   return (
     <div className="min-h-screen bg-black text-white pt-24 pb-20 px-6 selection:bg-violet-500/30 selection:text-violet-200">
       <div className="max-w-5xl mx-auto flex flex-col gap-6">
@@ -244,35 +306,6 @@ export const EventDetailsPage: React.FC = () => {
           All Events
         </Link>
 
-        <div className="relative rounded-3xl overflow-hidden border border-white/10 aspect-video sm:aspect-[21/9]">
-          <SmartImage
-            src={heroImage}
-            fallback={heroFallback}
-            alt={heroAlt}
-            className="w-full h-full"
-            wrapperClassName="absolute inset-0"
-            placeholder="Loading image…"
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-black via-black/50 to-black/20" />
-          <div className="absolute bottom-0 left-0 p-6 sm:p-8 flex flex-col gap-3">
-            <div className="flex items-center gap-2 flex-wrap">
-              {event.category && (
-                <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-violet-500/15 text-violet-300 border border-violet-500/30 uppercase tracking-wider">
-                  {event.category}
-                </span>
-              )}
-              <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border ${statusStyles[event.registrationStatus] || statusStyles['Registration Open']}`}>
-                {event.registrationStatus || 'Registration Open'}
-              </span>
-            </div>
-            <h1 className="text-3xl sm:text-5xl font-extrabold font-display tracking-tight">{event.name}</h1>
-            {event.tagline && <p className="text-sm sm:text-base text-violet-300/90 font-medium">{event.tagline}</p>}
-            {event.shortDescription && !event.tagline && (
-              <p className="text-sm text-white/70 leading-relaxed">{event.shortDescription}</p>
-            )}
-          </div>
-        </div>
-
         {isComingSoon ? (
           <div className="flex flex-col items-center gap-3 py-24 text-center rounded-3xl border border-white/10 bg-white/[0.02]">
             <Clock className="w-8 h-8 text-white/30" />
@@ -282,7 +315,10 @@ export const EventDetailsPage: React.FC = () => {
           </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6 items-start">
-            <PublicEventRenderer data={cms} />
+            <div className="flex flex-col gap-6">
+              <PublicEventRenderer data={cms} />
+              <EventInformationSection details={details} event={event} defaultFee={registrationFee} />
+            </div>
             <div className="w-full lg:w-[320px]">{registerPanel}</div>
           </div>
         )}

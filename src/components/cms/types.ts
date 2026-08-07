@@ -15,11 +15,15 @@ export interface CmsEventDetails {
   date: string;
   time: string;
   venue: string;
+  teamSize: string;
+  category: string;
+  registrationFee: string;
+  participantLimit: string;
+  registrationStatus: string;
   building: string;
   room: string;
   mapsLink: string;
   registrationDeadline: string;
-  participantLimit: string;
   dressCode: string;
   language: string;
   difficultyLevel: string;
@@ -243,7 +247,7 @@ export function defaultContent(type: CmsSectionType): Record<string, unknown> {
     case 'hero':
       return { bannerImage: '', bannerImagePath: '', bannerImageAlt: '', title: '', category: 'Technical', tagline: '', shortDescription: '', status: 'Registration Open' };
     case 'details':
-      return { date: '', time: '', venue: '', building: '', room: '', mapsLink: '', registrationDeadline: '', participantLimit: '', dressCode: '', language: '', difficultyLevel: '', duration: '' };
+      return { date: '', time: '', venue: '', teamSize: '', category: '', registrationFee: '', participantLimit: '', registrationStatus: '', building: '', room: '', mapsLink: '', registrationDeadline: '', dressCode: '', language: '', difficultyLevel: '', duration: '' };
     case 'about':
     case 'richText':
       return { html: '' };

@@ -119,24 +119,27 @@ const HeroView: React.FC<{ content: CmsHero }> = ({ content: hero }) => (
   </div>
 );
 
+const EVENT_INFO_ONLY_FIELDS = ['teamSize', 'category', 'registrationFee', 'registrationStatus'];
+
 const DetailsView: React.FC<{ content: CmsEventDetails }> = ({ content: details }) => {
-  const rows = DETAIL_FIELDS.filter((f) => details[f.key]);
+  const rows = DETAIL_FIELDS.filter((f) => !EVENT_INFO_ONLY_FIELDS.includes(f.key) && details[f.key]);
   if (rows.length === 0) return <EmptyState text="No event details added yet." />;
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
       {rows.map((f) => {
         const Icon = f.icon;
+        const value = details[f.key];
         return (
           <div key={f.key} className="flex items-start gap-2.5 rounded-xl bg-white/[0.03] border border-white/10 p-3">
             <Icon className="w-4 h-4 text-violet-400 mt-0.5 flex-shrink-0" />
             <div className="flex flex-col min-w-0">
               <span className="text-[9px] font-bold uppercase tracking-widest text-white/40">{f.label}</span>
               {f.key === 'mapsLink' ? (
-                <a href={details[f.key]} target="_blank" rel="noreferrer" className="text-xs text-violet-300 hover:text-violet-200 underline truncate">
+                <a href={value} target="_blank" rel="noreferrer" className="text-xs text-violet-300 hover:text-violet-200 underline truncate">
                   View Map
                 </a>
               ) : (
-                <span className="text-xs text-white/85 break-words">{details[f.key]}</span>
+                <span className="text-xs text-white/85 break-words">{value}</span>
               )}
             </div>
           </div>
