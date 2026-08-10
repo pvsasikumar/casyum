@@ -11,7 +11,8 @@ export type UserRole =
   | 'Finance Manager'
   | 'Participant'
   | 'casyum_faculty_coordinator'
-  | 'Observer';
+  | 'Observer'
+  | 'Sponsorship Head';
 
 export type PermissionAction = 'view' | 'create' | 'edit' | 'delete' | 'export' | 'approve' | 'reject' | 'verify' | 'refund' | 'assign' | 'generate' | 'reissue' | 'manage';
 
@@ -38,6 +39,8 @@ export type PermissionDomain =
   | 'emails'
   | 'results'
   | 'observers'
+  | 'sponsors'
+  | 'sponsorship_enquiries'
   | 'profile';
 
 export type Permission = `${PermissionDomain}.${PermissionAction}`;

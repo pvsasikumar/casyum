@@ -24,6 +24,8 @@ import {
   Wallet,
   MessageSquare,
   Eye,
+  Handshake,
+  BadgeDollarSign,
 } from 'lucide-react';
 import type { ActiveTabModule } from '../../types';
 import { useAdmin } from '../../context/AdminContext';
@@ -70,6 +72,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ onCloseMobile, onExitAdmin }) 
     { name: 'Employees', icon: Briefcase, permission: 'employees.view' },
     { name: 'Email Logs', icon: Mail, permission: 'emails.view' },
     { name: 'Audit Logs', icon: History, permission: 'activity_logs.view' },
+    { name: 'Sponsors', icon: Handshake, permission: 'sponsors.view' },
+    { name: 'Sponsorship Enquiries', icon: BadgeDollarSign, permission: 'sponsorship_enquiries.view' },
     { name: 'Settings', icon: Settings, permission: 'settings.view' },
   ];
 

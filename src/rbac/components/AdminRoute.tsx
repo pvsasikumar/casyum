@@ -8,6 +8,7 @@ import {
   REGISTRATION_TEAM_PORTAL_ROLES,
   CASYUM_FACULTY_PORTAL_ROLES,
   OBSERVER_PORTAL_ROLES,
+  SPONSORSHIP_HEAD_PORTAL_ROLES,
 } from '../constants';
 
 interface AdminRouteProps {
@@ -53,6 +54,10 @@ export const AdminRoute: React.FC<AdminRouteProps> = ({ roles, children }) => {
 
   if (OBSERVER_PORTAL_ROLES.includes(role)) {
     return <Navigate to="/observer/dashboard" replace />;
+  }
+
+  if (SPONSORSHIP_HEAD_PORTAL_ROLES.includes(role)) {
+    return <Navigate to="/sponsorship-head/dashboard" replace />;
   }
 
   return <Navigate to="/admin/login" replace state={{ unauthorized: true }} />;

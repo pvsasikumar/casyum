@@ -7,13 +7,16 @@ import { Hero } from './components/Hero';
 import { About } from './components/About';
 import { Events } from './components/Events';
 import { ParticipantRegistration } from './components/ParticipantRegistration';
+import { SponsorshipEnquiry } from './components/SponsorshipEnquiry';
 import { ParticipantDashboard } from './participant/ParticipantDashboard';
+import { SponsorShowcase } from './participant/SponsorShowcase';
 import { EventDetailsPage } from './components/events/EventDetailsPage';
 import { AdminDashboard } from './admin/AdminDashboard';
 import { CoordinatorApp } from './coordinator/CoordinatorApp';
 import { RegistrationTeamApp } from './registration-team/RegistrationTeamApp';
 import { CasyumFacultyApp } from './casyum-faculty/CasyumFacultyApp';
 import { ObserverApp } from './observer/ObserverApp';
+import { SponsorshipHeadApp } from './sponsorship-head/SponsorshipHeadApp';
 import { AdminLogin } from './pages/admin/AdminLogin';
 import { AdminRoute } from './rbac/components/AdminRoute';
 import { CreatePassword } from './pages/auth/CreatePassword';
@@ -21,7 +24,7 @@ import { ForgotPassword } from './pages/auth/ForgotPassword';
 import { ResetPassword } from './pages/auth/ResetPassword';
 import { LogIn, Loader2, AlertCircle, X } from 'lucide-react';
 import { useRBAC } from './rbac/context/RBACContext';
-import { SUPER_ADMIN_ROLE, COORDINATOR_PORTAL_ROLES, REGISTRATION_TEAM_PORTAL_ROLES, CASYUM_FACULTY_PORTAL_ROLES, OBSERVER_PORTAL_ROLES } from './rbac/constants';
+import { SUPER_ADMIN_ROLE, COORDINATOR_PORTAL_ROLES, REGISTRATION_TEAM_PORTAL_ROLES, CASYUM_FACULTY_PORTAL_ROLES, OBSERVER_PORTAL_ROLES, SPONSORSHIP_HEAD_PORTAL_ROLES } from './rbac/constants';
 import { useGoogleParticipantLogin } from './hooks/useGoogleParticipantLogin';
 
 function PublicSite() {
@@ -99,6 +102,7 @@ function PublicSite() {
         <About />
         <Events />
         <ParticipantRegistration />
+        <SponsorshipEnquiry />
 
         <footer className="border-t border-white/5 bg-black/50 py-12 px-6 text-center text-[10px] tracking-[0.25em] text-white/30 uppercase font-semibold font-display">
           <div className="max-w-4xl mx-auto flex flex-col gap-6 items-center">
@@ -205,6 +209,15 @@ export default function App() {
         }
       />
 
+      <Route
+        path="/participant/sponsors"
+        element={
+          <ParticipantRoute>
+            <SponsorShowcase />
+          </ParticipantRoute>
+        }
+      />
+
       <Route path="/admin/login" element={<AdminLogin />} />
 
       <Route
@@ -239,6 +252,15 @@ export default function App() {
         element={
           <AdminRoute roles={OBSERVER_PORTAL_ROLES}>
             <ObserverApp />
+          </AdminRoute>
+        }
+      />
+
+      <Route
+        path="/sponsorship-head/*"
+        element={
+          <AdminRoute roles={SPONSORSHIP_HEAD_PORTAL_ROLES}>
+            <SponsorshipHeadApp />
           </AdminRoute>
         }
       />

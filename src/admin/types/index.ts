@@ -196,7 +196,9 @@ export type ActiveTabModule =
   | 'Audit Logs'
   | 'Employees'
   | 'Email Logs'
-  | 'Results';
+  | 'Results'
+  | 'Sponsors'
+  | 'Sponsorship Enquiries';
 
 export interface EmailLog {
   id: string;

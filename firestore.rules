@@ -39,6 +39,10 @@ service cloud.firestore {
       return getUserRole() in ['casyum_faculty_coordinator'];
     }
 
+    function isSponsorshipHead() {
+      return getUserRole() in ['Sponsorship Head'];
+    }
+
     // Observers have strictly read-only access across the system. They are
     // granted read rules only; no write rule ever includes isObserver(), so
     // every create/update/delete attempt by an observer is denied by Firestore.
@@ -396,8 +400,57 @@ service cloud.firestore {
     // excluded here to avoid granting broader write access via overlapping
     // match statements.
     match /settings/{docId} {
-      allow read: if docId == 'payment' || (docId != 'communication' && isAdmin());
-      allow write: if docId != 'communication' && isAdmin();
+      allow read: if docId == 'payment'
+        || (docId != 'communication' && docId != 'sponsorship' && isAdmin());
+      allow write: if docId != 'communication' && docId != 'sponsorship' && isAdmin();
+    }
+
+    // Sponsorship settings (active tariff PDF URL + Sponsorship Head contact):
+    // the tariff PDF link must be publicly readable so visitors can open the
+    // "View Sponsorship Packages" button without signing in; only the Super
+    // Admin may change it.
+    match /settings/sponsorship {
+      allow read: if true;
+      allow write: if isSuperAdmin();
+    }
+
+    // Sponsor categories drive the sponsor showcase grouping. They are
+    // readable by everyone (they contain no sensitive data) and managed
+    // entirely by the Super Admin.
+    match /sponsorCategories/{categoryId} {
+      allow read: if true;
+      allow write: if isSuperAdmin();
+    }
+
+    // Sponsorship packages define display level, logo size and benefits per
+    // package. Readable by everyone, managed by the Super Admin.
+    match /sponsorPackages/{packageId} {
+      allow read: if true;
+      allow write: if isSuperAdmin();
+    }
+
+    // Sponsors: participants read the sponsor showcase after login, staff
+    // read it for the showcase preview, and only the Super Admin manages the
+    // sponsor records (create / enable / disable / reorder / delete). The
+    // Sponsorship Head may create a sponsor when approving an enquiry and may
+    // edit the sponsors they manage, but can never delete one.
+    // The showcase filters client-side to status == 'Active' and
+    // approvalStatus == 'Approved'.
+    match /sponsors/{sponsorId} {
+      allow read: if isSignedIn() || isSponsorshipHead();
+      allow create: if isSuperAdmin() || isSponsorshipHead();
+      allow update: if isSuperAdmin() || isSponsorshipHead();
+      allow delete: if isSuperAdmin();
+    }
+
+    // Sponsorship enquiries: anyone may submit one from the public website.
+    // Only the Super Admin, Admin and Sponsorship Head may read/update them.
+    // Deletion is limited to the Super Admin.
+    match /sponsorshipEnquiries/{enquiryId} {
+      allow read: if isSignedIn() && (isSuperAdmin() || isAdmin() || isSponsorshipHead());
+      allow create: if true;
+      allow update: if isSuperAdmin() || isSponsorshipHead();
+      allow delete: if isSuperAdmin();
     }
 
     // Certificates and event results: admins manage them; observers may read

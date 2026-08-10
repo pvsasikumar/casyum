@@ -95,7 +95,7 @@ export const ParticipantRegistration: React.FC = () => {
       });
       setSuccessMsg(`Welcome, ${result.user.name}! Redirecting to your dashboard...`);
       setAuthenticating(false);
-      navigate('/participant/dashboard', { replace: true });
+      navigate('/participant/sponsors', { replace: true });
     } catch (err) {
       setAuthenticating(false);
       setErrorMsg(err instanceof Error ? err.message : 'Google Sign-In failed. Please try again.');

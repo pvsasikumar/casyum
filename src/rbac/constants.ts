@@ -13,6 +13,7 @@ export const ALL_ROLES: UserRole[] = [
   'Finance Manager',
   'casyum_faculty_coordinator',
   'Observer',
+  'Sponsorship Head',
 ];
 
 export const ROLE_LABELS: Record<UserRole, string> = {
@@ -29,6 +30,7 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   'Participant': 'Participant',
   'casyum_faculty_coordinator': 'CASYUM Faculty Coordinator',
   'Observer': 'Observer',
+  'Sponsorship Head': 'Sponsorship Head',
 };
 
 export const SUPER_ADMIN_ROLE: UserRole = 'Super Admin';
@@ -38,6 +40,8 @@ export const REGISTRATION_TEAM_ROLE: UserRole = 'Registration Team';
 export const CASYUM_FACULTY_COORDINATOR_ROLE: UserRole = 'casyum_faculty_coordinator';
 
 export const OBSERVER_ROLE: UserRole = 'Observer';
+
+export const SPONSORSHIP_HEAD_ROLE: UserRole = 'Sponsorship Head';
 
 export const ADMIN_PORTAL_ROLES: UserRole[] = [
   'Super Admin',
@@ -56,11 +60,14 @@ export const CASYUM_FACULTY_PORTAL_ROLES: UserRole[] = [CASYUM_FACULTY_COORDINAT
 
 export const OBSERVER_PORTAL_ROLES: UserRole[] = [OBSERVER_ROLE];
 
+export const SPONSORSHIP_HEAD_PORTAL_ROLES: UserRole[] = [SPONSORSHIP_HEAD_ROLE];
+
 export const STAFF_PORTAL_ROLES: UserRole[] = [
   ...ADMIN_PORTAL_ROLES,
   ...REGISTRATION_TEAM_PORTAL_ROLES,
   ...CASYUM_FACULTY_PORTAL_ROLES,
   ...OBSERVER_PORTAL_ROLES,
+  ...SPONSORSHIP_HEAD_PORTAL_ROLES,
 ];
 
 export const ROLE_HIERARCHY: Record<UserRole, number> = {
@@ -77,6 +84,7 @@ export const ROLE_HIERARCHY: Record<UserRole, number> = {
   'Participant': 6,
   'casyum_faculty_coordinator': 2,
   'Observer': 6,
+  'Sponsorship Head': 2,
 };
 
 const all = (domain: PermissionDomain): Permission[] => [
@@ -114,12 +122,17 @@ export const ROLE_PERMISSIONS: RolePermission[] = [
       ...all('emails'),
       ...all('results'),
       ...all('profile'),
+      ...all('sponsors'),
+      ...all('sponsorship_enquiries'),
       'payments.verify',
       'payments.refund',
       'registrations.approve',
       'registrations.reject',
       'settings.manage',
       'coordinators.assign',
+      'sponsorship_enquiries.approve',
+      'sponsorship_enquiries.reject',
+      'sponsorship_enquiries.assign',
     ],
   },
   {
@@ -336,6 +349,21 @@ export const ROLE_PERMISSIONS: RolePermission[] = [
       'certificates.view',
       'results.view',
       'profile.view',
+    ],
+  },
+  {
+    role: 'Sponsorship Head',
+    permissions: [
+      'sponsorship_enquiries.view',
+      'sponsorship_enquiries.edit',
+      'sponsorship_enquiries.approve',
+      'sponsorship_enquiries.reject',
+      'sponsorship_enquiries.assign',
+      'sponsors.view',
+      'sponsors.create',
+      'sponsors.edit',
+      'profile.view',
+      'profile.edit',
     ],
   },
 ];

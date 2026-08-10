@@ -57,5 +57,13 @@ service firebase.storage {
       allow read: if isSignedIn();
       allow write: if isSignedIn() && isAdmin();
     }
+
+    // Sponsorship tariff PDF (sponsorship/tariff/{file}) must be publicly
+    // readable so visitors can open the "View Sponsorship Packages" button
+    // without signing in. Writable only by admins (Super Admin).
+    match /sponsorship/tariff/{fileName} {
+      allow read: if true;
+      allow write: if isSignedIn() && isAdmin();
+    }
   }
 }

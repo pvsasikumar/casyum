@@ -33,6 +33,8 @@ import { AuditLogs } from './components/modules/AuditLogs';
 import { EmployeeManagement } from './components/modules/EmployeeManagement';
 import { EmailLogs } from './components/modules/EmailLogs';
 import { ResultsModule } from './components/modules/ResultsModule';
+import { SponsorManagement } from './components/modules/SponsorManagement';
+import { SponsorshipEnquiries } from './components/modules/SponsorshipEnquiries';
 
 const ModuleRouter: React.FC = () => {
   const { activeTab } = useAdmin();
@@ -88,6 +90,10 @@ const ModuleRouter: React.FC = () => {
       return <EmailLogs />;
     case 'Results':
       return <ResultsModule />;
+    case 'Sponsors':
+      return <SponsorManagement />;
+    case 'Sponsorship Enquiries':
+      return <SponsorshipEnquiries />;
     default:
       return <DashboardHome />;
   }

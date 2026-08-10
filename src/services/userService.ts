@@ -25,6 +25,7 @@ const EMPLOYEE_ROLES = [
   'Registration Manager',
   'Certificate Manager',
   'Finance Manager',
+  'Sponsorship Head',
 ];
 
 function isEmployeeRecord(record: UserRecord): boolean {
