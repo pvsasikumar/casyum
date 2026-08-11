@@ -1,6 +1,6 @@
 import { collection, doc, getDoc, getDocs, setDoc, updateDoc } from 'firebase/firestore';
 import { getDb } from '../../firebase/firestore';
-import { now } from '../../services/helpers';
+import { now, sanitizeFirestoreData } from '../../services/helpers';
 import { slugifyEventName, eventImageForSlug, isValidStoredImage } from '../../services/eventSlug';
 import type {
   CmsEditor,
@@ -359,7 +359,7 @@ function buildCmsDoc(
 export async function saveEventCmsDraft(eventId: string, data: EventCmsData, editor: CmsEditor): Promise<EventCmsData> {
   const db = getDb();
   const timestamp = now();
-  await setDoc(doc(db, DRAFT_COLLECTION, eventId), buildCmsDoc(eventId, data, timestamp, editor), { merge: true });
+  await setDoc(doc(db, DRAFT_COLLECTION, eventId), sanitizeFirestoreData(buildCmsDoc(eventId, data, timestamp, editor)), { merge: true });
   return {
     ...data,
     meta: {
@@ -435,8 +435,8 @@ export async function publishEventCms(eventId: string, data: EventCmsData, edito
     }
   }
 
-  await updateDoc(doc(db, EVENTS_COLLECTION, eventId), eventPatch);
-  await setDoc(doc(db, CMS_COLLECTION, eventId), buildCmsDoc(eventId, data, timestamp, editor, true), { merge: true });
+  await updateDoc(doc(db, EVENTS_COLLECTION, eventId), sanitizeFirestoreData(eventPatch));
+  await setDoc(doc(db, CMS_COLLECTION, eventId), sanitizeFirestoreData(buildCmsDoc(eventId, data, timestamp, editor, true)), { merge: true });
 
   return {
     ...data,

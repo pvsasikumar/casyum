@@ -1,11 +1,12 @@
 import React from 'react';
-import { Home, CalendarDays, Trophy, UserPlus } from 'lucide-react';
+import { Home, CalendarDays, Trophy, Handshake, UserPlus } from 'lucide-react';
 import { AnimeNavBar } from './ui/anime-navbar';
 
 const NAV_ITEMS = [
   { name: 'Home', url: '#home', icon: Home },
   { name: 'About', url: '#about', icon: CalendarDays },
   { name: 'Events', url: '#events', icon: Trophy },
+  { name: 'Sponsors', url: '#sponsors', icon: Handshake },
   { name: 'Register', url: '#register', icon: UserPlus },
 ];
 

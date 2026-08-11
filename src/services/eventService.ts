@@ -10,7 +10,7 @@ import {
   where,
 } from 'firebase/firestore';
 import { getDb } from '../firebase/firestore';
-import { nextSequence, now } from './helpers';
+import { nextSequence, now, sanitizeFirestoreData } from './helpers';
 
 export interface EventRow {
   id: string;
@@ -257,7 +257,7 @@ export async function createEvent(data: {
     created_at: now(),
     updated_at: now(),
   };
-  await setDoc(doc(db, 'events', id), row);
+  await setDoc(doc(db, 'events', id), sanitizeFirestoreData(row));
   return { event: row };
 }
 
@@ -287,7 +287,12 @@ export async function updateEvent(
   const db = getDb();
   const eventId = String(id);
   const patch: Record<string, any> = { ...data, updated_at: now() };
-  await updateDoc(doc(db, 'events', eventId), patch);
+  // Never overwrite an existing event_type (or other single-key semantics)
+  // with an empty/undefined value. Only valid, explicit values are written.
+  if (patch.event_type === undefined || patch.event_type === '') {
+    delete patch.event_type;
+  }
+  await updateDoc(doc(db, 'events', eventId), sanitizeFirestoreData(patch));
   const snap = await getDoc(doc(db, 'events', eventId));
   return { event: mapEventDoc(snap.id, snap.data() || {}) };
 }

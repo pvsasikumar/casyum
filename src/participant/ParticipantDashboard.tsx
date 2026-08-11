@@ -56,6 +56,60 @@ const YEARS = ['1st Year', '2nd Year', '3rd Year', '4th Year', 'Other'];
 
 const inputClass = 'w-full bg-white/5 border border-white/10 rounded-xl px-5 py-3 text-sm focus:outline-none focus:border-violet-500/50 transition-all font-sans text-white placeholder-white/30';
 
+/**
+ * Deduplicate registration records by their unique Firestore registration id
+ * before any rendering. Guards against legacy duplicate documents or repeated
+ * state updates while preserving distinct registrations (each registration
+ * document stays exactly one record). Refresh/re-render can never append the
+ * same registration twice.
+ */
+function dedupeRegistrations(regs: any[]): any[] {
+  const seen = new Set<string>();
+  const unique: any[] = [];
+  for (const reg of regs || []) {
+    if (!reg) continue;
+    const key = reg.registration_id != null ? String(reg.registration_id) : '';
+    if (key && seen.has(key)) continue;
+    if (key) seen.add(key);
+    unique.push(reg);
+  }
+  return unique;
+}
+
+/**
+ * Expand one registration record into its selected events so "My Registrations"
+ * renders a single card per event (never one card per registration, which would
+ * repeat the registration summary shown in the panel above). Falls back to the
+ * stored event name for legacy single-event registrations.
+ */
+function registrationEventItems(reg: any): Array<{ eventId: string | null; eventName: string }> {
+  const items: Array<{ eventId: string | null; eventName: string }> = [];
+  const sel = reg?.selectedEvents;
+  if (sel && Array.isArray(sel.regular)) {
+    sel.regular.forEach((ev: any) => {
+      if (ev && ev.eventName) {
+        items.push({
+          eventId: ev.eventId != null ? String(ev.eventId) : null,
+          eventName: String(ev.eventName),
+        });
+      }
+    });
+  }
+  if (sel && sel.gaming && sel.gaming.eventName) {
+    items.push({
+      eventId: sel.gaming.eventId != null ? String(sel.gaming.eventId) : null,
+      eventName: String(sel.gaming.eventName),
+    });
+  }
+  if (items.length === 0 && reg?.event_name) {
+    items.push({
+      eventId: reg.event_id != null ? String(reg.event_id) : null,
+      eventName: String(reg.event_name),
+    });
+  }
+  return items;
+}
+
 export const ParticipantDashboard: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -138,7 +192,7 @@ export const ParticipantDashboard: React.FC = () => {
     );
     const wantsSelect = searchParams.get('select') === '1';
     const wantsAlreadyNotice = searchParams.get('status') === 'already_registered';
-    const hasSubmitted = (participant.registered_events || []).length > 0;
+    const hasSubmitted = dedupeRegistrations(participant.registered_events).length > 0;
 
     pendingEventProcessedRef.current = true;
     setSearchParams({}, { replace: true });
@@ -473,7 +527,7 @@ export const ParticipantDashboard: React.FC = () => {
 
   const profileComplete = participant.profile_completed === 1;
   const registeredEventIds = new Set((participant.event_ids || []).map((x: any) => Number(x)));
-  const myRegistrations = participant.registered_events || [];
+  const myRegistrations = dedupeRegistrations(participant.registered_events);
   const hasSubmitted = myRegistrations.length > 0;
   const avatar = participant.profile_picture || '';
 
@@ -572,9 +626,9 @@ export const ParticipantDashboard: React.FC = () => {
               <ParticipantQRCard
                 participantId={participant.participant_id || participant.id}
                 casyumId={participant.casyum_id}
-                registrationId={participant.registered_events?.[0]?.registration_id}
+                registrationId={myRegistrations[0]?.registration_id}
                 participantName={participant.full_name}
-                paymentStatus={participant.registered_events?.[0]?.payment_status}
+                paymentStatus={myRegistrations[0]?.payment_status}
                 verificationStatus={participant.verificationStatus || 'Pending'}
                 verifiedBy={participant.verifiedBy}
                 verifiedAt={participant.verifiedAt}
@@ -943,87 +997,27 @@ export const ParticipantDashboard: React.FC = () => {
               ) : (
                 <div className="flex flex-col gap-3">
                   {myRegistrations.map((reg: any) => {
-                    const paymentStatus = reg.payment_status || 'submitted';
-                    const isRejected = paymentStatus === 'rejected';
-                    const paymentVerified = paymentStatus === 'verified';
-                    const deskVerified = (reg.registration_verification_status || 'locked') === 'verified';
-                    const attendanceEnabled = reg.attendance_eligibility === true;
-                    return (
-                      <div
-                        key={reg.registration_id}
-                        className="rounded-2xl border border-white/10 bg-white/[0.03] px-5 py-4 flex flex-col gap-4"
-                      >
-                        <div className="flex flex-wrap items-center justify-between gap-3">
-                          <div className="flex flex-col gap-1 min-w-0">
-                            <span className="text-sm font-bold">{reg.event_name}</span>
-                            {reg.selectedEvents && (
-                              <div className="flex flex-wrap gap-1.5 mt-0.5">
-                                {Array.isArray(reg.selectedEvents.regular) &&
-                                  reg.selectedEvents.regular.map((ev: any) => (
-                                    <span key={String(ev.eventId)} className="px-2 py-0.5 rounded-md bg-violet-500/10 border border-violet-500/25 text-violet-300 text-[9px] font-bold">
-                                      {ev.eventName}
-                                    </span>
-                                  ))}
-                                {reg.selectedEvents.gaming && (
-                                  <span className="px-2 py-0.5 rounded-md bg-rose-500/10 border border-rose-500/25 text-rose-300 text-[9px] font-bold">
-                                    {reg.selectedEvents.gaming.eventName}
-                                  </span>
-                                )}
-                              </div>
-                            )}
-                            <span className="text-[11px] text-white/40">
-                              {reg.event_date}{reg.event_time ? ` · ${reg.event_time}` : ''} · {reg.venue || 'TBA'}
-                            </span>
-                            <span className="text-[10px] text-white/30 font-mono">{reg.registration_id}</span>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <span className="text-xs text-white/50">Fee: ₹{Number(reg.fee) || 0}</span>
-                            <span
-                              className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border ${
-                                paymentVerified
-                                  ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300'
-                                  : isRejected
-                                    ? 'bg-rose-500/15 border-rose-500/30 text-rose-300'
-                                    : 'bg-amber-500/15 border-amber-500/30 text-amber-300'
-                              }`}
-                            >
-                              {paymentVerified ? 'Payment Verified' : isRejected ? 'Payment Rejected' : 'Pending Verification'}
-                            </span>
-                          </div>
-                        </div>
-
-                        <RegistrationStatusTracker
-                          paymentStatus={paymentStatus}
-                          deskVerified={deskVerified}
-                          attendanceEnabled={attendanceEnabled}
-                          attendanceStatus={reg.attendance_status || 'not_marked'}
+                    const events = registrationEventItems(reg);
+                    const singleEvent = events.length === 1;
+                    return events.map((ev) => {
+                      const evDetail = ev.eventId
+                        ? openEvents.find((e) => String(e.id) === ev.eventId)
+                        : undefined;
+                      return (
+                        <MyRegistrationEventCard
+                          key={`${reg.registration_id || 'registration'}::${ev.eventId || ev.eventName}`}
+                          registration={reg}
+                          eventName={ev.eventName}
+                          eventDate={evDetail?.event_date || (singleEvent ? reg.event_date : '')}
+                          eventTime={evDetail?.time || (singleEvent ? reg.event_time : '')}
+                          venue={evDetail?.venue || (singleEvent ? reg.venue : '')}
+                          onResubmit={() => {
+                            setResubmitError('');
+                            setResubmitTarget(reg);
+                          }}
                         />
-
-                        {isRejected && (
-                          <div className="flex flex-col gap-2">
-                            <div className="flex items-start gap-2 px-3 py-2.5 rounded-xl bg-rose-500/10 border border-rose-500/25 text-rose-300 text-xs">
-                              <XCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
-                              <span>
-                                Payment rejected: {reg.payment_rejection_reason || 'Please verify your payment details.'}
-                                {reg.payment_resubmission_count > 0
-                                  ? ` (Resubmission #${reg.payment_resubmission_count})`
-                                  : ''}
-                              </span>
-                            </div>
-                            <button
-                              onClick={() => {
-                                setResubmitError('');
-                                setResubmitTarget(reg);
-                              }}
-                              className="self-start flex items-center gap-2 px-4 py-2.5 rounded-xl bg-violet-600/20 hover:bg-violet-600/30 border border-violet-500/30 text-violet-300 text-xs font-bold cursor-pointer transition-all"
-                            >
-                              <RefreshCw className="w-3.5 h-3.5" />
-                              Resubmit Payment
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    );
+                      );
+                    });
                   })}
                 </div>
               )}
@@ -1201,6 +1195,78 @@ const RegistrationStatusTracker: React.FC<RegistrationStatusTrackerProps> = ({
   );
 };
 
+interface MyRegistrationEventCardProps {
+  registration: any;
+  eventName: string;
+  eventDate: string;
+  eventTime: string;
+  venue: string;
+  onResubmit: () => void;
+}
+
+/**
+ * Event-wise registration card shown under "My Registrations". Each card
+ * represents ONE selected event of a single registration record (records are
+ * deduplicated by registration id), and keeps the existing event-wise
+ * status/timeline. The registration-level summary (id, fee, payment status)
+ * lives in the Registration Submitted panel above, so it is never repeated
+ * here.
+ */
+const MyRegistrationEventCard: React.FC<MyRegistrationEventCardProps> = ({
+  registration,
+  eventName,
+  eventDate,
+  eventTime,
+  venue,
+  onResubmit,
+}) => {
+  const paymentStatus = registration?.payment_status || 'submitted';
+  const isRejected = paymentStatus === 'rejected';
+  const deskVerified = (registration?.registration_verification_status || 'locked') === 'verified';
+  const attendanceEnabled = registration?.attendance_eligibility === true;
+  const attendanceStatus = registration?.attendance_status || 'not_marked';
+  const scheduleLine = [eventDate, eventTime, venue].filter(Boolean).join(' · ');
+
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-5 py-4 flex flex-col gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-col gap-1 min-w-0">
+          <span className="text-sm font-bold">{eventName}</span>
+          {scheduleLine && <span className="text-[11px] text-white/40">{scheduleLine}</span>}
+        </div>
+      </div>
+
+      <RegistrationStatusTracker
+        paymentStatus={paymentStatus}
+        deskVerified={deskVerified}
+        attendanceEnabled={attendanceEnabled}
+        attendanceStatus={attendanceStatus}
+      />
+
+      {isRejected && (
+        <div className="flex flex-col gap-2">
+          <div className="flex items-start gap-2 px-3 py-2.5 rounded-xl bg-rose-500/10 border border-rose-500/25 text-rose-300 text-xs">
+            <XCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+            <span>
+              Payment rejected: {registration.payment_rejection_reason || 'Please verify your payment details.'}
+              {registration.payment_resubmission_count > 0
+                ? ` (Resubmission #${registration.payment_resubmission_count})`
+                : ''}
+            </span>
+          </div>
+          <button
+            onClick={onResubmit}
+            className="self-start flex items-center gap-2 px-4 py-2.5 rounded-xl bg-violet-600/20 hover:bg-violet-600/30 border border-violet-500/30 text-violet-300 text-xs font-bold cursor-pointer transition-all"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            Resubmit Payment
+          </button>
+        </div>
+      )}
+    </div>
+  );
+};
+
 interface StatusItemProps {
   label: string;
   value: string;
@@ -1255,6 +1321,11 @@ const RegistrationSubmittedPanel: React.FC<{ registration: any }> = ({ registrat
     {
       label: 'Selected Event(s)',
       value: selectedEventNames.length > 0 ? selectedEventNames.join(', ') : '—',
+      state: 'info',
+    },
+    {
+      label: 'Total Registration Fee',
+      value: `₹${Number(registration?.fee) || 0}`,
       state: 'info',
     },
     {

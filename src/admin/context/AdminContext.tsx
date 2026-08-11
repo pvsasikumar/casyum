@@ -29,6 +29,7 @@ import { listAuditLogs, addAuditLog } from '../../services/auditLogService';
 import { readSettings, saveSettings } from '../../services/settingsService';
 import { listAllAttendance, upsertAttendance } from '../../services/attendanceService';
 import { EVENT_IMAGE_MAP, DEFAULT_EVENT_IMAGE } from '../../services/eventSlug';
+import { isGamingEvent } from '../../services/eventSelection';
 
 interface NotificationItem {
   id: string;
@@ -221,7 +222,12 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       id: String(row?.id),
       name,
       category: row?.category || 'Technical',
-      event_type: row?.event_type || undefined,
+      // Events created before the schema introduced `event_type` may not have
+      // the field. Derive a sensible value so updates never send `undefined`
+      // and the admin form always shows a valid selection.
+      event_type:
+        row?.event_type ||
+        (isGamingEvent(row) ? 'gaming' : 'regular'),
       tagline: row?.tagline || '',
       description: row?.description || '',
       iconName: row?.iconName || 'Calendar',

@@ -57,7 +57,7 @@ const BUDGET_OPTIONS = [
   'In-kind contribution',
 ];
 
-export const SponsorshipEnquiry: React.FC = () => {
+export const SponsorshipEnquiry: React.FC<{ openSignal?: number }> = ({ openSignal = 0 }) => {
   const [formOpen, setFormOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -66,6 +66,13 @@ export const SponsorshipEnquiry: React.FC = () => {
   const [errorMsg, setErrorMsg] = useState('');
   const [tariffUrl, setTariffUrl] = useState('');
   const [tariffLoading, setTariffLoading] = useState(true);
+
+  useEffect(() => {
+    if (openSignal > 0) {
+      setSubmitted(false);
+      setFormOpen(true);
+    }
+  }, [openSignal]);
 
   useEffect(() => {
     readSponsorshipSettings()

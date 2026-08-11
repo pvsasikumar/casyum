@@ -40,3 +40,34 @@ export function slugify(input: string): string {
 export function isValidEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
+
+/**
+ * Recursively removes `undefined` values from a value tree so it can be safely
+ * written to Firestore. Firestore rejects `undefined` anywhere in a document
+ * (top-level or nested). `null` is a valid Firestore value and is preserved.
+ * Top-level keys whose value becomes `undefined` are dropped entirely, which
+ * keeps `updateDoc` from clobbering existing fields that were not edited.
+ */
+export function stripUndefined(value: unknown): unknown {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  if (Array.isArray(value)) {
+    return value
+      .map(stripUndefined)
+      .filter((item) => item !== undefined);
+  }
+  if (typeof value === 'object' && !(value instanceof Date)) {
+    const cleaned: Record<string, unknown> = {};
+    for (const [key, item] of Object.entries(value)) {
+      const stripped = stripUndefined(item);
+      if (stripped !== undefined) cleaned[key] = stripped;
+    }
+    return cleaned;
+  }
+  return value;
+}
+
+/** Sanitizes an object so no Firestore write can contain `undefined`. */
+export function sanitizeFirestoreData<T extends Record<string, any>>(data: T): T {
+  return stripUndefined(data) as T;
+}

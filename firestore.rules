@@ -429,15 +429,16 @@ service cloud.firestore {
       allow write: if isSuperAdmin();
     }
 
-    // Sponsors: participants read the sponsor showcase after login, staff
-    // read it for the showcase preview, and only the Super Admin manages the
-    // sponsor records (create / enable / disable / reorder / delete). The
-    // Sponsorship Head may create a sponsor when approving an enquiry and may
-    // edit the sponsors they manage, but can never delete one.
-    // The showcase filters client-side to status == 'Active' and
-    // approvalStatus == 'Approved'.
+    // Sponsors: the public website loads the sponsor showcase from Firestore
+    // without authentication, so reads are public. Only sponsors with
+    // status == 'Active' and approvalStatus == 'Approved' are rendered by the
+    // public UI (filtered client-side), so pending/rejected sponsors never
+    // appear publicly. Only the Super Admin manages the sponsor records
+    // (create / enable / disable / reorder / delete). The Sponsorship Head
+    // may create a sponsor when approving an enquiry and may edit the
+    // sponsors they manage, but can never delete one.
     match /sponsors/{sponsorId} {
-      allow read: if isSignedIn() || isSponsorshipHead();
+      allow read: if true;
       allow create: if isSuperAdmin() || isSponsorshipHead();
       allow update: if isSuperAdmin() || isSponsorshipHead();
       allow delete: if isSuperAdmin();

@@ -6,6 +6,7 @@ import { Navbar } from './components/Navbar';
 import { Hero } from './components/Hero';
 import { About } from './components/About';
 import { Events } from './components/Events';
+import { Sponsors } from './components/Sponsors';
 import { ParticipantRegistration } from './components/ParticipantRegistration';
 import { SponsorshipEnquiry } from './components/SponsorshipEnquiry';
 import { ParticipantDashboard } from './participant/ParticipantDashboard';
@@ -29,6 +30,7 @@ import { useGoogleParticipantLogin } from './hooks/useGoogleParticipantLogin';
 
 function PublicSite() {
   const { signIn, isSigningIn, error, clearError } = useGoogleParticipantLogin();
+  const [sponsorEnquiryOpen, setSponsorEnquiryOpen] = useState(0);
   const [showIntro, setShowIntro] = useState(() => {
     const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     if (prefersReducedMotion) return false;
@@ -101,8 +103,9 @@ function PublicSite() {
         <Hero startAnimation={startAnimation} onOpenLogin={signIn} isSigningIn={isSigningIn} />
         <About />
         <Events />
+        <Sponsors onOpenEnquiry={() => setSponsorEnquiryOpen((n) => n + 1)} />
         <ParticipantRegistration />
-        <SponsorshipEnquiry />
+        <SponsorshipEnquiry openSignal={sponsorEnquiryOpen} />
 
         <footer className="border-t border-white/5 bg-black/50 py-12 px-6 text-center text-[10px] tracking-[0.25em] text-white/30 uppercase font-semibold font-display">
           <div className="max-w-4xl mx-auto flex flex-col gap-6 items-center">

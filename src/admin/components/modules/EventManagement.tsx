@@ -21,6 +21,7 @@ import { DEFAULT_EVENT_IMAGE } from '../../../services/eventSlug';
 const emptyEventForm = {
   name: '',
   category: 'Technical' as EventItem['category'],
+  event_type: 'regular' as EventItem['event_type'],
   tagline: '',
   description: '',
   iconName: 'Calendar',
@@ -70,6 +71,7 @@ export const EventManagement: React.FC = () => {
     setForm({
       name: e.name,
       category: e.category,
+      event_type: e.event_type || (e.category === 'Gaming' ? 'gaming' : 'regular'),
       tagline: e.tagline,
       description: e.description,
       iconName: e.iconName,
@@ -252,9 +254,18 @@ export const EventManagement: React.FC = () => {
                   </select>
                 </div>
               </div>
-              <div className="flex flex-col gap-1.5">
-                <label className="text-[10px] font-bold text-white/50 uppercase">Tagline</label>
-                <input value={form.tagline} onChange={(e) => setForm({ ...form, tagline: e.target.value })} className="p-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder-white/30 focus:outline-none" placeholder="Short tagline" />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[10px] font-bold text-white/50 uppercase">Event Type</label>
+                  <select value={form.event_type} onChange={(e) => setForm({ ...form, event_type: e.target.value as EventItem['event_type'] })} className="bg-zinc-900 border border-white/10 text-white text-xs rounded-xl px-3 py-3 focus:outline-none">
+                    <option value="regular">Regular</option>
+                    <option value="gaming">Gaming</option>
+                  </select>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[10px] font-bold text-white/50 uppercase">Tagline</label>
+                  <input value={form.tagline} onChange={(e) => setForm({ ...form, tagline: e.target.value })} className="p-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder-white/30 focus:outline-none" placeholder="Short tagline" />
+                </div>
               </div>
               <div className="flex flex-col gap-1.5">
                 <label className="text-[10px] font-bold text-white/50 uppercase">Description</label>
