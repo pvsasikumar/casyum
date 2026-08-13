@@ -42,3 +42,4 @@ export const CoordinatorApp: React.FC = () => {
     </CoordinatorProvider>
   );
 };
+.
