@@ -64,20 +64,44 @@ export const Hero: React.FC<HeroProps> = ({ startAnimation, onOpenLogin, isSigni
           SRM Institute of Science and Technology
         </motion.div>
 
+        {/* Faculty Info */}
+        <motion.div
+          variants={itemVariants}
+          className="text-[8px] sm:text-[11px] font-semibold tracking-[0.25em] text-white/60 uppercase"
+        >
+          Faculty of Liberal Arts and Business Studies
+        </motion.div>
+
+        {/* School Info */}
+        <motion.div
+          variants={itemVariants}
+          className="text-[8px] sm:text-[11px] font-semibold tracking-[0.25em] text-white/60 uppercase"
+        >
+          School of Applied Science
+        </motion.div>
+
         {/* Department Info */}
         <motion.div
           variants={itemVariants}
-          className="text-[10px] sm:text-xs font-semibold tracking-[0.25em] text-white/50 uppercase"
+          className="text-[8px] sm:text-[11px] font-semibold tracking-[0.25em] text-white/70 uppercase"
         >
           Department of Computer Applications
+        </motion.div>
+
+        {/* Courses */}
+        <motion.div
+          variants={itemVariants}
+          className="text-[8px] sm:text-[11px] font-semibold tracking-[0.25em] text-violet-300/80 uppercase"
+        >
+          (BCA &amp; BCA Gen AI)
         </motion.div>
 
         {/* Presenting Subtitle */}
         <motion.div
           variants={itemVariants}
-          className="text-[9px] sm:text-xs font-semibold tracking-[0.4em] text-white/70 uppercase mt-1 sm:mt-2"
+          className="text-[9px] sm:text-xs font-semibold tracking-[0.4em] text-white/70 uppercase mt-1.5 sm:mt-3"
         >
-          presents the annual national symposium
+          Presents
         </motion.div>
 
         {/* Main Title */}
@@ -88,8 +112,16 @@ export const Hero: React.FC<HeroProps> = ({ startAnimation, onOpenLogin, isSigni
           CASYUM 2K26
         </motion.h1>
 
+        {/* Event Subtitle */}
+        <motion.div
+          variants={itemVariants}
+          className="text-sm sm:text-lg md:text-2xl font-bold tracking-[0.3em] text-white/85 uppercase font-display -mt-0.5 sm:mt-0"
+        >
+          National Level Symposium
+        </motion.div>
+
         {/* Countdown Timer */}
-        <motion.div variants={itemVariants} className="mt-2">
+        <motion.div variants={itemVariants} className="mt-2 sm:mt-3">
           <Countdown />
         </motion.div>
 

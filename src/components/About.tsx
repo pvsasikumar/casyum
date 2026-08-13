@@ -25,7 +25,7 @@ export const About: React.FC = () => {
             Where Innovation Meets Execution.
           </h2>
           <p className="text-white/60 text-sm sm:text-base leading-relaxed">
-            CASYUM is the flagship national symposium hosted by the Department of Computer Applications at SRM Institute of Science and Technology. Year after year, we bring together the brightest minds in technology, design, and software engineering to compete, collaborate, and push the boundaries of what is possible.
+            CASYUM is the flagship national symposium hosted by the Department of Computer Applications, School of Applied Science, under the Faculty of Liberal Arts and Business Studies at SRM Institute of Science and Technology. Year after year, we bring together the brightest minds in technology, design, and software engineering to compete, collaborate, and push the boundaries of what is possible.
           </p>
           <p className="text-white/60 text-sm sm:text-base leading-relaxed">
             CASYUM 2K26 is themed around cosmic crystallization and futurism, embodying the assembly of ideas into functional brilliance. Step into the arena and claim your spot among the pioneers.

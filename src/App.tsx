@@ -123,7 +123,7 @@ function PublicSite() {
               </button>
             </div>
             <span>© 2026 CASYUM SYMPOSIUM. ALL RIGHTS RESERVED.</span>
-            <span className="text-[9px] text-violet-400/40">SRM INSTITUTE OF SCIENCE AND TECHNOLOGY · DEPT OF COMPUTER APPLICATIONS</span>
+            <span className="text-[9px] text-violet-400/40">SRM INSTITUTE OF SCIENCE AND TECHNOLOGY · FACULTY OF LIBERAL ARTS AND BUSINESS STUDIES · SCHOOL OF APPLIED SCIENCE · DEPARTMENT OF COMPUTER APPLICATIONS</span>
           </div>
         </footer>
       </div>
