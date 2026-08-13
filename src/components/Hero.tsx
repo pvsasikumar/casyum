@@ -54,7 +54,7 @@ export const Hero: React.FC<HeroProps> = ({ startAnimation, onOpenLogin, isSigni
         variants={containerVariants}
         initial="hidden"
         animate={startAnimation ? 'visible' : 'hidden'}
-        className="relative z-10 max-w-4xl w-full flex flex-col items-center justify-center gap-1.5 sm:gap-2.5 mt-12"
+        className="relative z-10 max-w-4xl w-full flex flex-col items-center justify-center gap-1.5 sm:gap-2.5 mt-30"
       >
         {/* Institution Info */}
         <motion.div
