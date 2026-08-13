@@ -33,6 +33,12 @@ export interface EventRow {
   rules: string[];
   /** 'gaming' marks special gaming events (Free Fire / BGMI). */
   event_type: string;
+  /** Rule Book PDF reference for this specific event. */
+  ruleBookUrl: string;
+  ruleBookFileName: string;
+  ruleBookVersion: string;
+  ruleBookUpdatedAt: string;
+  ruleBookUpdatedBy: string;
   created_at: string;
   updated_at: string;
 }
@@ -110,6 +116,11 @@ export function mapEventDoc(docId: string, data: Record<string, any>): EventRow 
     revenue: Number(data.revenue) || 0,
     rules: Array.isArray(data.rules) ? data.rules : [],
     event_type: data.event_type || (data.is_gaming === true ? 'gaming' : ''),
+    ruleBookUrl: data.ruleBookUrl || '',
+    ruleBookFileName: data.ruleBookFileName || '',
+    ruleBookVersion: data.ruleBookVersion || '',
+    ruleBookUpdatedAt: data.ruleBookUpdatedAt || '',
+    ruleBookUpdatedBy: data.ruleBookUpdatedBy || '',
     created_at: data.created_at || '',
     updated_at: data.updated_at || '',
   };
@@ -228,6 +239,11 @@ export async function createEvent(data: {
   student_coordinator?: string;
   tagline?: string;
   event_type?: string;
+  ruleBookUrl?: string;
+  ruleBookFileName?: string;
+  ruleBookVersion?: string;
+  ruleBookUpdatedAt?: string;
+  ruleBookUpdatedBy?: string;
 }): Promise<{ event: EventRow }> {
   if (!data.name) {
     throw new Error('Event name is required.');
@@ -254,6 +270,11 @@ export async function createEvent(data: {
     revenue: 0,
     rules: [],
     event_type: data.event_type || '',
+    ruleBookUrl: data.ruleBookUrl || '',
+    ruleBookFileName: data.ruleBookFileName || '',
+    ruleBookVersion: data.ruleBookVersion || '',
+    ruleBookUpdatedAt: data.ruleBookUpdatedAt || '',
+    ruleBookUpdatedBy: data.ruleBookUpdatedBy || '',
     created_at: now(),
     updated_at: now(),
   };
@@ -282,6 +303,11 @@ export async function updateEvent(
     banner: string;
     registered_count: number;
     event_type?: string;
+    ruleBookUrl?: string;
+    ruleBookFileName?: string;
+    ruleBookVersion?: string;
+    ruleBookUpdatedAt?: string;
+    ruleBookUpdatedBy?: string;
   }>
 ): Promise<{ event: EventRow }> {
   const db = getDb();
@@ -292,6 +318,14 @@ export async function updateEvent(
   if (patch.event_type === undefined || patch.event_type === '') {
     delete patch.event_type;
   }
+  // Rule Book reference: only write when explicitly provided. An empty string
+  // is meaningful (admin removed the Rule Book), but `undefined` (not edited)
+  // must never wipe out a previously stored reference.
+  ['ruleBookUrl', 'ruleBookFileName', 'ruleBookVersion', 'ruleBookUpdatedAt', 'ruleBookUpdatedBy'].forEach(
+    (key) => {
+      if (patch[key] === undefined) delete patch[key];
+    }
+  );
   await updateDoc(doc(db, 'events', eventId), sanitizeFirestoreData(patch));
   const snap = await getDoc(doc(db, 'events', eventId));
   return { event: mapEventDoc(snap.id, snap.data() || {}) };

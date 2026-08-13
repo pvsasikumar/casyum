@@ -243,6 +243,11 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       status: row?.status || 'Open',
       revenue: 0,
       rules: [],
+      ruleBookUrl: row?.ruleBookUrl || '',
+      ruleBookFileName: row?.ruleBookFileName || '',
+      ruleBookVersion: row?.ruleBookVersion || '',
+      ruleBookUpdatedAt: row?.ruleBookUpdatedAt || '',
+      ruleBookUpdatedBy: row?.ruleBookUpdatedBy || '',
     };
   }, []);
 
@@ -540,6 +545,11 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         status: data.status,
         faculty_coordinator: data.facultyCoordinator,
         student_coordinator: data.studentCoordinator,
+        ruleBookUrl: data.ruleBookUrl,
+        ruleBookFileName: data.ruleBookFileName,
+        ruleBookVersion: data.ruleBookVersion,
+        ruleBookUpdatedAt: data.ruleBookUpdatedAt,
+        ruleBookUpdatedBy: data.ruleBookUpdatedBy,
       });
       await refreshEvents();
       logAction('Event Created', `Created new event: ${data.name}`);
@@ -564,6 +574,11 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         status: updated.status,
         faculty_coordinator: updated.facultyCoordinator,
         student_coordinator: updated.studentCoordinator,
+        ruleBookUrl: updated.ruleBookUrl,
+        ruleBookFileName: updated.ruleBookFileName,
+        ruleBookVersion: updated.ruleBookVersion,
+        ruleBookUpdatedAt: updated.ruleBookUpdatedAt,
+        ruleBookUpdatedBy: updated.ruleBookUpdatedBy,
       });
       await refreshEvents();
       logAction('Event Updated', `Updated event: ${updated.name}`);

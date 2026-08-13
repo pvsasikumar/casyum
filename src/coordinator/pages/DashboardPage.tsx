@@ -18,6 +18,7 @@ import {
 import { useCoordinator } from '../context/CoordinatorContext';
 import { AttendanceService } from '../services/AttendanceService';
 import type { EventAttendanceStats } from '../types';
+import { RuleBookButton } from '../../components/events/RuleBookButton';
 
 interface StatTileProps {
   label: string;
@@ -224,14 +225,24 @@ export const DashboardPage: React.FC = () => {
                     ) : null}
 
                     {/* Action Button */}
-                    <button
-                      onClick={() => navigate('/coordinator/attendance')}
-                      className="w-full py-3 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white text-xs font-bold uppercase tracking-wider transition-all shadow-lg shadow-violet-500/20 cursor-pointer flex items-center justify-center gap-2 group/btn"
-                    >
-                      <ClipboardList className="w-4 h-4" />
-                      <span>Manage Attendance</span>
-                      <ChevronRight className="w-3.5 h-3.5 group-hover/btn:translate-x-0.5 transition-transform" />
-                    </button>
+                    <div className="flex flex-col gap-2">
+                      <RuleBookButton
+                        url={event.ruleBookUrl}
+                        fileName={event.ruleBookFileName}
+                        version={event.ruleBookVersion}
+                        variant="secondary"
+                        label="View Rule Book"
+                        fullWidth
+                      />
+                      <button
+                        onClick={() => navigate('/coordinator/attendance')}
+                        className="w-full py-3 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white text-xs font-bold uppercase tracking-wider transition-all shadow-lg shadow-violet-500/20 cursor-pointer flex items-center justify-center gap-2 group/btn"
+                      >
+                        <ClipboardList className="w-4 h-4" />
+                        <span>Manage Attendance</span>
+                        <ChevronRight className="w-3.5 h-3.5 group-hover/btn:translate-x-0.5 transition-transform" />
+                      </button>
+                    </div>
                   </div>
                 </motion.div>
               );

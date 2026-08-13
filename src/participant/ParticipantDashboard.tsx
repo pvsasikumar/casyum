@@ -31,6 +31,7 @@ import { api } from '../services/api';
 import { EventOverviewCms } from '../components/cms/EventOverviewCms';
 import { ParticipantQRCard } from './ParticipantQRCard';
 import { PaymentDetailsSection } from '../components/events/PaymentDetailsSection';
+import { RuleBookButton } from '../components/events/RuleBookButton';
 import {
   registerEvent,
   registerEventBundle,
@@ -118,6 +119,7 @@ export const ParticipantDashboard: React.FC = () => {
 
   const [participant, setParticipant] = useState<any>(null);
   const [openEvents, setOpenEvents] = useState<any[]>([]);
+  const [allEvents, setAllEvents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -144,10 +146,12 @@ export const ParticipantDashboard: React.FC = () => {
     try {
       const [meRes, eventsRes] = await Promise.all([
         api.participant.me(),
-        api.event.list({ status: 'Open' }),
+        api.event.list(),
       ]);
       setParticipant(meRes.participant);
-      setOpenEvents(eventsRes.events || []);
+      const all = eventsRes.events || [];
+      setAllEvents(all);
+      setOpenEvents(all.filter((e: any) => e.status === 'Open'));
       if (meRes.participant?.profile_completed === 1) {
         setProfile({
           phone: meRes.participant.phone || '',
@@ -273,6 +277,23 @@ export const ParticipantDashboard: React.FC = () => {
    * overlap so they can adjust the selection before paying.
    */
   const timeClashes = useMemo(() => findEventTimeClashes(selectedEvents), [selectedEvents]);
+
+  /**
+   * Rule Book lookup for every event (open or closed) so "My Registrations"
+   * can open the correct event's Rule Book without extra requests.
+   */
+  const ruleBookById = useMemo(() => {
+    const map = new Map<string, { url: string; fileName: string; version: string }>();
+    allEvents.forEach((e) => {
+      if (!e || e.id == null) return;
+      map.set(String(e.id), {
+        url: e.ruleBookUrl || '',
+        fileName: e.ruleBookFileName || '',
+        version: e.ruleBookVersion || '',
+      });
+    });
+    return map;
+  }, [allEvents]);
 
   const handleLogout = () => {
     logout();
@@ -1003,6 +1024,7 @@ export const ParticipantDashboard: React.FC = () => {
                       const evDetail = ev.eventId
                         ? openEvents.find((e) => String(e.id) === ev.eventId)
                         : undefined;
+                      const ruleBook = ev.eventId ? ruleBookById.get(ev.eventId) : undefined;
                       return (
                         <MyRegistrationEventCard
                           key={`${reg.registration_id || 'registration'}::${ev.eventId || ev.eventName}`}
@@ -1011,6 +1033,9 @@ export const ParticipantDashboard: React.FC = () => {
                           eventDate={evDetail?.event_date || (singleEvent ? reg.event_date : '')}
                           eventTime={evDetail?.time || (singleEvent ? reg.event_time : '')}
                           venue={evDetail?.venue || (singleEvent ? reg.venue : '')}
+                          ruleBookUrl={ruleBook?.url}
+                          ruleBookFileName={ruleBook?.fileName}
+                          ruleBookVersion={ruleBook?.version}
                           onResubmit={() => {
                             setResubmitError('');
                             setResubmitTarget(reg);
@@ -1201,6 +1226,9 @@ interface MyRegistrationEventCardProps {
   eventDate: string;
   eventTime: string;
   venue: string;
+  ruleBookUrl?: string;
+  ruleBookFileName?: string;
+  ruleBookVersion?: string;
   onResubmit: () => void;
 }
 
@@ -1218,6 +1246,9 @@ const MyRegistrationEventCard: React.FC<MyRegistrationEventCardProps> = ({
   eventDate,
   eventTime,
   venue,
+  ruleBookUrl,
+  ruleBookFileName,
+  ruleBookVersion,
   onResubmit,
 }) => {
   const paymentStatus = registration?.payment_status || 'submitted';
@@ -1234,6 +1265,13 @@ const MyRegistrationEventCard: React.FC<MyRegistrationEventCardProps> = ({
           <span className="text-sm font-bold">{eventName}</span>
           {scheduleLine && <span className="text-[11px] text-white/40">{scheduleLine}</span>}
         </div>
+        <RuleBookButton
+          url={ruleBookUrl}
+          fileName={ruleBookFileName}
+          version={ruleBookVersion}
+          variant="secondary"
+          label="Rule Book"
+        />
       </div>
 
       <RegistrationStatusTracker

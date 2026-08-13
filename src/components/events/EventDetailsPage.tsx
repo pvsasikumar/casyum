@@ -21,6 +21,7 @@ import { fetchEventBySlug, type PublicEvent } from '../../services/publicEventSe
 import { useEventRegistration } from '../../hooks/useEventRegistration';
 import { PublicEventRenderer } from './PublicEventRenderer';
 import { ProfileCompletionModal } from './ProfileCompletionModal';
+import { RuleBookButton } from './RuleBookButton';
 import {
   MAX_REGULAR_EVENTS,
   isGamingEvent,
@@ -69,7 +70,14 @@ const EventInformationSection: React.FC<EventInformationSectionProps> = ({ detai
     },
   ].filter((r) => String(r.value || '').trim() !== '');
 
-  if (rows.length === 0) return null;
+  if (rows.length === 0) {
+    return (
+      <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-6">
+        <h2 className="text-xl sm:text-2xl font-extrabold font-display text-white mb-5">Event Information</h2>
+        <RuleBookRow url={event.ruleBookUrl} fileName={event.ruleBookFileName} version={event.ruleBookVersion} />
+      </div>
+    );
+  }
 
   return (
     <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-6">
@@ -95,9 +103,36 @@ const EventInformationSection: React.FC<EventInformationSectionProps> = ({ detai
           );
         })}
       </div>
+      <RuleBookRow url={event.ruleBookUrl} fileName={event.ruleBookFileName} version={event.ruleBookVersion} />
     </div>
   );
 };
+
+interface RuleBookRowProps {
+  url?: string;
+  fileName?: string;
+  version?: string;
+}
+
+const RuleBookRow: React.FC<RuleBookRowProps> = ({ url, fileName, version }) => (
+  <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+    <div className="flex flex-col gap-0.5 min-w-0">
+      <span className="text-[10px] font-bold uppercase tracking-widest text-white/50">
+        {fileName ? 'Event Rule Book' : 'Rule Book'}
+      </span>
+      <span className="text-[10px] text-white/40 truncate">
+        {fileName || 'Read the official rules before registering'}
+      </span>
+    </div>
+    <RuleBookButton
+      url={url}
+      fileName={fileName}
+      version={version}
+      variant="primary"
+      label="Rule Book"
+    />
+  </div>
+);
 
 export const EventDetailsPage: React.FC = () => {
   const { eventSlug } = useParams<{ eventSlug: string }>();
@@ -288,6 +323,22 @@ export const EventDetailsPage: React.FC = () => {
           {isSigningIn ? 'Signing in...' : isChecking ? 'Checking...' : 'Register for Event'}
         </button>
       )}
+
+      <div className="h-px bg-white/10" />
+
+      <div className="flex flex-col gap-1.5">
+        <span className="text-[9px] font-bold uppercase tracking-widest text-white/40">
+          Before you register, read the official event rules
+        </span>
+        <RuleBookButton
+          url={event.ruleBookUrl}
+          fileName={event.ruleBookFileName}
+          version={event.ruleBookVersion}
+          variant="primary"
+          fullWidth
+          showFileName
+        />
+      </div>
 
       {(registerError || signInError) && (
         <p className="text-xs text-rose-300">{registerError || signInError}</p>

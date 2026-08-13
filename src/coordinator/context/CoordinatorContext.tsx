@@ -61,6 +61,10 @@ function mapAssignedEvent(ev: any): EventItem {
     status: ev.status || 'Open',
     revenue: 0,
     rules: [],
+    ruleBookUrl: ev.ruleBookUrl || '',
+    ruleBookFileName: ev.ruleBookFileName || '',
+    ruleBookVersion: ev.ruleBookVersion || '',
+    ruleBookUpdatedAt: ev.ruleBookUpdatedAt || '',
   };
 }
 

@@ -27,6 +27,10 @@ export interface PublicEvent {
   maxParticipants: number;
   registeredCount: number;
   publishedAt: string;
+  ruleBookUrl: string;
+  ruleBookFileName: string;
+  ruleBookVersion: string;
+  ruleBookUpdatedAt: string;
 }
 
 export const EVENT_NOT_PUBLISHED_MESSAGE = 'Event details are available soon.';
@@ -63,6 +67,10 @@ function mapEventDoc(eventId: string, data: DocumentData): PublicEvent {
     maxParticipants: Number(data.max_participants) || 0,
     registeredCount: Number(data.registered_count) || 0,
     publishedAt: String(data.publishedAt || data.cms_updated_at || ''),
+    ruleBookUrl: String(data.ruleBookUrl || ''),
+    ruleBookFileName: String(data.ruleBookFileName || ''),
+    ruleBookVersion: String(data.ruleBookVersion || ''),
+    ruleBookUpdatedAt: String(data.ruleBookUpdatedAt || ''),
   };
 }
 

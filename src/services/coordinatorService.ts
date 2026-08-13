@@ -74,6 +74,10 @@ async function mapCoordinatorRecord(record: UserRecord): Promise<any> {
         max_participants: Number(ev?.max_participants) || 0,
         registered_count: Number(ev?.registered_count) || 0,
         status: ev?.status || 'Open',
+        ruleBookUrl: ev?.ruleBookUrl || '',
+        ruleBookFileName: ev?.ruleBookFileName || '',
+        ruleBookVersion: ev?.ruleBookVersion || '',
+        ruleBookUpdatedAt: ev?.ruleBookUpdatedAt || '',
       };
     }),
   };
@@ -258,6 +262,10 @@ export async function getAssignedEvents(id: string | number): Promise<{ events: 
         status: ev?.status || 'Open',
         revenue: 0,
         rules: [],
+        ruleBookUrl: ev?.ruleBookUrl || '',
+        ruleBookFileName: ev?.ruleBookFileName || '',
+        ruleBookVersion: ev?.ruleBookVersion || '',
+        ruleBookUpdatedAt: ev?.ruleBookUpdatedAt || '',
       };
     }),
   };

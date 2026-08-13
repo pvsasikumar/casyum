@@ -50,6 +50,11 @@ export interface EventItem {
   status: 'Open' | 'Closed' | 'Full';
   revenue: number;
   rules: string[];
+  ruleBookUrl?: string;
+  ruleBookFileName?: string;
+  ruleBookVersion?: string;
+  ruleBookUpdatedAt?: string;
+  ruleBookUpdatedBy?: string;
 }
 
 export interface AttendanceRecord {
