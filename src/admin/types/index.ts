@@ -50,6 +50,11 @@ export interface EventItem {
   status: 'Open' | 'Closed' | 'Full';
   revenue: number;
   rules: string[];
+  teamEvent?: boolean;
+  minTeamSize?: number;
+  maxTeamSize?: number;
+  teamFormationEnabled?: boolean;
+  feeType?: string;
   ruleBookUrl?: string;
   ruleBookFileName?: string;
   ruleBookVersion?: string;
@@ -203,7 +208,9 @@ export type ActiveTabModule =
   | 'Email Logs'
   | 'Results'
   | 'Sponsors'
-  | 'Sponsorship Enquiries';
+  | 'Sponsorship Enquiries'
+  | 'Teams'
+  | 'Team Settings';
 
 export interface EmailLog {
   id: string;

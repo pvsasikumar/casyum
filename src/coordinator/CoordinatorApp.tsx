@@ -10,6 +10,7 @@ import { EventOverviewPage } from './pages/EventOverviewPage';
 import { EventDescriptionPage } from './pages/EventDescriptionPage';
 import { ResultsPage } from './pages/ResultsPage';
 import { ProfilePage } from './pages/ProfilePage';
+import { TeamsPage } from './pages/TeamsPage';
 
 const AttendanceRoute: React.FC = () => {
   const { assignedEvent } = useCoordinator();
@@ -30,6 +31,7 @@ export const CoordinatorApp: React.FC = () => {
           <Route path="dashboard" element={<DashboardPage />} />
           <Route path="attendance" element={<AttendanceRoute />} />
           <Route path="participants" element={<ParticipantsPage />} />
+          <Route path="teams" element={<TeamsPage />} />
           <Route path="event-overview" element={<EventOverviewPage />} />
           <Route path="event-description" element={<EventDescriptionPage />} />
           <Route path="results" element={<ResultsPage />} />

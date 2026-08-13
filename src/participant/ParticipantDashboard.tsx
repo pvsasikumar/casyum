@@ -32,6 +32,7 @@ import { EventOverviewCms } from '../components/cms/EventOverviewCms';
 import { ParticipantQRCard } from './ParticipantQRCard';
 import { PaymentDetailsSection } from '../components/events/PaymentDetailsSection';
 import { RuleBookButton } from '../components/events/RuleBookButton';
+import { TeamFormationSection } from './TeamFormationSection';
 import {
   registerEvent,
   registerEventBundle,
@@ -1047,6 +1048,12 @@ export const ParticipantDashboard: React.FC = () => {
                 </div>
               )}
             </section>
+
+            <TeamFormationSection
+              participantId={participant.participant_id || participant.id}
+              events={allEvents}
+              registrations={myRegistrations}
+            />
           </>
         )}
       </main>

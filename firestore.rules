@@ -156,6 +156,65 @@ service cloud.firestore {
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly(fields);
     }
 
+    // ---- Team Formation helpers -------------------------------------------------
+    // Team creation/joining is allowed only while the event is a team event
+    // with team formation OPEN. The event doc keeps both `team_event` and the
+    // legacy `event_type` ('team') markers in sync when the admin configures it.
+    function isEventTeamFormationOpen(eventId) {
+      let ref = /databases/$(database)/documents/events/$(eventId);
+      return exists(ref)
+        && get(ref).data.team_formation_enabled == true
+        && (get(ref).data.team_event == true || get(ref).data.event_type == 'team');
+    }
+
+    // A participant may create/join teams only when their registration payment
+    // is verified AND their registration was verified at the Registration Desk.
+    // Unpaid, rejected, or unverified participants are never eligible. Both
+    // naming conventions are accepted (legacy docs mix `payment_status` with
+    // `registrationVerificationStatus`; canonical docs use camelCase).
+    function isPaymentVerified(reg) {
+      return ('payment_status' in reg && reg.payment_status == 'verified')
+        || ('paymentStatus' in reg && reg.paymentStatus == 'verified');
+    }
+
+    function isDeskVerified(reg) {
+      return ('registration_verification_status' in reg && reg.registration_verification_status == 'verified')
+        || ('registrationVerificationStatus' in reg && reg.registrationVerificationStatus == 'verified');
+    }
+
+    function isEligibleParticipantForEvent(participantId) {
+      let ref = /databases/$(database)/documents/registrations/reg-$(participantId);
+      if (!exists(ref)) {
+        let canonical = /databases/$(database)/documents/eventRegistrations/reg-$(participantId);
+        if (!exists(canonical)) { return false; }
+        let creg = get(canonical).data;
+        return isPaymentVerified(creg) && isDeskVerified(creg);
+      }
+      let reg = get(ref).data;
+      return isPaymentVerified(reg) && isDeskVerified(reg);
+    }
+
+    function isTeamLeader(teamId) {
+      let ref = /databases/$(database)/documents/teams/$(teamId);
+      return exists(ref) && get(ref).data.teamLeaderId == request.auth.uid;
+    }
+
+    function isTeamMember(teamId) {
+      let ref = /databases/$(database)/documents/teams/$(teamId);
+      return exists(ref) && get(ref).data.memberIds has request.auth.uid;
+    }
+
+    // Fields a participant may change on their own registration when joining or
+    // leaving a team (the mirrored team id lives on both registration copies).
+    function isParticipantTeamUpdate() {
+      return onlyChanges(['teamId', 'teamIds', 'updatedAt', 'updated_at']);
+    }
+
+    // Fields a team member may update on the team document (join/leave/lead).
+    function isTeamFieldsUpdate() {
+      return onlyChanges(['currentMemberCount', 'status', 'teamLeaderId', 'memberIds', 'updatedAt']);
+    }
+
     // Roles that review and verify participant payments. Only the CASYUM
     // Faculty Coordinator and the Super Admin may approve or reject payments.
     function isPaymentReviewer() {
@@ -313,7 +372,8 @@ service cloud.firestore {
       allow update: if isAdmin() || isPaymentReviewer()
         || (isCoordinator() && isAssignedEvent(resource.data.event_id))
         || (isRegistrationTeam() && isDeskVerificationUpdate() && isPaymentAlreadyVerified())
-        || (request.auth.uid == resource.data.participant_id && isParticipantPaymentUpdate());
+        || (request.auth.uid == resource.data.participant_id && isParticipantPaymentUpdate())
+        || (request.auth.uid == resource.data.participant_id && isParticipantTeamUpdate());
       allow delete: if isAdmin();
     }
 
@@ -343,8 +403,80 @@ service cloud.firestore {
         || (isCoordinator() && isAssignedEvent(resource.data.event_id))
         || (isRegistrationTeam() && isDeskVerificationUpdate() && isPaymentAlreadyVerified())
         || (request.auth.uid == resource.data.participant_id && isParticipantPaymentUpdate())
+        || (request.auth.uid == resource.data.participant_id && isParticipantTeamUpdate())
       );
       allow delete: if isAdmin();
+    }
+
+    // Team Formation: participants form teams for team events once payment is
+    // verified and team formation is OPEN. The team document keeps a memberIds
+    // list so membership and leader-ship can be validated without collection
+    // queries. Admins may remove members and disband teams; disbanding never
+    // touches the participants' registrations.
+    match /teams/{teamId} {
+      allow read: if isSignedIn() && (
+        isAdmin()
+        || isObserver()
+        || (isCoordinator() && isAssignedEvent(resource.data.eventId))
+        || (isTeamLeader(teamId) || isTeamMember(teamId))
+      );
+      allow create: if isSignedIn()
+        && request.resource.data.teamLeaderId == request.auth.uid
+        && request.resource.data.createdBy == request.auth.uid
+        && isEventTeamFormationOpen(request.resource.data.eventId)
+        && isEligibleParticipantForEvent(request.auth.uid)
+        && request.resource.data.currentMemberCount == 1
+        && request.resource.data.memberIds == [request.auth.uid];
+      // A member may update the aggregate fields when joining (their id is added
+      // to memberIds), leaving (their id is removed) or leading. Admins may do
+      // anything. The memberIds/count/status fields are derived display data;
+      // teamMembers is the source of truth.
+      allow update: if isSignedIn() && (
+        isAdmin()
+        || ((isTeamMember(teamId) || request.resource.data.memberIds has request.auth.uid)
+            && isTeamFieldsUpdate())
+      );
+      allow delete: if isAdmin();
+    }
+
+    // Team memberships. A participant may only ever be a member of one team per
+    // event: the document id is deterministic (`tm-{participantId}-{teamId}`), so
+    // a second create for the same pair becomes an update and is denied unless it
+    // only touches the allowed role/updatedAt fields. Members may leave freely;
+    // the team leader may manage member records; admins may do anything.
+    match /teamMembers/{memberId} {
+      allow read: if isSignedIn() && (
+        isAdmin()
+        || isObserver()
+        || (isCoordinator() && isAssignedEvent(resource.data.eventId))
+        || (isTeamLeader(resource.data.teamId) || isTeamMember(resource.data.teamId))
+        || request.auth.uid == resource.data.participantId
+      );
+      allow create: if isSignedIn()
+        && request.resource.data.participantId == request.auth.uid
+        && isEventTeamFormationOpen(request.resource.data.eventId)
+        && isEligibleParticipantForEvent(request.auth.uid);
+      allow update: if isSignedIn() && (
+        isAdmin()
+        || (request.auth.uid == resource.data.participantId && onlyChanges(['role', 'updatedAt']))
+        || isTeamLeader(resource.data.teamId)
+      );
+      allow delete: if isSignedIn() && (
+        isAdmin()
+        || request.auth.uid == resource.data.participantId
+        || isTeamLeader(resource.data.teamId)
+      );
+    }
+
+    // Team formation access records: written ONLY by admins when team formation
+    // is enabled (the in-app "Team Formation is Now Open" notification lives on
+    // these docs). Participants can read their own record; admins read/write all.
+    match /teamFormationAccess/{accessId} {
+      allow read: if isSignedIn() && (
+        isAdmin()
+        || request.auth.uid == resource.data.participantId
+      );
+      allow write: if isSignedIn() && isAdmin();
     }
 
     // Attendance: a coordinator can only create/update/delete attendance for
@@ -478,6 +610,13 @@ service cloud.firestore {
     // Sequence counters are read and incremented when participants register.
     match /counters/{key} {
       allow read, write: if isSignedIn();
+    }
+
+    // Email audit logs (written by the admin email module and team formation
+    // notifications). Admins read/write; everyone else is denied by default.
+    match /emailLogs/{logId} {
+      allow read: if isSignedIn() && isAdmin();
+      allow write: if isSignedIn() && isAdmin();
     }
 
     // The CASYUM id counter document (`systemCounters/participantCounter`) is

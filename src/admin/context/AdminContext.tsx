@@ -121,6 +121,7 @@ interface AdminContextType {
   addEvent: (e: Omit<EventItem, 'id' | 'revenue'>) => void;
   updateEvent: (e: EventItem) => void;
   deleteEvent: (id: string) => void;
+  refreshEvents: () => Promise<void>;
 
   // Actions
   approvePayment: (id: string, remarks?: string) => void;
@@ -143,6 +144,12 @@ interface AdminContextType {
   refreshParticipants: () => Promise<void>;
 
   toggleEventStatus: (eventId: string) => void;
+  // Team Settings: opening navigates to the Team Settings module for the event.
+  // Enabling/disabling team formation is ONLY done from there (with confirmation)
+  // via teamService.enableTeamFormation/disableTeamFormation.
+  teamSettingsEventId: string | null;
+  openTeamSettings: (eventId: string) => void;
+  closeTeamSettings: () => void;
   markAttendance: (participantId: string, eventId: string, status: AttendanceStatus) => void;
   createAnnouncement: (announcement: Omit<Announcement, 'id' | 'publishDate'>) => void;
   deleteAnnouncement: (id: string) => void;
@@ -243,6 +250,11 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       status: row?.status || 'Open',
       revenue: 0,
       rules: [],
+      teamEvent: row?.team_event === true,
+      minTeamSize: Number(row?.min_team_size) || 0,
+      maxTeamSize: Number(row?.max_team_size) || 0,
+      teamFormationEnabled: row?.team_formation_enabled === true,
+      feeType: row?.fee_type || 'Per Participant',
       ruleBookUrl: row?.ruleBookUrl || '',
       ruleBookFileName: row?.ruleBookFileName || '',
       ruleBookVersion: row?.ruleBookVersion || '',
@@ -550,6 +562,11 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         ruleBookVersion: data.ruleBookVersion,
         ruleBookUpdatedAt: data.ruleBookUpdatedAt,
         ruleBookUpdatedBy: data.ruleBookUpdatedBy,
+        team_event: data.teamEvent === true,
+        min_team_size: Number(data.minTeamSize) || 0,
+        max_team_size: Number(data.maxTeamSize) || 0,
+        team_formation_enabled: data.teamFormationEnabled === true,
+        fee_type: data.feeType || 'Per Participant',
       });
       await refreshEvents();
       logAction('Event Created', `Created new event: ${data.name}`);
@@ -579,6 +596,11 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         ruleBookVersion: updated.ruleBookVersion,
         ruleBookUpdatedAt: updated.ruleBookUpdatedAt,
         ruleBookUpdatedBy: updated.ruleBookUpdatedBy,
+        team_event: updated.teamEvent === true,
+        min_team_size: Number(updated.minTeamSize) || 0,
+        max_team_size: Number(updated.maxTeamSize) || 0,
+        team_formation_enabled: updated.teamFormationEnabled === true,
+        fee_type: updated.feeType || 'Per Participant',
       });
       await refreshEvents();
       logAction('Event Updated', `Updated event: ${updated.name}`);
@@ -748,6 +770,17 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   };
 
+  const [teamSettingsEventId, setTeamSettingsEventId] = useState<string | null>(null);
+
+  const openTeamSettings = (eventId: string) => {
+    setTeamSettingsEventId(String(eventId));
+    setActiveTab('Team Settings');
+  };
+
+  const closeTeamSettings = () => {
+    setTeamSettingsEventId(null);
+  };
+
   const markAttendance = (participantId: string, eventId: string, status: AttendanceStatus) => {
     const p = participants.find((x) => x.id === participantId);
     const e = events.find((x) => x.id === eventId);
@@ -905,6 +938,7 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         addEvent,
         updateEvent,
         deleteEvent,
+        refreshEvents,
         approvePayment,
         rejectPayment,
         addRegistration,
@@ -914,6 +948,9 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         bulkDeleteParticipants,
         bulkApprovePayments,
         toggleEventStatus,
+        teamSettingsEventId,
+        openTeamSettings,
+        closeTeamSettings,
         markAttendance,
         createAnnouncement,
         deleteAnnouncement,

@@ -35,6 +35,8 @@ import { EmailLogs } from './components/modules/EmailLogs';
 import { ResultsModule } from './components/modules/ResultsModule';
 import { SponsorManagement } from './components/modules/SponsorManagement';
 import { SponsorshipEnquiries } from './components/modules/SponsorshipEnquiries';
+import { TeamsModule } from './components/modules/TeamsModule';
+import { TeamSettingsModule } from './components/modules/TeamSettingsModule';
 
 const ModuleRouter: React.FC = () => {
   const { activeTab } = useAdmin();
@@ -80,6 +82,10 @@ const ModuleRouter: React.FC = () => {
       return <ObserverManagement />;
     case 'Participants':
       return <ParticipantsModule />;
+    case 'Teams':
+      return <TeamsModule />;
+    case 'Team Settings':
+      return <TeamSettingsModule />;
     case 'Settings':
       return <SettingsModule />;
     case 'Audit Logs':

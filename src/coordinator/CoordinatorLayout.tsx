@@ -11,6 +11,7 @@ import {
   Sparkles,
   ChevronRight,
   FileText,
+  UsersRound,
 } from 'lucide-react';
 import { useCoordinator } from './context/CoordinatorContext';
 
@@ -20,6 +21,7 @@ const PAGE_TITLES: Record<string, string> = {
   participants: 'Participants',
   'event-overview': 'Event Overview',
   'event-description': 'Event Description',
+  teams: 'Teams',
   results: 'Results',
   profile: 'Profile',
 };
@@ -28,6 +30,7 @@ const NAV_ITEMS = [
   { to: '/coordinator/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/coordinator/attendance', label: 'Attendance', icon: ClipboardList },
   { to: '/coordinator/participants', label: 'Participants', icon: Users },
+  { to: '/coordinator/teams', label: 'Teams', icon: UsersRound },
   { to: '/coordinator/event-overview', label: 'Event Overview', icon: Calendar },
   { to: '/coordinator/event-description', label: 'Event Description', icon: FileText },
   { to: '/coordinator/results', label: 'Results', icon: BarChart3 },

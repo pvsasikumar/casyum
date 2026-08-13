@@ -15,6 +15,7 @@ import {
   FileText,
   ExternalLink,
   UploadCloud,
+  Settings,
 } from 'lucide-react';
 import { useAdmin } from '../../context/AdminContext';
 import type { EventItem } from '../../types';
@@ -47,6 +48,11 @@ const emptyEventForm = {
   studentCoordinator: '',
   status: 'Open' as EventItem['status'],
   rules: [''],
+  teamEvent: false,
+  minTeamSize: 2,
+  maxTeamSize: 4,
+  teamFormationEnabled: false,
+  feeType: 'Per Participant',
   ruleBookUrl: '',
   ruleBookFileName: '',
   ruleBookVersion: '',
@@ -55,7 +61,7 @@ const emptyEventForm = {
 };
 
 export const EventManagement: React.FC = () => {
-  const { events, participants, coordinators, toggleEventStatus, addEvent, updateEvent, deleteEvent } = useAdmin();
+  const { events, participants, coordinators, toggleEventStatus, openTeamSettings, addEvent, updateEvent, deleteEvent } = useAdmin();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('All');
   const [categoryFilter, setCategoryFilter] = useState<string>('All');
@@ -106,6 +112,11 @@ export const EventManagement: React.FC = () => {
       studentCoordinator: e.studentCoordinator,
       status: e.status,
       rules: e.rules,
+      teamEvent: e.teamEvent === true,
+      minTeamSize: Number(e.minTeamSize) || 2,
+      maxTeamSize: Number(e.maxTeamSize) || 4,
+      teamFormationEnabled: e.teamFormationEnabled === true,
+      feeType: e.feeType || 'Per Participant',
       ruleBookUrl: e.ruleBookUrl || '',
       ruleBookFileName: e.ruleBookFileName || '',
       ruleBookVersion: e.ruleBookVersion || '',
@@ -312,11 +323,27 @@ export const EventManagement: React.FC = () => {
                     </div>
                   </div>
                   <div className="text-[10px] text-white/40 flex items-center gap-1"><Calendar className="w-3 h-3" />{e.date}</div>
+                  {e.teamEvent === true && (
+                    <div className="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-xl bg-amber-500/5 border border-amber-500/15">
+                      <span className="text-[10px] font-bold text-amber-300/90 flex items-center gap-1">
+                        <Users className="w-3 h-3" />
+                        Team {e.minTeamSize}–{e.maxTeamSize}
+                      </span>
+                      <span className={`text-[9px] font-extrabold uppercase tracking-widest ${e.teamFormationEnabled ? 'text-emerald-300' : 'text-rose-300/80'}`}>
+                        {e.teamFormationEnabled ? 'Formation OPEN' : 'Formation LOCKED'}
+                      </span>
+                    </div>
+                  )}
                 </div>
                 <div className="p-3 border-t border-white/10 bg-white/5 flex items-center justify-between">
                   <div className="flex items-center gap-1.5">
                     <button onClick={() => openEditForm(e)} className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-white/70 hover:text-white cursor-pointer" title="Edit"><Edit className="w-3.5 h-3.5" /></button>
                     <button onClick={() => setDeleteConfirm(e)} className="p-2 rounded-lg bg-white/5 hover:bg-rose-500/20 text-white/40 hover:text-rose-400 cursor-pointer" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
+                    {e.teamEvent === true && (
+                      <button onClick={() => openTeamSettings(e.id)} className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-white/70 hover:text-white cursor-pointer" title="Team Settings">
+                        <Settings className="w-3.5 h-3.5 text-cyan-300" />
+                      </button>
+                    )}
                   </div>
                   <button onClick={() => toggleEventStatus(e.id)} className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-white/70 hover:text-white cursor-pointer" title={e.status === 'Open' ? 'Close Registration' : 'Open Registration'}>
                     {e.status === 'Open' ? <Lock className="w-3.5 h-3.5 text-amber-400" /> : <Unlock className="w-3.5 h-3.5 text-emerald-400" />}
@@ -434,6 +461,105 @@ export const EventManagement: React.FC = () => {
                 </div>
                 {selectedCoordinatorIds.length > 0 && (
                   <div className="text-[10px] text-violet-300">{selectedCoordinatorIds.length} coordinator(s) selected</div>
+                )}
+              </div>
+
+              {/* Team Formation */}
+              <div className="flex flex-col gap-3 p-4 rounded-2xl bg-amber-500/5 border border-amber-500/20">
+                <label className="text-[10px] font-bold text-amber-300 uppercase tracking-wider flex items-center gap-1.5">
+                  <Users className="w-3.5 h-3.5" />
+                  Team Formation Configuration
+                </label>
+
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-[11px] font-bold text-white">Team Event</span>
+                    <span className="text-[10px] text-white/40">Solo events do not require teams.</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setForm((f) => ({
+                        ...f,
+                        teamEvent: !f.teamEvent,
+                        teamFormationEnabled: !f.teamEvent ? f.teamFormationEnabled : false,
+                      }))
+                    }
+                    className={`w-11 h-6 rounded-full transition-colors cursor-pointer relative ${
+                      form.teamEvent ? 'bg-amber-500' : 'bg-white/10'
+                    }`}
+                    title={form.teamEvent ? 'Solo Event' : 'Team Event'}
+                  >
+                    <span
+                      className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-all ${
+                        form.teamEvent ? 'left-[22px]' : 'left-0.5'
+                      }`}
+                    />
+                  </button>
+                </div>
+
+                {form.teamEvent && (
+                  <>
+                    <div className="grid grid-cols-3 gap-3">
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-[10px] font-bold text-white/50 uppercase">Min Team Size</label>
+                        <input
+                          type="number"
+                          min={1}
+                          value={form.minTeamSize}
+                          onChange={(e) => setForm((f) => ({ ...f, minTeamSize: Number(e.target.value) }))}
+                          className="p-3 rounded-xl bg-black/60 border border-white/10 text-white focus:outline-none focus:border-amber-500/50"
+                        />
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-[10px] font-bold text-white/50 uppercase">Max Team Size</label>
+                        <input
+                          type="number"
+                          min={1}
+                          value={form.maxTeamSize}
+                          onChange={(e) => setForm((f) => ({ ...f, maxTeamSize: Number(e.target.value) }))}
+                          className="p-3 rounded-xl bg-black/60 border border-white/10 text-white focus:outline-none focus:border-amber-500/50"
+                        />
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-[10px] font-bold text-white/50 uppercase">Fee Type</label>
+                        <select
+                          value={form.feeType}
+                          onChange={(e) => setForm((f) => ({ ...f, feeType: e.target.value }))}
+                          className="bg-zinc-900 border border-white/10 text-white text-xs rounded-xl px-3 py-3 focus:outline-none"
+                        >
+                          <option value="Per Participant">Per Participant</option>
+                          <option value="Per Team">Per Team</option>
+                        </select>
+                      </div>
+                    </div>
+                    {form.minTeamSize > 0 && form.minTeamSize === form.maxTeamSize && (
+                      <div className="text-[10px] text-white/40">
+                        This is an exact-size team — a team will be marked Complete only with exactly{' '}
+                        {form.maxTeamSize} members.
+                      </div>
+                    )}
+                    {form.minTeamSize > form.maxTeamSize && (
+                      <div className="text-[10px] text-rose-400">Min team size cannot exceed max team size.</div>
+                    )}
+
+                    <div className="flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl bg-white/[0.03] border border-white/10">
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-[11px] font-bold text-white">
+                          Team Formation Status:{' '}
+                          <span className={form.teamFormationEnabled ? 'text-emerald-300' : 'text-rose-300'}>
+                            {form.teamFormationEnabled ? 'OPEN' : 'LOCKED'}
+                          </span>
+                        </span>
+                        <span className="text-[10px] text-white/40">
+                          Manage from the Team Settings page for this event (enable/disable is confirmed there).
+                        </span>
+                      </div>
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-white/30 px-3 py-1.5 rounded-lg border border-white/10">
+                        Managed in Team Settings
+                      </span>
+                    </div>
+                  </>
                 )}
               </div>
 

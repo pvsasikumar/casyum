@@ -33,6 +33,16 @@ export interface EventRow {
   rules: string[];
   /** 'gaming' marks special gaming events (Free Fire / BGMI). */
   event_type: string;
+  /** true = Team event (participants form teams), false/absent = Solo. */
+  team_event?: boolean;
+  /** Minimum team size (Team events only). */
+  min_team_size?: number;
+  /** Maximum team size (Team events only). */
+  max_team_size?: number;
+  /** Team Formation is locked (false) until a Super Admin enables it. */
+  team_formation_enabled?: boolean;
+  /** 'Per Participant' | 'Per Team'. Defaults to 'Per Participant'. */
+  fee_type?: string;
   /** Rule Book PDF reference for this specific event. */
   ruleBookUrl: string;
   ruleBookFileName: string;
@@ -116,6 +126,11 @@ export function mapEventDoc(docId: string, data: Record<string, any>): EventRow 
     revenue: Number(data.revenue) || 0,
     rules: Array.isArray(data.rules) ? data.rules : [],
     event_type: data.event_type || (data.is_gaming === true ? 'gaming' : ''),
+    team_event: data.team_event === true,
+    min_team_size: Number(data.min_team_size) || 0,
+    max_team_size: Number(data.max_team_size) || 0,
+    team_formation_enabled: data.team_formation_enabled === true,
+    fee_type: data.fee_type || 'Per Participant',
     ruleBookUrl: data.ruleBookUrl || '',
     ruleBookFileName: data.ruleBookFileName || '',
     ruleBookVersion: data.ruleBookVersion || '',
@@ -239,6 +254,11 @@ export async function createEvent(data: {
   student_coordinator?: string;
   tagline?: string;
   event_type?: string;
+  team_event?: boolean;
+  min_team_size?: number;
+  max_team_size?: number;
+  team_formation_enabled?: boolean;
+  fee_type?: string;
   ruleBookUrl?: string;
   ruleBookFileName?: string;
   ruleBookVersion?: string;
@@ -270,6 +290,11 @@ export async function createEvent(data: {
     revenue: 0,
     rules: [],
     event_type: data.event_type || '',
+    team_event: data.team_event === true,
+    min_team_size: Number(data.min_team_size) || 0,
+    max_team_size: Number(data.max_team_size) || 0,
+    team_formation_enabled: data.team_formation_enabled === true,
+    fee_type: data.fee_type || 'Per Participant',
     ruleBookUrl: data.ruleBookUrl || '',
     ruleBookFileName: data.ruleBookFileName || '',
     ruleBookVersion: data.ruleBookVersion || '',
@@ -303,6 +328,11 @@ export async function updateEvent(
     banner: string;
     registered_count: number;
     event_type?: string;
+    team_event?: boolean;
+    min_team_size?: number;
+    max_team_size?: number;
+    team_formation_enabled?: boolean;
+    fee_type?: string;
     ruleBookUrl?: string;
     ruleBookFileName?: string;
     ruleBookVersion?: string;
