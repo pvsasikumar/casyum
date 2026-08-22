@@ -166,13 +166,13 @@ export function resolveParticipantCode(data: string): string | null {
 }
 
 /**
- * Resolve a CASYUM id (`CAS-01`) to the participant document id via the
- * `casyum_id` field: `participants where casyum_id == "CAS-01"`. The scanned
+ * Resolve a CASYUM id (`CAS00`) to the participant document id via the
+ * `casyum_id` field: `participants where casyum_id == "CAS00"`. The scanned
  * value is never used as a document id for this path.
  */
 async function resolveByCasyumId(db: Firestore, casyumId: string): Promise<string | null> {
   const id = String(casyumId || '').trim().toUpperCase();
-  if (!/^CAS-\d+$/i.test(id)) return null;
+  if (!/^CAS-?\d+$/i.test(id)) return null;
   try {
     const snap = await getDocs(query(collection(db, 'participants'), where('casyum_id', '==', id)));
     if (snap.empty) return null;
@@ -189,10 +189,10 @@ async function resolveByCasyumId(db: Firestore, casyumId: string): Promise<strin
 /**
  * Shared participant lookup used by BOTH camera scans and manual entry. It
  * normalizes any raw value (bare id, prefixed QR payload, whitespace/newline
- * artifacts, lower-case) to the canonical CASYUM id (`CAS-01`) and resolves it
+ * artifacts, lower-case) to the canonical CASYUM id (`CAS00`) and resolves it
  * through the exact same Firestore path the working manual lookup uses
- * (`participants where casyum_id == "CAS-01"`). Returns null for payloads that
- * do not contain a valid CASYUM id (`^CAS-\d+$`).
+ * (`participants where casyum_id == "CAS00"`). Returns null for payloads that
+ * do not contain a valid CASYUM id (`^CAS-?\d+$`).
  */
 export async function lookupParticipantByCasyumId(
   casyumId: string,
@@ -210,7 +210,7 @@ export async function lookupParticipantByCasyumId(
  *
  * Participant-id QR payloads (`CASYUM:PARTICIPANT:<casyumId>`) are resolved
  * against the `casyum_id` field of the `participants` collection
- * (`participants where casyum_id == "CAS-01"`) — never as a document id — with
+ * (`participants where casyum_id == "CAS00"`) — never as a document id — with
  * a legacy fallback to `participants/<casyumId>` so QRs printed before the
  * CASYUM id system keep working. Registration tokens are only searched for
  * when the decoded payload is confirmed to be a registration id (legacy
@@ -234,7 +234,7 @@ export async function getScannedParticipant(
   let resolvedId: string | null = null;
 
   if (isParticipantCode) {
-    // Canonical path: the payload suffix is a CASYUM id (`CAS-01`) resolved via
+    // Canonical path: the payload suffix is a CASYUM id (`CAS00`) resolved via
     // the `casyum_id` field query. Fall back to the document id only for
     // legacy QRs that encoded the raw participant id.
     resolvedId = await resolveByCasyumId(db, participantId);
@@ -242,7 +242,7 @@ export async function getScannedParticipant(
       const direct = await getDoc(doc(db, 'participants', participantId)).catch(() => null);
       if (direct?.exists()) resolvedId = participantId;
     }
-  } else if (/^CAS-\d+$/i.test(key)) {
+  } else if (/^CAS-?\d+$/i.test(key)) {
     // Manual entry of a bare CASYUM id (e.g. typed into the desk search box).
     resolvedId = (await resolveByCasyumId(db, key)) || (await resolveParticipantKey(db, key));
   } else {

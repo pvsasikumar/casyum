@@ -928,7 +928,7 @@ export const VerifyParticipantPage: React.FC = () => {
 
               <div className="flex flex-col gap-2 border-t border-white/10 pt-4">
                 <p className="text-[10px] text-white/40">
-                  Camera unavailable? Enter the CASYUM id (e.g. <span className="font-mono text-violet-300">CAS-01</span>) or registration ID printed on the participant's pass instead.
+                  Camera unavailable? Enter the CASYUM id (e.g. <span className="font-mono text-violet-300">CAS00</span>) or registration ID printed on the participant's pass instead.
                 </p>
                 <div className="flex gap-2">
                   <input
@@ -936,7 +936,7 @@ export const VerifyParticipantPage: React.FC = () => {
                     value={manualToken}
                     onChange={(e) => { setManualToken(e.target.value); setScanResult(null); }}
                     onKeyDown={(e) => { if (e.key === 'Enter') handleManualLookup(); }}
-                    placeholder="e.g. CAS-01 or REG-22"
+                    placeholder="e.g. CAS00 or REG-22"
                     className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white placeholder-white/30 focus:outline-none focus:border-violet-500/50"
                   />
                   <button

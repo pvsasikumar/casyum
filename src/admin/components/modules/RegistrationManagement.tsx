@@ -18,6 +18,8 @@ import { useAdmin } from '../../context/AdminContext';
 import { ParticipantDrawer } from './ParticipantDrawer';
 import { exportToCSV } from '../../utils/exportUtils';
 import { migrateMissingCasyumIds } from '../../../services/casyumIdMigration';
+import { resetAllParticipantData, countParticipantData } from '../../../services/participantDataResetService';
+import { ConfirmationDialog } from '../../components/common/ConfirmationDialog';
 
 export const RegistrationManagement: React.FC = () => {
   const {
@@ -29,7 +31,10 @@ export const RegistrationManagement: React.FC = () => {
     bulkApprovePayments,
     addRegistration,
     refreshParticipants,
+    refreshEvents,
     addToast,
+    logAction,
+    role,
     selectedParticipant,
     setSelectedParticipant,
   } = useAdmin();
@@ -44,6 +49,9 @@ export const RegistrationManagement: React.FC = () => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [repairOpen, setRepairOpen] = useState(false);
   const [repairing, setRepairing] = useState(false);
+  const [resetOpen, setResetOpen] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  const [resetPreview, setResetPreview] = useState({ participants: 0, registrations: 0, teams: 0 });
 
   // Form state for manual registration modal (payment data is not fabricated:
   // payments are captured and reviewed through the per-event payment flow).
@@ -170,6 +178,40 @@ export const RegistrationManagement: React.FC = () => {
     }
   };
 
+  const openResetDialog = async () => {
+    try {
+      const counts = await countParticipantData();
+      setResetPreview(counts);
+    } catch {
+      setResetPreview({ participants: participants.length, registrations: 0, teams: 0 });
+    }
+    setResetOpen(true);
+  };
+
+  const handleResetData = async () => {
+    setResetting(true);
+    try {
+      const result = await resetAllParticipantData();
+      await refreshParticipants();
+      await refreshEvents();
+      setResetOpen(false);
+      logAction('Participant Data Reset', 'Deleted all participant data and reset the CASYUM id counter to CAS00');
+      const parts = Object.entries(result.deleted)
+        .filter(([, n]) => n > 0)
+        .map(([name, n]) => `${name}: ${n}`);
+      addToast(
+        'Participant Data Reset',
+        `CASYUM id counter reset — next registration is CAS00. ${parts.join(', ') || 'No documents deleted'}.`,
+        'success',
+        8000
+      );
+    } catch (err: any) {
+      addToast('Reset Failed', err?.message || 'Unable to reset participant data.', 'error');
+    } finally {
+      setResetting(false);
+    }
+  };
+
   return (
     <div className="flex flex-col gap-6 select-none pb-12">
       {/* Header & Main Controls */}
@@ -192,6 +234,16 @@ export const RegistrationManagement: React.FC = () => {
             <ShieldAlert className="w-3.5 h-3.5" />
             <span>Sync CASYUM IDs</span>
           </button>
+          {(role === 'Super Admin' || role === 'Admin') && (
+            <button
+              onClick={() => void openResetDialog()}
+              className="px-4 py-2 rounded-xl bg-white/5 hover:bg-rose-600/20 border border-white/10 text-rose-400/80 hover:text-rose-300 text-xs font-bold transition-all cursor-pointer flex items-center gap-2"
+              title="Delete all participant data and restart the CASYUM id sequence at CAS00"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>Reset Data</span>
+            </button>
+          )}
           <button
             onClick={handleBulkExport}
             className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white/80 hover:text-white text-xs font-bold transition-all cursor-pointer flex items-center gap-2"
@@ -338,6 +390,7 @@ export const RegistrationManagement: React.FC = () => {
               ) : (
                 paginatedParticipants.map((p) => {
                   const isSelected = selectedIds.includes(p.id);
+
                   return (
                     <tr
                       key={p.id}
@@ -492,13 +545,45 @@ export const RegistrationManagement: React.FC = () => {
         />
       )}
 
+      {/* Reset Participant Data Confirmation */}
+      <ConfirmationDialog
+        open={resetOpen}
+        title="Reset All Participant Data"
+        variant="danger"
+        confirmLabel={resetting ? 'Resetting…' : 'Yes, Reset Everything'}
+        loading={resetting}
+        onCancel={() => setResetOpen(false)}
+        onConfirm={() => void handleResetData()}
+        message={
+          <div className="flex flex-col gap-3">
+            <p>
+              This permanently deletes every participant record and restarts the CASYUM id sequence at{' '}
+              <span className="font-mono text-violet-300">CAS00</span>. This cannot be undone.
+            </p>
+            <div className="rounded-xl bg-white/5 border border-white/10 p-3 text-xs text-white/70 flex flex-col gap-1">
+              <span className="text-white/90 font-bold">Will be deleted:</span>
+              <span>• {resetPreview.participants} participants</span>
+              <span>• {resetPreview.registrations} registrations</span>
+              <span>• {resetPreview.teams} teams, team members & formation access</span>
+              <span>• attendance, verifications, verification logs, payments</span>
+              <span className="text-white/90 font-bold mt-1">Kept:</span>
+              <span>• events, users (staff), audit logs, certificates, email logs</span>
+              <span>• event registered-counts are reset to 0</span>
+            </div>
+            <p className="text-rose-300 font-bold">
+              Next registration will be CAS00. This resets the live production data — only use to start a fresh event.
+            </p>
+          </div>
+        }
+      />
+
       {/* Sync CASYUM IDs Modal */}
       {repairOpen && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
           <div className="w-full max-w-md bg-zinc-950 border border-white/20 rounded-3xl p-6 shadow-2xl flex flex-col gap-4">
             <h3 className="text-lg font-bold font-display text-white">Sync CASYUM IDs</h3>
             <p className="text-xs text-white/60 leading-relaxed">
-              Assigns a unique sequential CASYUM id (e.g. <span className="font-mono text-violet-300">CAS-01</span>) to every
+              Assigns a unique sequential CASYUM id (e.g. <span className="font-mono text-violet-300">CAS00</span>) to every
               participant that does not have one. Existing ids are never changed or overwritten, the sequence continues
               from the highest existing number, and running this again is safe — it will simply report nothing to do.
             </p>

@@ -17,7 +17,7 @@ import {
  *  - Idempotent: running it twice assigns nothing the second time.
  *  - Never overwrites an existing `casyum_id` (existing values are only used
  *    to compute the starting point).
- *  - Continues from the highest existing CAS number, never from `CAS-01`, so
+ *  - Continues from the highest existing CAS number, never from `CAS00`, so
  *    migrated records and future registrations never collide.
  *  - Preserves all existing participant data (only the `casyum_id` field and
  *    the counter document are touched).
@@ -57,13 +57,15 @@ export async function migrateMissingCasyumIds(): Promise<CasyumIdMigrationResult
     (a, b) => a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id)
   );
 
-  // Initialise (or advance) the counter to the highest existing number so
-  // future registrations continue after the migrated range. Idempotent.
+  // Initialise (or advance) the counter to the highest existing number plus one
+  // so future registrations continue after the migrated range. The counter
+  // always holds the NEXT number to issue, so a highest id of CAS42 means the
+  // next issued id is CAS43. Idempotent.
   const counterDoc = doc(db, CASYUM_COUNTER_COLLECTION, CASYUM_COUNTER_DOC);
   await runTransaction(db, async (tx) => {
     const counterSnap = await tx.get(counterDoc);
     const stored = Number(counterSnap.data()?.[CASYUM_COUNTER_FIELD]) || 0;
-    const next = Math.max(stored, maxExisting);
+    const next = Math.max(stored, maxExisting + 1);
     tx.set(counterDoc, { [CASYUM_COUNTER_FIELD]: next }, { merge: true });
   });
 
@@ -74,7 +76,7 @@ export async function migrateMissingCasyumIds(): Promise<CasyumIdMigrationResult
   }
 
   const counterSnap = await getDoc(counterDoc);
-  const nextCasyumId = formatCasyumId(Number(counterSnap.data()?.[CASYUM_COUNTER_FIELD]) + 1);
+  const nextCasyumId = formatCasyumId(Number(counterSnap.data()?.[CASYUM_COUNTER_FIELD]));
 
   return {
     assigned,

@@ -198,7 +198,7 @@ export const QRScanner: React.FC<QRScannerProps> = ({
     // Safely normalize the decoded value before handing it to the parent:
     // strip zero-width / BOM characters, collapse line breaks and tabs into a
     // single space, then trim surrounding whitespace. The parent receives the
-    // clean value (`CAS-02`) and runs the exact same lookup as manual entry.
+    // clean value (`CAS00`) and runs the exact same lookup as manual entry.
     const normalizedText = String(decodedText)
       .replace(/[\u200B-\u200D\uFEFF]/g, '')
       .replace(/[\r\n\t]/g, ' ')

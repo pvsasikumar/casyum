@@ -80,10 +80,10 @@ export const ParticipantQRCard: React.FC<ParticipantQRCardProps> = ({
   const paymentVerified = isPaymentVerified(paymentStatus);
   const paymentRejected = isPaymentRejected(paymentStatus);
 
-  // The QR encodes exactly the participant's unique CASYUM id (`CAS-02`) —
+  // The QR encodes exactly the participant's unique CASYUM id (`CAS00`) —
   // never participant PII, event objects or React state. The id is resolved to
   // the full profile server-side after scanning via
-  // `participants where casyum_id == "CAS-02"`.
+  // `participants where casyum_id == "CAS00"`.
   const payload = encodeParticipantQR(casyumId || '');
 
   // Payment gate: the QR is only generated (and therefore only active) after

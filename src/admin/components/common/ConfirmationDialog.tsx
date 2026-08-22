@@ -53,7 +53,7 @@ export const ConfirmationDialog: React.FC<ConfirmationDialogProps> = ({
             <X className="w-4 h-4" />
           </button>
         </div>
-        <p className="text-sm text-white/70 leading-relaxed">{message}</p>
+        <div className="text-sm text-white/70 leading-relaxed">{message}</div>
         <div className="flex items-center justify-end gap-3 mt-2">
           <button onClick={onCancel} disabled={loading} className="px-4 py-2 rounded-xl text-white/60 hover:text-white bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-bold cursor-pointer disabled:opacity-50">
             {cancelLabel}
