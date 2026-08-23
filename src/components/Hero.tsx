@@ -2,6 +2,7 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { Loader2 } from 'lucide-react';
 import { Countdown } from './Countdown';
+import type { CmsHomeContent } from '../services/cmsService';
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -30,16 +31,32 @@ interface HeroProps {
   startAnimation: boolean;
   onOpenLogin?: () => void;
   isSigningIn?: boolean;
+  /** CMS overrides for the hero text/background (defaults keep the original look). */
+  content?: Partial<CmsHomeContent>;
+  showRegisterButton?: boolean;
+  showLoginButton?: boolean;
 }
 
-export const Hero: React.FC<HeroProps> = ({ startAnimation, onOpenLogin, isSigningIn }) => {
+export const Hero: React.FC<HeroProps> = ({
+  startAnimation,
+  onOpenLogin,
+  isSigningIn,
+  content,
+  showRegisterButton = true,
+  showLoginButton = true,
+}) => {
+  const heroTitle = content?.heroTitle || 'CASYUM 2K26';
+  const heroSubtitle = content?.heroSubtitle || 'National Level Symposium';
+  const heroDescription = content?.heroDescription || '';
+  const backgroundImage = content?.backgroundImage || '/images/final.jpeg';
+  const backgroundImageAlt = content?.backgroundImageAlt || 'Hero Background Centerpiece';
   return (
     <section id="home" className="relative w-full h-screen flex flex-col items-center justify-center text-center px-6 overflow-hidden bg-black select-none">
       {/* Permanent Hero Background - identical positioning, scaling, and aspect ratio to the video overlay */}
       <div className={`absolute inset-0 z-0 select-none pointer-events-none ${startAnimation ? 'animate-logo-float' : ''}`}>
         <img
-          src="/images/final.jpeg"
-          alt="Hero Background Centerpiece"
+          src={backgroundImage}
+          alt={backgroundImageAlt}
           className="w-full h-full object-cover opacity-[0.35]"
           style={{ willChange: 'transform' }}
         />
@@ -109,7 +126,7 @@ export const Hero: React.FC<HeroProps> = ({ startAnimation, onOpenLogin, isSigni
           variants={itemVariants}
           className="text-4xl sm:text-7xl md:text-8xl font-extrabold tracking-tighter uppercase font-display text-gradient py-1.5 sm:py-3"
         >
-          CASYUM 2K26
+          {heroTitle}
         </motion.h1>
 
         {/* Event Subtitle */}
@@ -117,8 +134,18 @@ export const Hero: React.FC<HeroProps> = ({ startAnimation, onOpenLogin, isSigni
           variants={itemVariants}
           className="text-sm sm:text-lg md:text-2xl font-bold tracking-[0.3em] text-white/85 uppercase font-display -mt-0.5 sm:mt-0"
         >
-          National Level Symposium
+          {heroSubtitle}
         </motion.div>
+
+        {/* Optional CMS description line (hidden when empty) */}
+        {heroDescription.trim() !== '' && (
+          <motion.p
+            variants={itemVariants}
+            className="text-white/50 text-xs sm:text-sm max-w-xl leading-relaxed mt-2"
+          >
+            {heroDescription}
+          </motion.p>
+        )}
 
         {/* Countdown Timer */}
         <motion.div variants={itemVariants} className="mt-2 sm:mt-3">
@@ -126,29 +153,35 @@ export const Hero: React.FC<HeroProps> = ({ startAnimation, onOpenLogin, isSigni
         </motion.div>
 
         {/* Calls-To-Action */}
-        <motion.div
-          variants={itemVariants}
-          className="flex flex-wrap items-center justify-center gap-4 mt-8"
-        >
-          <a
-            href="#register"
-            className="group relative inline-flex items-center justify-center px-8 py-3.5 text-[10px] sm:text-xs font-bold uppercase tracking-[0.2em] text-black bg-white rounded-full overflow-hidden hover:bg-neutral-200 transition-all duration-300 shadow-[0_0_30px_rgba(255,255,255,0.2)] hover:scale-105"
+        {(showRegisterButton || showLoginButton) && (
+          <motion.div
+            variants={itemVariants}
+            className="flex flex-wrap items-center justify-center gap-4 mt-8"
           >
-            {/* Gloss Shimmer */}
-            <span className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-white/40 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-out" />
-            Register Now
-          </a>
+            {showRegisterButton && (
+              <a
+                href="#register"
+                className="group relative inline-flex items-center justify-center px-8 py-3.5 text-[10px] sm:text-xs font-bold uppercase tracking-[0.2em] text-black bg-white rounded-full overflow-hidden hover:bg-neutral-200 transition-all duration-300 shadow-[0_0_30px_rgba(255,255,255,0.2)] hover:scale-105"
+              >
+                {/* Gloss Shimmer */}
+                <span className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-white/40 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-out" />
+                Register Now
+              </a>
+            )}
 
-          <button
-            type="button"
-            onClick={() => onOpenLogin?.()}
-            disabled={isSigningIn}
-            className="glass-panel px-8 py-3.5 text-[10px] sm:text-xs font-bold uppercase tracking-[0.2em] text-white rounded-full hover:bg-white/10 transition-all duration-300 border border-white/10 hover:border-white/20 hover:scale-105 active:scale-98 cursor-pointer disabled:opacity-50 disabled:cursor-wait inline-flex items-center gap-2"
-          >
-            {isSigningIn && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-            {isSigningIn ? 'Signing in...' : 'Login'}
-          </button>
-        </motion.div>
+            {showLoginButton && (
+              <button
+                type="button"
+                onClick={() => onOpenLogin?.()}
+                disabled={isSigningIn}
+                className="glass-panel px-8 py-3.5 text-[10px] sm:text-xs font-bold uppercase tracking-[0.2em] text-white rounded-full hover:bg-white/10 transition-all duration-300 border border-white/10 hover:border-white/20 hover:scale-105 active:scale-98 cursor-pointer disabled:opacity-50 disabled:cursor-wait inline-flex items-center gap-2"
+              >
+                {isSigningIn && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                {isSigningIn ? 'Signing in...' : 'Login'}
+              </button>
+            )}
+          </motion.div>
+        )}
       </motion.div>
 
       {/* Futuristic Corner Tech Accents */}

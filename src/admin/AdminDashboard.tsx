@@ -9,6 +9,7 @@ import { ChangePassword } from '../pages/admin/ChangePassword';
 import { Settings } from '../pages/admin/Settings';
 
 import { DashboardHome } from './components/modules/DashboardHome';
+import { CmsModule } from './components/modules/CmsModule';
 import { RegistrationManagement } from './components/modules/RegistrationManagement';
 import { EventManagement } from './components/modules/EventManagement';
 import { EventOverviewModule } from './components/modules/EventOverviewModule';
@@ -44,6 +45,8 @@ const ModuleRouter: React.FC = () => {
   switch (activeTab) {
     case 'Dashboard':
       return <DashboardHome />;
+    case 'CMS':
+      return <CmsModule />;
     case 'Registrations':
       return <RegistrationManagement />;
     case 'Events':

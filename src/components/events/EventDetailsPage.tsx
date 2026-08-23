@@ -17,6 +17,7 @@ import {
 import type { CmsEventDetails, EventCmsData } from '../cms/types';
 import { emptyCmsData, hasContent, sortSections } from '../cms/types';
 import { loadEventCms } from '../cms/eventCmsService';
+import { fetchRuleBookVisible } from '../../services/cmsService';
 import { fetchEventBySlug, type PublicEvent } from '../../services/publicEventService';
 import { useEventRegistration } from '../../hooks/useEventRegistration';
 import { PublicEventRenderer } from './PublicEventRenderer';
@@ -41,9 +42,10 @@ interface EventInformationSectionProps {
   details?: CmsEventDetails;
   event: PublicEvent;
   defaultFee: number;
+  ruleBookVisible: boolean;
 }
 
-const EventInformationSection: React.FC<EventInformationSectionProps> = ({ details, event, defaultFee }) => {
+const EventInformationSection: React.FC<EventInformationSectionProps> = ({ details, event, defaultFee, ruleBookVisible }) => {
   const rows = [
     { key: 'date', label: 'Date', icon: CalendarDays, value: details?.date || event.date },
     { key: 'time', label: 'Time', icon: Clock, value: details?.time || '' },
@@ -74,7 +76,9 @@ const EventInformationSection: React.FC<EventInformationSectionProps> = ({ detai
     return (
       <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-6">
         <h2 className="text-xl sm:text-2xl font-extrabold font-display text-white mb-5">Event Information</h2>
-        <RuleBookRow url={event.ruleBookUrl} fileName={event.ruleBookFileName} version={event.ruleBookVersion} />
+        {ruleBookVisible && (
+          <RuleBookRow url={event.ruleBookUrl} fileName={event.ruleBookFileName} version={event.ruleBookVersion} />
+        )}
       </div>
     );
   }
@@ -103,7 +107,9 @@ const EventInformationSection: React.FC<EventInformationSectionProps> = ({ detai
           );
         })}
       </div>
-      <RuleBookRow url={event.ruleBookUrl} fileName={event.ruleBookFileName} version={event.ruleBookVersion} />
+      {ruleBookVisible && (
+        <RuleBookRow url={event.ruleBookUrl} fileName={event.ruleBookFileName} version={event.ruleBookVersion} />
+      )}
     </div>
   );
 };
@@ -138,6 +144,7 @@ export const EventDetailsPage: React.FC = () => {
   const { eventSlug } = useParams<{ eventSlug: string }>();
   const [event, setEvent] = useState<PublicEvent | null>(null);
   const [cms, setCms] = useState<EventCmsData>(() => emptyCmsData(''));
+  const [ruleBookVisible, setRuleBookVisible] = useState(true);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const startedRef = useRef(false);
@@ -157,6 +164,8 @@ export const EventDetailsPage: React.FC = () => {
         return;
       }
       setEvent(resolved);
+      // Rule Book PDF is never deleted — this only controls the public button.
+      fetchRuleBookVisible(resolved.eventId).then(setRuleBookVisible).catch(() => {});
       const cmsData = await loadEventCms(resolved.eventId);
       setCms(cmsData);
     } catch {
@@ -326,19 +335,21 @@ export const EventDetailsPage: React.FC = () => {
 
       <div className="h-px bg-white/10" />
 
-      <div className="flex flex-col gap-1.5">
-        <span className="text-[9px] font-bold uppercase tracking-widest text-white/40">
-          Before you register, read the official event rules
-        </span>
-        <RuleBookButton
-          url={event.ruleBookUrl}
-          fileName={event.ruleBookFileName}
-          version={event.ruleBookVersion}
-          variant="primary"
-          fullWidth
-          showFileName
-        />
-      </div>
+      {ruleBookVisible && (
+        <div className="flex flex-col gap-1.5">
+          <span className="text-[9px] font-bold uppercase tracking-widest text-white/40">
+            Before you register, read the official event rules
+          </span>
+          <RuleBookButton
+            url={event.ruleBookUrl}
+            fileName={event.ruleBookFileName}
+            version={event.ruleBookVersion}
+            variant="primary"
+            fullWidth
+            showFileName
+          />
+        </div>
+      )}
 
       {(registerError || signInError) && (
         <p className="text-xs text-rose-300">{registerError || signInError}</p>
@@ -368,7 +379,12 @@ export const EventDetailsPage: React.FC = () => {
           <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6 items-start">
             <div className="flex flex-col gap-6">
               <PublicEventRenderer data={cms} />
-              <EventInformationSection details={details} event={event} defaultFee={registrationFee} />
+              <EventInformationSection
+                details={details}
+                event={event}
+                defaultFee={registrationFee}
+                ruleBookVisible={ruleBookVisible}
+              />
             </div>
             <div className="w-full lg:w-[320px]">{registerPanel}</div>
           </div>

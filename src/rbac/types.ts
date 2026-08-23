@@ -41,6 +41,7 @@ export type PermissionDomain =
   | 'observers'
   | 'sponsors'
   | 'sponsorship_enquiries'
+  | 'cms'
   | 'profile';
 
 export type Permission = `${PermissionDomain}.${PermissionAction}`;

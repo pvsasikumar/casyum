@@ -1,13 +1,19 @@
-import React, { useState } from 'react';
-import { LayoutDashboard, Calendar, Search } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { LayoutDashboard, Calendar, Search, X } from 'lucide-react';
 import { useAdmin } from '../../context/AdminContext';
 import { useRBAC } from '../../../rbac/context/RBACContext';
 import { EventOverviewCms } from '../../../components/cms/EventOverviewCms';
 
 export const EventOverviewModule: React.FC = () => {
-  const { events } = useAdmin();
+  const { events, eventOverviewEventId, closeEventOverview } = useAdmin();
   const rbac = useRBAC();
-  const [selectedId, setSelectedId] = useState<string>('');
+  const [selectedId, setSelectedId] = useState<string>(eventOverviewEventId || '');
+
+  // When another module (e.g. Website CMS) opens this module for a specific
+  // event, follow the new selection.
+  useEffect(() => {
+    if (eventOverviewEventId) setSelectedId(eventOverviewEventId);
+  }, [eventOverviewEventId]);
 
   const selectedEvent = events.find((e) => String(e.id) === selectedId) || null;
 
@@ -54,6 +60,15 @@ export const EventOverviewModule: React.FC = () => {
             <Calendar className="w-3.5 h-3.5 text-violet-400" />
             {selectedEvent.date || 'No date set'} · {selectedEvent.venue || 'Venue TBA'}
           </span>
+        )}
+        {eventOverviewEventId && (
+          <button
+            onClick={closeEventOverview}
+            className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-[10px] font-bold uppercase tracking-widest text-white/60 hover:text-white hover:border-white/20 transition-colors cursor-pointer"
+          >
+            <X className="w-3.5 h-3.5" />
+            Clear Selection
+          </button>
         )}
       </div>
 

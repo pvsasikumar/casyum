@@ -183,6 +183,7 @@ export interface CoordinatorAccount {
 
 export type ActiveTabModule =
   | 'Dashboard'
+  | 'CMS'
   | 'Registrations'
   | 'Events'
   | 'Event Overview'

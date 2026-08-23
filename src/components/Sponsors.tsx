@@ -3,9 +3,18 @@ import { motion } from 'framer-motion';
 import { ExternalLink, Handshake, Loader2, AlertCircle, Sparkles } from 'lucide-react';
 import { listActiveSponsors, listSponsorCategories } from '../services/sponsorshipService';
 import type { Sponsor, SponsorCategory } from '../types/sponsorship';
+import type { CmsSponsorsContent } from '../services/cmsService';
 
 interface SponsorsProps {
   onOpenEnquiry?: () => void;
+  /** CMS overrides for the Sponsors header text (defaults keep the original look). */
+  content?: Partial<CmsSponsorsContent>;
+  sections?: {
+    header?: boolean;
+    titleSponsor?: boolean;
+    sponsorGrid?: boolean;
+    sponsorCta?: boolean;
+  };
 }
 
 type LogoSize = 'small' | 'medium' | 'large';
@@ -69,7 +78,18 @@ function SponsorLogo({ src, name, size, title }: { src: string; name: string; si
   );
 }
 
-export const Sponsors: React.FC<SponsorsProps> = ({ onOpenEnquiry }) => {
+export const Sponsors: React.FC<SponsorsProps> = ({ onOpenEnquiry, content, sections }) => {
+  const showHeader = sections?.header !== false;
+  const showTitleSponsor = sections?.titleSponsor !== false;
+  const showGrid = sections?.sponsorGrid !== false;
+  const showCta = sections?.sponsorCta !== false;
+
+  const kicker = content?.kicker || 'Our Sponsors';
+  const title = content?.title || 'Powered by Visionaries';
+  const subtitle =
+    content?.subtitle ||
+    'The organizations fueling CASYUM 2K26. We are grateful to every partner whose support brings this national symposium to life.';
+
   const [sponsors, setSponsors] = useState<Sponsor[]>([]);
   const [categories, setCategories] = useState<SponsorCategory[]>([]);
   const [loading, setLoading] = useState(true);
@@ -115,8 +135,10 @@ export const Sponsors: React.FC<SponsorsProps> = ({ onOpenEnquiry }) => {
     });
   }, [sponsors, categories]);
 
-  const titleGroup = grouped.find(([name]) => name === 'Title Sponsor');
-  const otherGroups = grouped.filter(([name]) => name !== 'Title Sponsor');
+  const titleGroup = showTitleSponsor ? grouped.find(([name]) => name === 'Title Sponsor') : undefined;
+  const otherGroups = showTitleSponsor
+    ? grouped.filter(([name]) => name !== 'Title Sponsor')
+    : grouped;
 
   const hasSponsors = sponsors.length > 0;
 
@@ -129,27 +151,28 @@ export const Sponsors: React.FC<SponsorsProps> = ({ onOpenEnquiry }) => {
 
       <div className="relative z-10 max-w-6xl mx-auto flex flex-col gap-14 sm:gap-20">
         {/* Header */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
-          className="text-center max-w-2xl mx-auto flex flex-col items-center gap-4"
-        >
-          <div className="flex items-center gap-2.5">
-            <div className="p-2.5 rounded-xl bg-violet-500/15 border border-violet-500/30 text-violet-300">
-              <Sparkles className="w-5 h-5" />
+        {showHeader && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+            className="text-center max-w-2xl mx-auto flex flex-col items-center gap-4"
+          >
+            <div className="flex items-center gap-2.5">
+              <div className="p-2.5 rounded-xl bg-violet-500/15 border border-violet-500/30 text-violet-300">
+                <Sparkles className="w-5 h-5" />
+              </div>
+              <span className="text-[10px] font-bold tracking-[0.3em] text-violet-400 uppercase">{kicker}</span>
             </div>
-            <span className="text-[10px] font-bold tracking-[0.3em] text-violet-400 uppercase">Our Sponsors</span>
-          </div>
-          <h2 className="text-3xl sm:text-5xl font-extrabold tracking-tight font-display text-gradient">
-            Powered by Visionaries
-          </h2>
-          <p className="text-white/50 text-sm sm:text-base max-w-xl leading-relaxed">
-            The organizations fueling CASYUM 2K26. We are grateful to every partner whose support brings this
-            national symposium to life.
-          </p>
-        </motion.div>
+            <h2 className="text-3xl sm:text-5xl font-extrabold tracking-tight font-display text-gradient">
+              {title}
+            </h2>
+            <p className="text-white/50 text-sm sm:text-base max-w-xl leading-relaxed">
+              {subtitle}
+            </p>
+          </motion.div>
+        )}
 
         {/* Loading */}
         {loading && (
@@ -188,7 +211,7 @@ export const Sponsors: React.FC<SponsorsProps> = ({ onOpenEnquiry }) => {
         )}
 
         {/* Sponsor content */}
-        {!loading && !loadError && hasSponsors && (
+        {!loading && !loadError && hasSponsors && showGrid && (
           <div className="w-full flex flex-col gap-14 sm:gap-20">
             {/* TITLE SPONSOR highlight */}
             {titleGroup && (
@@ -299,24 +322,26 @@ export const Sponsors: React.FC<SponsorsProps> = ({ onOpenEnquiry }) => {
         )}
 
         {/* Sponsor CTA */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
-          className="flex flex-col items-center gap-5 text-center"
-        >
-          <div className="h-px w-24 bg-gradient-to-r from-transparent via-violet-500/50 to-transparent" />
-          <p className="text-white/50 text-sm sm:text-base">Interested in sponsoring CASYUM 2K26?</p>
-          <button
-            type="button"
-            onClick={onOpenEnquiry}
-            className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-2xl bg-gradient-to-r from-violet-500 to-indigo-600 hover:from-violet-600 hover:to-indigo-700 text-white text-xs font-extrabold uppercase tracking-widest shadow-lg shadow-violet-500/25 transition-all cursor-pointer active:scale-95"
+        {showCta && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+            className="flex flex-col items-center gap-5 text-center"
           >
-            <Handshake className="w-4 h-4" />
-            Become a Sponsor
-          </button>
-        </motion.div>
+            <div className="h-px w-24 bg-gradient-to-r from-transparent via-violet-500/50 to-transparent" />
+            <p className="text-white/50 text-sm sm:text-base">Interested in sponsoring CASYUM 2K26?</p>
+            <button
+              type="button"
+              onClick={onOpenEnquiry}
+              className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-2xl bg-gradient-to-r from-violet-500 to-indigo-600 hover:from-violet-600 hover:to-indigo-700 text-white text-xs font-extrabold uppercase tracking-widest shadow-lg shadow-violet-500/25 transition-all cursor-pointer active:scale-95"
+            >
+              <Handshake className="w-4 h-4" />
+              Become a Sponsor
+            </button>
+          </motion.div>
+        )}
       </div>
     </section>
   );

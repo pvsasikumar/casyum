@@ -51,6 +51,14 @@ service firebase.storage {
       allow write: if isSignedIn() && (isAdmin() || (isCoordinator() && isAssignedEvent(eventId)));
     }
 
+    // Website CMS media (cms/pages/{pageId}/...) — e.g. the Home hero
+    // background. Publicly readable because the public website renders these
+    // images without authentication; writable only by admins.
+    match /cms/{allPaths=**} {
+      allow read: if true;
+      allow write: if isSignedIn() && isAdmin();
+    }
+
     // Generic uploads (admin profile photos, admin gallery media, CMS extras).
     // Readable by signed-in staff; writable only by admins.
     match /{allPaths=**} {

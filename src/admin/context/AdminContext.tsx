@@ -150,6 +150,11 @@ interface AdminContextType {
   teamSettingsEventId: string | null;
   openTeamSettings: (eventId: string) => void;
   closeTeamSettings: () => void;
+  // Event Overview CMS: pre-selects an event when opening that module from
+  // another module (e.g. the Website CMS "Events & Rule Books" tab).
+  eventOverviewEventId: string | null;
+  openEventOverview: (eventId: string) => void;
+  closeEventOverview: () => void;
   markAttendance: (participantId: string, eventId: string, status: AttendanceStatus) => void;
   createAnnouncement: (announcement: Omit<Announcement, 'id' | 'publishDate'>) => void;
   deleteAnnouncement: (id: string) => void;
@@ -781,6 +786,17 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setTeamSettingsEventId(null);
   };
 
+  const [eventOverviewEventId, setEventOverviewEventId] = useState<string | null>(null);
+
+  const openEventOverview = (eventId: string) => {
+    setEventOverviewEventId(String(eventId));
+    setActiveTab('Event Overview');
+  };
+
+  const closeEventOverview = () => {
+    setEventOverviewEventId(null);
+  };
+
   const markAttendance = (participantId: string, eventId: string, status: AttendanceStatus) => {
     const p = participants.find((x) => x.id === participantId);
     const e = events.find((x) => x.id === eventId);
@@ -951,6 +967,9 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         teamSettingsEventId,
         openTeamSettings,
         closeTeamSettings,
+        eventOverviewEventId,
+        openEventOverview,
+        closeEventOverview,
         markAttendance,
         createAnnouncement,
         deleteAnnouncement,

@@ -27,6 +27,7 @@ import {
   Handshake,
   BadgeDollarSign,
   UsersRound,
+  Globe,
 } from 'lucide-react';
 import type { ActiveTabModule } from '../../types';
 import { useAdmin } from '../../context/AdminContext';
@@ -51,6 +52,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onCloseMobile, onExitAdmin }) 
 
   const allNavItems: NavItemConfig[] = [
     { name: 'Dashboard', icon: LayoutDashboard, permission: 'dashboard.view' },
+    { name: 'CMS', icon: Globe, permission: 'cms.view' },
     { name: 'Events', icon: Calendar, permission: 'events.view' },
     { name: 'Event Overview', icon: LayoutDashboard, permission: 'events.view' },
     { name: 'Event Cards', icon: Calendar, permission: 'events.view' },

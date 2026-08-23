@@ -7,6 +7,7 @@ import { Spotlight } from '@/components/ui/spotlight';
 import { SplineScene } from '@/components/ui/splite';
 import { api } from '../services/api';
 import { useRBAC } from '../rbac/context/RBACContext';
+import type { CmsRegisterContent } from '../services/cmsService';
 
 declare global {
   interface Window {
@@ -58,9 +59,19 @@ function loadGoogleScript(): Promise<void> {
   });
 }
 
-export const ParticipantRegistration: React.FC = () => {
+export const ParticipantRegistration: React.FC<{
+  content?: Partial<CmsRegisterContent>;
+  /** CMS control for the Google Sign-In panel (heading text stays editable). */
+  showSignInPanel?: boolean;
+}> = ({ content, showSignInPanel = true }) => {
   const navigate = useNavigate();
   const { login, role } = useRBAC();
+
+  const kicker = content?.kicker || 'Secure Your Spot';
+  const heading = content?.heading || 'Join the Symposium';
+  const description =
+    content?.description ||
+    'Sign in with your Google account to register for CASYUM 2K26. Your account is created automatically on your first sign-in.';
 
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [authenticating, setAuthenticating] = useState(false);
@@ -159,10 +170,10 @@ export const ParticipantRegistration: React.FC = () => {
 
         <div className="flex flex-col-reverse md:flex-row h-full min-h-[500px]">
           <div className="flex-1 p-8 sm:p-12 relative z-10 flex flex-col justify-center gap-6">
-            <span className="text-xs font-bold tracking-[0.3em] text-violet-400 uppercase text-left">Secure Your Spot</span>
-            <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight font-display text-gradient text-left">Join the Symposium</h2>
+            <span className="text-xs font-bold tracking-[0.3em] text-violet-400 uppercase text-left">{kicker}</span>
+            <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight font-display text-gradient text-left">{heading}</h2>
             <p className="text-white/50 text-sm leading-relaxed text-left">
-              Sign in with your Google account to register for CASYUM 2K26. Your account is created automatically on your first sign-in.
+              {description}
             </p>
 
             {isParticipant ? (
@@ -174,6 +185,10 @@ export const ParticipantRegistration: React.FC = () => {
                   <LayoutDashboard className="w-4 h-4" />
                   Go to your Dashboard
                 </button>
+              </div>
+            ) : !showSignInPanel ? (
+              <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white/60 text-xs font-bold mt-4 w-fit">
+                Registrations are currently closed. Please check back later.
               </div>
             ) : status === 'loading' ? (
               <div className="flex items-center gap-2 text-sm text-white/40 mt-4">

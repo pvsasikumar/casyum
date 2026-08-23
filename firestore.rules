@@ -318,6 +318,27 @@ service cloud.firestore {
       allow write: if isAdmin() || (isCoordinator() && isAssignedEvent(eventId));
     }
 
+    // Website CMS published pages (Home / About / Events / Sponsors / Register):
+    // the public website reads them without authentication, so reads are open.
+    // Only Admins and the Super Admin may publish or hide pages.
+    match /cms_pages/{pageId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Website CMS private drafts: never public. Only admins may read or save a
+    // draft; drafts are promoted to cms_pages/{pageId} on "Publish Changes".
+    match /cms_drafts/{pageId} {
+      allow read, write: if isAdmin();
+    }
+
+    // Per-event public flags managed by the Website CMS (currently only the
+    // rule book visibility switch for the event details page).
+    match /cms_events/{eventId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
     // Participants must be able to read and update their own profile, and
     // create their own record on first Google sign-in. Profile fields such as
     // phone, college, city, department and year_of_study are self-serviced by

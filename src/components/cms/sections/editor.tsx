@@ -51,7 +51,7 @@ export const SectionEditor: React.FC<{
 }> = ({ section, eventId, onChange }) => {
   switch (section.sectionType) {
     case 'hero':
-      return <HeroEditor content={section.content} eventId={eventId} onChange={onChange} />;
+      return <HeroEditor content={section.content} onChange={onChange} />;
     case 'details':
       return <DetailsEditor content={section.content} onChange={onChange} />;
     case 'about':
@@ -262,7 +262,7 @@ export const SectionEditor: React.FC<{
           emptyText="No gallery images yet."
           renderEditor={(item, update) => (
             <>
-              <CmsImageField value={item.url} onChange={(url) => update({ url })} eventId={eventId} storageFolder="gallery" canEdit />
+              <CmsImageField value={item.url} onChange={(url) => update({ url })} canEdit />
               <div className="flex gap-2">
                 <CmsInput value={item.caption} onChange={(e) => update({ caption: e.target.value })} placeholder="Caption" />
                 <div className="w-36 flex-shrink-0">
@@ -299,7 +299,7 @@ export const SectionEditor: React.FC<{
                 <CmsInput value={item.name} onChange={(e) => update({ name: e.target.value })} placeholder="Sponsor name" />
                 <CmsInput value={item.website} onChange={(e) => update({ website: e.target.value })} placeholder="Website URL" />
               </div>
-              <CmsImageField value={item.logoUrl} onChange={(url) => update({ logoUrl: url })} eventId={eventId} storageFolder="sponsors" aspect="aspect-video" canEdit />
+              <CmsImageField value={item.logoUrl} onChange={(url) => update({ logoUrl: url })} aspect="aspect-video" canEdit />
               <CmsTextArea rows={2} value={item.description} onChange={(e) => update({ description: e.target.value })} placeholder="Description" />
             </>
           )}
@@ -338,7 +338,7 @@ export const SectionEditor: React.FC<{
     case 'image':
       return (
         <div className="flex flex-col gap-4">
-          <CmsImageField value={section.content.url} onChange={(url) => onChange({ url })} eventId={eventId} storageFolder="images" canEdit />
+          <CmsImageField value={section.content.url} onChange={(url) => onChange({ url })} canEdit />
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <CmsField label="Caption">
               <CmsInput value={section.content.caption} onChange={(e) => onChange({ caption: e.target.value })} placeholder="Caption (optional)" />
@@ -437,17 +437,14 @@ export const SectionEditor: React.FC<{
   }
 };
 
-const HeroEditor: React.FC<{ content: CmsHero; eventId: string; onChange: (patch: Partial<CmsHero>) => void }> = ({ content: hero, eventId, onChange }) => {
+const HeroEditor: React.FC<{ content: CmsHero; onChange: (patch: Partial<CmsHero>) => void }> = ({ content: hero, onChange }) => {
   const set = (patch: Partial<CmsHero>) => onChange(patch);
   return (
     <div className="flex flex-col gap-4">
       <CmsImageField
         value={hero.bannerImage}
-        onChange={(url, meta) => set({ bannerImage: url, bannerImagePath: meta?.path || '' })}
-        eventId={eventId}
-        storageFolder="hero"
+        onChange={(url) => set({ bannerImage: url, bannerImagePath: '' })}
         label="Event Banner"
-        imagePath={hero.bannerImagePath}
         imageAlt={hero.bannerImageAlt}
         onImageAltChange={(alt) => set({ bannerImageAlt: alt })}
         canEdit
