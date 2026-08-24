@@ -7,18 +7,21 @@ import {
   LogOut,
   Sparkles,
   ChevronRight,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { useRegistrationTeam } from './context/RegistrationTeamContext';
 
 const PAGE_TITLES: Record<string, string> = {
   dashboard: 'Dashboard',
   verify: 'Participant Verification',
+  reports: 'Reports & Export',
   profile: 'Profile',
 };
 
 const NAV_ITEMS = [
   { to: '/registration-team/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/registration-team/verify', label: 'Participant Verification', icon: ScanLine },
+  { to: '/registration-team/reports', label: 'Reports & Export', icon: FileSpreadsheet },
   { to: '/registration-team/profile', label: 'Profile', icon: User },
 ];
 

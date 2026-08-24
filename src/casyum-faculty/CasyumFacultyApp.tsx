@@ -10,6 +10,7 @@ import { ParticipantsPage } from './pages/ParticipantsPage';
 import { RegistrationStatusPage } from './pages/RegistrationStatusPage';
 import { AttendanceOverviewPage } from './pages/AttendanceOverviewPage';
 import { ReportsPage } from './pages/ReportsPage';
+import StaffReportsPage from '../reports/StaffReportsPage';
 import { ProfilePage } from './pages/ProfilePage';
 
 const CasyumFacultyContent: React.FC = () => {
@@ -26,6 +27,10 @@ const CasyumFacultyContent: React.FC = () => {
           <Route path="registration-status" element={<RegistrationStatusPage />} />
           <Route path="attendance" element={<AttendanceOverviewPage />} />
           <Route path="reports" element={<ReportsPage />} />
+          <Route
+            path="participant-report"
+            element={<StaffReportsPage scope={{ mode: 'full' }} />}
+          />
           <Route path="profile" element={<ProfilePage />} />
           <Route path="*" element={<Navigate to="/casyum-faculty/dashboard" replace />} />
         </Route>

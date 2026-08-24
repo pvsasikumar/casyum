@@ -10,6 +10,7 @@ import { ParticipantsPage } from './pages/ParticipantsPage';
 import { PaymentsPage } from './pages/PaymentsPage';
 import { AttendancePage } from './pages/AttendancePage';
 import { ReportsPage } from './pages/ReportsPage';
+import StaffReportsPage from '../reports/StaffReportsPage';
 import { WinnersPage } from './pages/WinnersPage';
 import { CertificatesPage } from './pages/CertificatesPage';
 import { ProfilePage } from './pages/ProfilePage';
@@ -28,6 +29,10 @@ const ObserverContent: React.FC = () => {
           <Route path="payments" element={<PaymentsPage />} />
           <Route path="attendance" element={<AttendancePage />} />
           <Route path="reports" element={<ReportsPage />} />
+          <Route
+            path="participant-report"
+            element={<StaffReportsPage scope={{ mode: 'full' }} />}
+          />
           <Route path="winners" element={<WinnersPage />} />
           <Route path="certificates" element={<CertificatesPage />} />
           <Route path="profile" element={<ProfilePage />} />

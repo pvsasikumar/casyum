@@ -14,6 +14,7 @@ import {
   Sparkles,
   ChevronRight,
   Eye,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { useObserver } from './context/ObserverContext';
 import { ReadOnlyBanner, ReadOnlyBadge } from './components/ReadOnlyBanner';
@@ -26,6 +27,7 @@ const PAGE_TITLES: Record<string, string> = {
   payments: 'Payment Status',
   attendance: 'Attendance Status',
   reports: 'Reports',
+  'participant-report': 'Participant Report',
   winners: 'Winners',
   certificates: 'Certificates Status',
   profile: 'Profile',
@@ -40,6 +42,7 @@ const NAV_ITEMS = [
   { to: '/observer/winners', label: 'Winners', icon: Trophy },
   { to: '/observer/certificates', label: 'Certificates', icon: Award },
   { to: '/observer/reports', label: 'Reports', icon: BarChart3 },
+  { to: '/observer/participant-report', label: 'Participant Report', icon: FileSpreadsheet },
   { to: '/observer/profile', label: 'Profile', icon: User },
 ];
 

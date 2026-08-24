@@ -11,6 +11,7 @@ import { EventDescriptionPage } from './pages/EventDescriptionPage';
 import { ResultsPage } from './pages/ResultsPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { TeamsPage } from './pages/TeamsPage';
+import StaffReportsPage from '../reports/StaffReportsPage';
 
 const AttendanceRoute: React.FC = () => {
   const { assignedEvent } = useCoordinator();
@@ -20,6 +21,25 @@ const AttendanceRoute: React.FC = () => {
   }
 
   return <AttendancePage eventId={assignedEvent.id} eventName={assignedEvent.name} />;
+};
+
+/**
+ * Coordinator report — scoped to the coordinator's assigned events. Every
+ * Firestore query is constrained per event id so the data window matches what
+ * the security rules already enforce for this role.
+ */
+const ReportsRoute: React.FC = () => {
+  const { assignedEvents } = useCoordinator();
+
+  if (!assignedEvents || assignedEvents.length === 0) {
+    return <NoEventAssigned />;
+  }
+
+  return (
+    <StaffReportsPage
+      scope={{ mode: 'assigned', eventIds: assignedEvents.map((e) => String(e.id)) }}
+    />
+  );
 };
 
 export const CoordinatorApp: React.FC = () => {
@@ -35,6 +55,7 @@ export const CoordinatorApp: React.FC = () => {
           <Route path="event-overview" element={<EventOverviewPage />} />
           <Route path="event-description" element={<EventDescriptionPage />} />
           <Route path="results" element={<ResultsPage />} />
+          <Route path="reports" element={<ReportsRoute />} />
           <Route path="profile" element={<ProfilePage />} />
           <Route path="*" element={<Navigate to="/coordinator/dashboard" replace />} />
         </Route>

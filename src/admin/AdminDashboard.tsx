@@ -38,6 +38,7 @@ import { SponsorManagement } from './components/modules/SponsorManagement';
 import { SponsorshipEnquiries } from './components/modules/SponsorshipEnquiries';
 import { TeamsModule } from './components/modules/TeamsModule';
 import { TeamSettingsModule } from './components/modules/TeamSettingsModule';
+import StaffReportsPage from '../reports/StaffReportsPage';
 
 const ModuleRouter: React.FC = () => {
   const { activeTab } = useAdmin();
@@ -65,6 +66,8 @@ const ModuleRouter: React.FC = () => {
       return <AttendanceModule />;
     case 'Analytics':
       return <AnalyticsModule />;
+    case 'Reports':
+      return <StaffReportsPage scope={{ mode: 'full' }} />;
     case 'Export Center':
       return <ExportCenter />;
     case 'Event Export':

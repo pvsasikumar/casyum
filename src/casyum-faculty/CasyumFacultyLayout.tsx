@@ -12,6 +12,7 @@ import {
   LogOut,
   Sparkles,
   ChevronRight,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { useCasyumFaculty } from './context/CasyumFacultyContext';
 
@@ -23,6 +24,7 @@ const PAGE_TITLES: Record<string, string> = {
   'registration-status': 'Registration Status',
   attendance: 'Attendance Overview',
   reports: 'Reports',
+  'participant-report': 'Participant Report',
   profile: 'Profile',
 };
 
@@ -34,6 +36,7 @@ const NAV_ITEMS = [
   { to: '/casyum-faculty/registration-status', label: 'Registration Status', icon: ClipboardCheck },
   { to: '/casyum-faculty/attendance', label: 'Attendance', icon: UserCheck },
   { to: '/casyum-faculty/reports', label: 'Reports', icon: BarChart3 },
+  { to: '/casyum-faculty/participant-report', label: 'Participant Report', icon: FileSpreadsheet },
   { to: '/casyum-faculty/profile', label: 'Profile', icon: User },
 ];
 

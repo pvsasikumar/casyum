@@ -28,6 +28,7 @@ import {
   BadgeDollarSign,
   UsersRound,
   Globe,
+  FileSpreadsheet,
 } from 'lucide-react';
 import type { ActiveTabModule } from '../../types';
 import { useAdmin } from '../../context/AdminContext';
@@ -72,6 +73,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onCloseMobile, onExitAdmin }) 
     { name: 'Gallery', icon: Image, permission: 'gallery.view' },
     { name: 'Results', icon: Trophy, permission: 'results.view' },
     { name: 'Analytics', icon: BarChart3, permission: 'reports.view' },
+    { name: 'Reports', icon: FileSpreadsheet, permission: 'reports.view' },
     { name: 'Announcements', icon: Megaphone, permission: 'announcements.view' },
     { name: 'Employees', icon: Briefcase, permission: 'employees.view' },
     { name: 'Email Logs', icon: Mail, permission: 'emails.view' },

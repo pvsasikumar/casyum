@@ -193,6 +193,7 @@ export type ActiveTabModule =
   | 'Communication Settings'
   | 'Attendance'
   | 'Analytics'
+  | 'Reports'
   | 'Export Center'
   | 'Event Export'
   | 'Announcements'
