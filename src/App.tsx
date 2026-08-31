@@ -90,13 +90,6 @@ function PublicSiteContent() {
     setShowIntro(false);
   };
 
-  const handleReplayIntro = () => {
-    sessionStorage.removeItem('casyum_intro_played');
-    setIsVideoEnded(false);
-    setShowIntro(true);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
   const startAnimation = !showIntro || isVideoEnded;
 
   const homeSections = pages.home?.sections || {};
@@ -180,9 +173,6 @@ function PublicSiteContent() {
           <footer className="border-t border-white/5 bg-black/50 py-12 px-6 text-center text-[10px] tracking-[0.25em] text-white/30 uppercase font-semibold font-display">
             <div className="max-w-4xl mx-auto flex flex-col gap-6 items-center">
               <div className="flex flex-wrap items-center justify-center gap-4">
-                <button onClick={handleReplayIntro} className="px-6 py-2.5 rounded-full border border-white/10 text-white/50 hover:text-white hover:border-white/20 bg-white/5 hover:bg-white/10 transition-all duration-300 text-[10px] uppercase font-bold tracking-widest cursor-pointer active:scale-95">
-                  Replay Intro Video
-                </button>
                 <button type="button" onClick={() => void signIn()} disabled={isSigningIn} className="px-6 py-2.5 rounded-full border border-violet-500/30 text-violet-400 hover:text-violet-300 hover:border-violet-500/50 bg-violet-500/10 hover:bg-violet-500/20 transition-all duration-300 text-[10px] uppercase font-bold tracking-widest cursor-pointer active:scale-95 flex items-center gap-2 disabled:opacity-50 disabled:cursor-wait">
                   {isSigningIn ? (
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
