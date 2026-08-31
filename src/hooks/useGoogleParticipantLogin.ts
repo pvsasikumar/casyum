@@ -16,7 +16,7 @@ export function useGoogleParticipantLogin() {
       const destination =
         typeof redirect === 'string' && redirect.startsWith('/')
           ? redirect
-          : '/participant/sponsors';
+          : '/participant/dashboard';
       setIsSigningIn(true);
       setError('');
       try {
