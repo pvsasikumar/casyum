@@ -173,7 +173,7 @@ const DEFAULT_SETTINGS: SystemSettings = {
   registrationFee: 250,
   upiId: 'casyum.srm@okicici',
   upiQrUrl: 'https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?auto=format&fit=crop&w=400&q=80',
-  countdownTarget: '2026-08-29T08:00:00',
+  countdownTarget: '2026-09-19T08:00:00',
   homepageBanner: '🚀 Registration for CASYUM 2K26 is LIVE! Cash prizes worth ₹1.5L+ awaiting.',
   contactEmail: 'casyum2k26@srmist.edu.in',
   contactPhone: '+91 44 2741 7000',

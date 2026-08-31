@@ -29,7 +29,7 @@ export const statusStyles: Record<string, string> = {
 };
 
 export const DETAIL_FIELDS: Array<{ key: keyof CmsEventDetails; label: string; icon: ElementType; placeholder?: string }> = [
-  { key: 'date', label: 'Event Date', icon: CalendarDays, placeholder: 'e.g. 29 Aug 2026' },
+  { key: 'date', label: 'Event Date', icon: CalendarDays, placeholder: 'e.g. 19 Sep 2026' },
   { key: 'time', label: 'Event Time', icon: Clock, placeholder: 'e.g. 10:00 AM - 4:00 PM' },
   { key: 'venue', label: 'Venue', icon: MapPin, placeholder: 'Main venue' },
   { key: 'teamSize', label: 'Team Size (Min–Max)', icon: UserRound, placeholder: 'e.g. 1 – 3' },
