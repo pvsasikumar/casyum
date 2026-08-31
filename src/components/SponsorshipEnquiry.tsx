@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Handshake,
@@ -130,6 +131,15 @@ export const SponsorshipEnquiry: React.FC<{ openSignal?: number }> = ({ openSign
     setTimeout(() => setSubmitted(false), 300);
   };
 
+  useEffect(() => {
+    if (!formOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') closeForm();
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [formOpen, submitting]);
+
   return (
     <section id="sponsor-us" className="relative py-20 sm:py-24 px-6 select-none bg-black overflow-hidden">
       <div className="absolute top-1/3 right-0 w-[30vw] h-[30vw] bg-violet-600/5 rounded-full blur-3xl" />
@@ -192,39 +202,41 @@ export const SponsorshipEnquiry: React.FC<{ openSignal?: number }> = ({ openSign
       </div>
 
       {/* Enquiry Form Modal */}
-      <AnimatePresence>
-        {formOpen && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[9999] bg-black/85 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 overflow-y-auto"
-          >
+      {createPortal(
+        <AnimatePresence>
+          {formOpen && (
             <motion.div
-              initial={{ opacity: 0, y: 24, scale: 0.98 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 24, scale: 0.98 }}
-              transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-              className="w-full max-w-2xl max-h-[92vh] overflow-y-auto bg-zinc-950 border border-white/15 rounded-3xl shadow-2xl custom-scrollbar my-auto"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[9999] bg-black/85 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 overflow-y-auto"
             >
-              <div className="sticky top-0 z-10 bg-zinc-950/95 backdrop-blur border-b border-white/10 px-6 py-4 flex items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-xl bg-violet-500/15 border border-violet-500/30 text-violet-300">
-                    <Handshake className="w-4 h-4" />
+              <motion.div
+                initial={{ opacity: 0, y: 24, scale: 0.98 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 24, scale: 0.98 }}
+                transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+                className="w-full max-w-2xl max-h-[92vh] overflow-y-auto bg-zinc-950 border border-white/15 rounded-3xl shadow-2xl custom-scrollbar my-auto"
+              >
+                <div className="sticky top-0 z-10 bg-zinc-950/95 backdrop-blur border-b border-white/10 px-6 py-4 flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-xl bg-violet-500/15 border border-violet-500/30 text-violet-300">
+                      <Handshake className="w-4 h-4" />
+                    </div>
+                    <div className="flex flex-col">
+                      <h3 className="text-sm font-extrabold font-display text-white">Sponsorship Enquiry</h3>
+                      <span className="text-[10px] text-white/40 uppercase tracking-widest">CASYUM 2026</span>
+                    </div>
                   </div>
-                  <div className="flex flex-col">
-                    <h3 className="text-sm font-extrabold font-display text-white">Sponsorship Enquiry</h3>
-                    <span className="text-[10px] text-white/40 uppercase tracking-widest">CASYUM 2026</span>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={closeForm}
+                    className="p-2 rounded-lg text-white/50 hover:text-white bg-white/5 hover:bg-white/10 cursor-pointer"
+                    aria-label="Close"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
                 </div>
-                <button
-                  onClick={closeForm}
-                  className="p-2 rounded-lg text-white/50 hover:text-white bg-white/5 hover:bg-white/10 cursor-pointer"
-                  aria-label="Close"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
 
               <div className="p-6">
                 {submitted ? (
@@ -419,7 +431,9 @@ export const SponsorshipEnquiry: React.FC<{ openSignal?: number }> = ({ openSign
             </motion.div>
           </motion.div>
         )}
-      </AnimatePresence>
+      </AnimatePresence>,
+        document.body,
+      )}
     </section>
   );
 };
