@@ -35,10 +35,6 @@ service cloud.firestore {
       return getUserRole() in ['Registration Team'];
     }
 
-    function isCasyumFacultyCoordinator() {
-      return getUserRole() in ['casyum_faculty_coordinator'];
-    }
-
     function isSponsorshipHead() {
       return getUserRole() in ['Sponsorship Head'];
     }
@@ -76,20 +72,9 @@ service cloud.firestore {
         || isGamingEventName(ev.name);
     }
 
-    function isGamingRef(ref) {
-      if (ref is map && 'eventId' in ref && ref.eventId is string) {
-        return isGamingEventDoc(ref.eventId);
-      }
-      if (ref is string) {
-        return isGamingEventDoc(ref);
-      }
-      return false;
-    }
-
     function isValidRegularList(regular) {
       return regular is list
-        && regular.size() <= 2
-        && !regular.any(e => isGamingRef(e));
+        && regular.size() <= 2;
     }
 
     function isValidGamingSelection(gaming) {
@@ -115,20 +100,27 @@ service cloud.firestore {
     // 400 (regular + gaming). A single-event registration (no selection map)
     // is priced from its event document instead. This makes it impossible to
     // store a manipulated payment amount.
+    function getRegularCount(sel) {
+      return (sel is map && 'regular' in sel && sel.regular is list) ? sel.regular.size() : 0;
+    }
+
+    function hasGamingSelection(sel) {
+      return sel is map && 'gaming' in sel && sel.gaming != null;
+    }
+
+    function hasSelectedEvents(data) {
+      return 'selectedEvents' in data && data.selectedEvents != null;
+    }
+
     function expectedFee(data) {
-      if ('selectedEvents' in data && data.selectedEvents != null) {
-        let sel = data.selectedEvents;
-        let hasRegular = 'regular' in sel && sel.regular.size() > 0;
-        let hasGaming = 'gaming' in sel && sel.gaming != null;
-        if (hasRegular && hasGaming) return 400;
-        if (hasRegular) return 150;
-        if (hasGaming) return 250;
-        return 0;
-      }
-      if ('event_id' in data && data.event_id is string) {
-        return isGamingEventDoc(data.event_id) ? 250 : 150;
-      }
-      return 0;
+      return hasSelectedEvents(data)
+        ? (getRegularCount(data.selectedEvents) > 0 && hasGamingSelection(data.selectedEvents)) ? 400
+          : (getRegularCount(data.selectedEvents) > 0) ? 150
+          : (hasGamingSelection(data.selectedEvents)) ? 250
+          : 0
+        : ('event_id' in data && data.event_id is string && isGamingEventDoc(data.event_id)) ? 250
+        : ('event_id' in data && data.event_id is string) ? 150
+        : 0;
     }
 
     function isValidCanonicalFee(data) {
@@ -183,25 +175,21 @@ service cloud.firestore {
     }
 
     function isEligibleParticipantForEvent(participantId) {
-      let ref = /databases/$(database)/documents/registrations/reg-$(participantId);
-      if (!exists(ref)) {
-        let canonical = /databases/$(database)/documents/eventRegistrations/reg-$(participantId);
-        if (!exists(canonical)) { return false; }
-        let creg = get(canonical).data;
-        return isPaymentVerified(creg) && isDeskVerified(creg);
-      }
-      let reg = get(ref).data;
-      return isPaymentVerified(reg) && isDeskVerified(reg);
+      let regRef = /databases/$(database)/documents/registrations/$('reg-' + participantId);
+      let canonRef = /databases/$(database)/documents/eventRegistrations/$('reg-' + participantId);
+      return (exists(regRef) && isPaymentVerified(get(regRef).data) && isDeskVerified(get(regRef).data))
+        || (!exists(regRef) && exists(canonRef)
+          && isPaymentVerified(get(canonRef).data) && isDeskVerified(get(canonRef).data));
     }
 
     function isTeamLeader(teamId) {
-      let ref = /databases/$(database)/documents/teams/$(teamId);
-      return exists(ref) && get(ref).data.teamLeaderId == request.auth.uid;
+      return exists(/databases/$(database)/documents/teams/$(teamId))
+        && get(/databases/$(database)/documents/teams/$(teamId)).data.teamLeaderId == request.auth.uid;
     }
 
     function isTeamMember(teamId) {
-      let ref = /databases/$(database)/documents/teams/$(teamId);
-      return exists(ref) && get(ref).data.memberIds has request.auth.uid;
+      return exists(/databases/$(database)/documents/teams/$(teamId))
+        && request.auth.uid in get(/databases/$(database)/documents/teams/$(teamId)).data.memberIds;
     }
 
     // Fields a participant may change on their own registration when joining or
@@ -291,7 +279,9 @@ service cloud.firestore {
       // never modify any user record.
       allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin() || isObserver());
       allow write: if isAdmin();
-    }    match /events/{eventId} {
+    }
+
+    match /events/{eventId} {
       // Public event pages and the public bento grid read the published
       // summary fields stored on the event document. Drafts live in the
       // separate event_drafts collection and are never exposed here.
@@ -454,7 +444,7 @@ service cloud.firestore {
       // teamMembers is the source of truth.
       allow update: if isSignedIn() && (
         isAdmin()
-        || ((isTeamMember(teamId) || request.resource.data.memberIds has request.auth.uid)
+        || ((isTeamMember(teamId) || request.auth.uid in request.resource.data.memberIds)
             && isTeamFieldsUpdate())
       );
       allow delete: if isAdmin();

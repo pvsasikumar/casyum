@@ -124,6 +124,7 @@ export const SponsorshipEnquiry: React.FC<{ openSignal?: number }> = ({ openSign
   const closeForm = () => {
     if (submitting) return;
     setFormOpen(false);
+    setForm(emptyForm);
     setErrors({});
     setErrorMsg('');
     setTimeout(() => setSubmitted(false), 300);
@@ -396,6 +397,15 @@ export const SponsorshipEnquiry: React.FC<{ openSignal?: number }> = ({ openSign
                           Submit Sponsorship Enquiry
                         </>
                       )}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={closeForm}
+                      disabled={submitting}
+                      className="w-full py-3 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-white/60 hover:text-white text-xs font-bold uppercase tracking-widest transition-all cursor-pointer disabled:opacity-50 disabled:cursor-wait"
+                    >
+                      Cancel
                     </button>
 
                     <p className="text-center text-[10px] text-white/30 flex items-center justify-center gap-1.5">
