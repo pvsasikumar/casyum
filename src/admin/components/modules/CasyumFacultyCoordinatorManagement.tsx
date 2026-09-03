@@ -137,8 +137,16 @@ export const CasyumFacultyCoordinatorManagement: React.FC = () => {
     setLoading(true);
     try {
       const res = await listCasyumFacultyCoordinators();
+      console.log('[CASYUM DEBUG] faculty coordinators query succeeded:', res.members.length, 'documents');
       setMembers(res.members);
-    } catch {
+    } catch (error: any) {
+      console.error('[CASYUM DEBUG] CASYUM Faculty Coordinators fetch failed:', {
+        code: error?.code || error?.name || 'unknown',
+        message: error?.message || String(error),
+        collection: 'users',
+        query: 'casyumFacultyCoordinators',
+        function: 'listCasyumFacultyCoordinators',
+      });
       setMembers([]);
     } finally {
       setLoading(false);

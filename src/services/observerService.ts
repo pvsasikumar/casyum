@@ -113,10 +113,13 @@ async function logActivity(entry: {
 export async function listObservers(params?: { status?: string; search?: string }): Promise<{ observers: Observer[] }> {
   const db = getDb();
   const snap = await getDocs(collection(db, 'users'));
+  console.log('[CASYUM DEBUG] users query succeeded:', snap.docs.length, 'documents');
   let observers = snap.docs
     .map((d) => ({ id: d.id, ...d.data() }) as UserRecord)
     .filter((r) => isObserverRecord(r))
     .map(mapObserverRecord);
+  console.log('[CASYUM DEBUG] users before observer filter:', snap.docs.length);
+  console.log('[CASYUM DEBUG] after observer role filter:', observers.length);
 
   if (params?.status && params.status !== 'All') {
     observers = observers.filter((m) => m.status === params.status);

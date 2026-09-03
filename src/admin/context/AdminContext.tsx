@@ -218,8 +218,16 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const refreshCoordinators = useCallback(async () => {
     try {
       const res = await api.coordinator.list();
+      console.log('[CASYUM DEBUG] coordinators query succeeded:', res.coordinators.length, 'documents');
       setCoordinators(res.coordinators);
-    } catch {
+    } catch (error: any) {
+      console.error('[CASYUM DEBUG] Coordinators fetch failed:', {
+        code: error?.code || error?.name || 'unknown',
+        message: error?.message || String(error),
+        collection: 'users',
+        query: 'coordinators',
+        function: 'refreshCoordinators',
+      });
       setCoordinators([]);
     }
   }, []);
@@ -314,8 +322,16 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const refreshParticipants = useCallback(async () => {
     try {
       const res = await api.participant.list();
+      console.log('[CASYUM DEBUG] participants query succeeded:', res.participants.length, 'documents');
       setParticipants((res.participants || []).map(mapDbParticipantToItem));
-    } catch {
+    } catch (error: any) {
+      console.error('[CASYUM DEBUG] Participants fetch failed:', {
+        code: error?.code || error?.name || 'unknown',
+        message: error?.message || String(error),
+        collection: 'participants, registrations',
+        query: 'participants',
+        function: 'refreshParticipants',
+      });
       setParticipants([]);
     }
   }, [mapDbParticipantToItem]);

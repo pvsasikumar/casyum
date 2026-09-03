@@ -86,9 +86,12 @@ async function mapCoordinatorRecord(record: UserRecord): Promise<any> {
 export async function listCoordinators(params?: { status?: string; search?: string }): Promise<{ coordinators: any[] }> {
   const db = getDb();
   const snap = await getDocs(collection(db, 'users'));
+  console.log('[CASYUM DEBUG] users query succeeded:', snap.docs.length, 'documents');
   const records = snap.docs
     .map((d) => ({ id: d.id, ...d.data() }) as UserRecord)
     .filter((r) => isCoordinatorRecord(r));
+  console.log('[CASYUM DEBUG] users before coordinator filter:', snap.docs.length);
+  console.log('[CASYUM DEBUG] after coordinator role filter:', records.length);
 
   let rows = await Promise.all(records.map(mapCoordinatorRecord));
 

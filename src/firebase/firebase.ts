@@ -33,6 +33,7 @@ export function getFirebaseApp(): FirebaseApp {
       throw configError;
     }
     app = initializeApp(firebaseConfig);
+    console.log('[CASYUM DEBUG] Firebase initialized — projectId:', firebaseConfig.projectId);
   }
   return app;
 }

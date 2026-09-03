@@ -118,10 +118,13 @@ export async function listCasyumFacultyCoordinators(params?: {
 }): Promise<{ members: CasyumFacultyCoordinator[] }> {
   const db = getDb();
   const snap = await getDocs(collection(db, 'users'));
+  console.log('[CASYUM DEBUG] users query succeeded:', snap.docs.length, 'documents');
   let members = snap.docs
     .map((d) => ({ id: d.id, ...d.data() }) as UserRecord)
     .filter((r) => isCasyumFacultyRecord(r))
     .map(mapMemberRecord);
+  console.log('[CASYUM DEBUG] users before faculty filter:', snap.docs.length);
+  console.log('[CASYUM DEBUG] after faculty role filter:', members.length);
 
   if (params?.status && params.status !== 'All') {
     members = members.filter((m) => m.status === params.status);

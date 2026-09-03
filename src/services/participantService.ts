@@ -582,11 +582,13 @@ export async function register(data: {
 export async function list(params?: { search?: string; status?: string }): Promise<{ participants: any[] }> {
   const db = getDb();
   const snap = await getDocs(collection(db, 'participants'));
+  console.log('[CASYUM DEBUG] participants query succeeded:', snap.docs.length, 'documents');
   const records = snap.docs.map(
     (d) => ({ id: d.id, ...d.data() }) as ParticipantRecord
   );
 
   const regSnap = await getDocs(collection(db, 'registrations'));
+  console.log('[CASYUM DEBUG] registrations query succeeded:', regSnap.docs.length, 'documents');
   const regsByParticipant: Record<string, any[]> = {};
   regSnap.docs.forEach((d) => {
     const data = d.data();
@@ -615,6 +617,7 @@ export async function list(params?: { search?: string; status?: string }): Promi
   }
 
   rows.sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
+  console.log('[CASYUM DEBUG] final participants after merge/filter:', rows.length);
   return { participants: rows };
 }
 

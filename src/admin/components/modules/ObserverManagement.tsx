@@ -129,8 +129,16 @@ export const ObserverManagement: React.FC = () => {
     setLoading(true);
     try {
       const res = await listObservers();
+      console.log('[CASYUM DEBUG] observers query succeeded:', res.observers.length, 'documents');
       setObservers(res.observers);
-    } catch {
+    } catch (error: any) {
+      console.error('[CASYUM DEBUG] Observers fetch failed:', {
+        code: error?.code || error?.name || 'unknown',
+        message: error?.message || String(error),
+        collection: 'users',
+        query: 'observers',
+        function: 'listObservers',
+      });
       setObservers([]);
     } finally {
       setLoading(false);
