@@ -28,10 +28,6 @@ export const Events: React.FC<EventsProps> = ({ content, sections }) => {
 
   const kicker = content?.kicker || 'Challenge Yourself';
   const title = content?.title || 'Arena of Battles';
-  const description =
-    content?.description ||
-    'Participate in multiple categories and compete with peers nationwide to win cash prizes and recognition. Hover over the bento cards to activate stars, 3D tilt, magnetism, and global spotlighting.';
-
   const [events, setEvents] = useState<PublicEvent[] | null>(null);
   const [error, setError] = useState('');
   const [retryKey, setRetryKey] = useState(0);
@@ -60,14 +56,11 @@ export const Events: React.FC<EventsProps> = ({ content, sections }) => {
       <div className="max-w-6xl w-full mx-auto relative z-10 flex flex-col gap-12">
         {/* Header */}
         {showHeader && (
-          <div className="text-center max-w-2xl mx-auto flex flex-col gap-4">
+          <div className="text-center max-w-2xl mx-auto flex flex-col gap-2">
             <span className="text-xs font-bold tracking-[0.3em] text-violet-400 uppercase">{kicker}</span>
             <h2 className="text-3xl sm:text-5xl font-extrabold tracking-tight font-display text-gradient">
               {title}
             </h2>
-            <p className="text-white/50 text-sm sm:text-base">
-              {description}
-            </p>
           </div>
         )}
 

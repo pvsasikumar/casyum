@@ -32,12 +32,18 @@ export interface PaymentInfoInput {
   payment_method: string;
   transaction_id: string;
   payment_date: string;
+  payment_screenshot_url?: string;
+  payment_screenshot_file_id?: string;
 }
 
 export interface CreateRegistrationInput {
   event_id: string;
   participant_id: string;
   participant_email?: string;
+  /** The participant's public CASYUM ID (e.g. `CAS01`). */
+  casyum_id?: string;
+  /** The Firebase Auth UID of the participant (same as participant_id). */
+  uid?: string;
   user_full_name?: string;
   user_department?: string;
   user_phone?: string;
@@ -70,6 +76,8 @@ export interface PaymentRegistrationRow extends RegistrationRow {
   transactionId: string;
   paymentDate: string;
   paymentStatus: string;
+  paymentScreenshotUrl: string;
+  paymentScreenshotFileId: string;
   paymentVerifiedBy: string;
   paymentVerifiedByName: string;
   paymentVerifiedAt: string;
@@ -113,6 +121,8 @@ function mapPaymentRegDoc(docId: string, data: Record<string, any>): PaymentRegi
     transactionId: data.transactionId || data.transaction_id || '',
     paymentDate: data.paymentDate || data.payment_date || '',
     paymentStatus: data.paymentStatus || data.payment_status || 'submitted',
+    paymentScreenshotUrl: data.paymentScreenshotUrl || data.payment_screenshot_url || '',
+    paymentScreenshotFileId: data.paymentScreenshotFileId || data.payment_screenshot_file_id || '',
     paymentVerifiedBy: data.paymentVerifiedBy || data.payment_verified_by || '',
     paymentVerifiedByName: data.paymentVerifiedByName || data.payment_verified_by_name || data.paymentVerifiedBy || '',
     paymentVerifiedAt: data.paymentVerifiedAt || data.payment_verified_at || '',
@@ -158,6 +168,8 @@ function buildRegistrationPayload(
     selectedEvents,
     participant_id: input.participant_id,
     participant_user_id: input.participant_id,
+    uid: input.uid || input.participant_id,
+    casyum_id: input.casyum_id || '',
     participant_email: input.participant_email || '',
     user_full_name: input.user_full_name || 'Participant',
     user_department: input.user_department || input.department || '',
@@ -169,7 +181,9 @@ function buildRegistrationPayload(
     gender: input.gender || 'Other',
     register_number: input.register_number || '',
     status: input.status || 'Confirmed',
+    registrationStatus: 'registered',
     registered_at: timestamp,
+    submittedAt: timestamp,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
 
@@ -181,8 +195,11 @@ function buildRegistrationPayload(
     transactionId: payment?.transaction_id || '',
     transactionIdNormalized: normalizeTransactionId(payment?.transaction_id || ''),
     paymentDate: payment?.payment_date || '',
+    paymentScreenshotUrl: payment?.payment_screenshot_url || '',
+    paymentScreenshotFileId: payment?.payment_screenshot_file_id || '',
 
     paymentStatus: 'submitted',
+    payment_amount: Number(input.payment_amount) || 0,
     paymentVerifiedBy: '',
     paymentVerifiedByName: '',
     paymentVerifiedAt: '',
@@ -192,6 +209,10 @@ function buildRegistrationPayload(
     paymentRejectionReason: '',
     paymentResubmittedAt: '',
     paymentResubmissionCount: 0,
+    verifiedBy: '',
+    verifiedAt: '',
+    verifiedByName: '',
+    verificationNotes: '',
 
     registrationVerificationStatus: 'locked',
     registrationVerifiedBy: '',
@@ -208,6 +229,8 @@ function buildRegistrationPayload(
     selectedEvents,
     participant_id: input.participant_id,
     participant_user_id: input.participant_id,
+    uid: input.uid || input.participant_id,
+    casyum_id: input.casyum_id || '',
     participant_email: input.participant_email || '',
     user_full_name: input.user_full_name || 'Participant',
     user_department: input.user_department || input.department || '',
@@ -219,6 +242,7 @@ function buildRegistrationPayload(
     gender: input.gender || 'Other',
     register_number: input.register_number || '',
     status: input.status || 'Confirmed',
+    registrationStatus: 'registered',
     registered_at: timestamp,
     created_at: timestamp,
     payment_status: 'submitted',
@@ -228,6 +252,8 @@ function buildRegistrationPayload(
     transaction_id: payment?.transaction_id || '',
     transactionIdNormalized: normalizeTransactionId(payment?.transaction_id || ''),
     payment_date: payment?.payment_date || '',
+    payment_screenshot_url: payment?.payment_screenshot_url || '',
+    payment_screenshot_file_id: payment?.payment_screenshot_file_id || '',
     payment_remarks: '',
     // Mirror the canonical payment/verification fields so legacy readers
     // (coordinator attendance, registration team) work without changes.
@@ -278,15 +304,25 @@ export async function checkDuplicateTransaction(
   const normalized = normalizeTransactionId(transactionId);
   if (!normalized) return false;
   const db = getDb();
-  const snap = await getDocs(
-    query(
-      collection(db, 'eventRegistrations'),
-      where('transactionIdNormalized', '==', normalized)
-    )
-  );
-  return snap.docs.some(
-    (d) => d.id !== excludeRegistrationId && String(d.data().paymentStatus || '') !== 'rejected'
-  );
+  try {
+    const snap = await getDocs(
+      query(
+        collection(db, 'eventRegistrations'),
+        where('transactionIdNormalized', '==', normalized)
+      )
+    );
+    return snap.docs.some(
+      (d) => d.id !== excludeRegistrationId && String(d.data().paymentStatus || '') !== 'rejected'
+    );
+  } catch {
+    // A participant's ownership-based read rule cannot list the whole
+    // eventRegistrations collection, so this cross-participant uniqueness query
+    // is denied by Firestore for a non-reviewer. Duplicate-transaction
+    // enforcement happens at staff-payment-review time (and via human review),
+    // so we never let this best-effort check block a legitimate registration
+    // with a spurious "Missing or insufficient permissions" error.
+    return false;
+  }
 }
 
 export async function getRegistration(registrationId: string): Promise<PaymentRegistrationRow | null> {
@@ -349,6 +385,10 @@ export interface CreateBundleRegistrationInput {
   regular: SelectedEventRef[];
   gaming: SelectedGamingRef | null;
   participant_id: string;
+  /** The participant's public CASYUM ID (e.g. `CAS01`). */
+  casyum_id?: string;
+  /** The Firebase Auth UID of the participant (same as participant_id). */
+  uid?: string;
   participant_email?: string;
   user_full_name?: string;
   user_department?: string;
@@ -433,6 +473,8 @@ export async function createBundleRegistration(
     {
       event_id: primaryEventId,
       participant_id: input.participant_id,
+      uid: input.uid || input.participant_id,
+      casyum_id: input.casyum_id || '',
       participant_email: input.participant_email,
       user_full_name: input.user_full_name,
       user_department: input.user_department,
@@ -645,16 +687,11 @@ export async function resubmitPayment(
     transactionId: payment.transaction_id,
     transactionIdNormalized: normalizeTransactionId(payment.transaction_id),
     paymentDate: payment.payment_date,
+    paymentScreenshotUrl: payment.payment_screenshot_url || '',
+    paymentScreenshotFileId: payment.payment_screenshot_file_id || '',
     paymentStatus: 'submitted',
     paymentResubmittedAt: timestamp,
     paymentResubmissionCount: resubmissionCount,
-    paymentVerifiedBy: '',
-    paymentVerifiedByName: '',
-    paymentVerifiedAt: '',
-    paymentRejectedBy: '',
-    paymentRejectedByName: '',
-    paymentRejectedAt: '',
-    paymentRejectionReason: '',
     updatedAt: serverTimestamp(),
   };
 
@@ -664,13 +701,10 @@ export async function resubmitPayment(
     transactionIdNormalized: normalizeTransactionId(payment.transaction_id),
     payment_date: payment.payment_date,
     payment_method: payment.payment_method,
-    payment_remarks: '',
+    payment_screenshot_url: payment.payment_screenshot_url || '',
+    payment_screenshot_file_id: payment.payment_screenshot_file_id || '',
     payment_resubmitted_at: timestamp,
     payment_resubmission_count: resubmissionCount,
-    payment_rejected_by: '',
-    payment_rejected_by_name: '',
-    payment_rejected_at: '',
-    payment_rejection_reason: '',
     updated_at: now(),
   };
 

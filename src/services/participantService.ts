@@ -97,6 +97,9 @@ function mapParticipantRow(
       event_name: registrationEventNames(r).join(', ') || events[r.event_id]?.name || '',
       selectedEvents: r.selectedEvents || null,
       status: r.status,
+      registration_status: r.registrationStatus || 'registered',
+      submitted_at: r.submittedAt || r.registered_at || '',
+      casyum_id: r.casyum_id || record.casyum_id || '',
       registered_at: r.registered_at,
       payment_status: r.payment_status,
       payment_amount: r.payment_amount,
@@ -201,6 +204,8 @@ export interface RegisterPaymentInput {
   payment_method: string;
   transaction_id: string;
   payment_date?: string;
+  payment_screenshot_url?: string;
+  payment_screenshot_file_id?: string;
 }
 
 export async function registerEvent(
@@ -261,6 +266,8 @@ export async function registerEvent(
   await createRegistration({
     event_id: id,
     participant_id: user.uid,
+    uid: user.uid,
+    casyum_id: record.casyum_id || '',
     participant_email: record.email,
     user_full_name: record.full_name,
     user_department: record.department,
@@ -279,6 +286,8 @@ export async function registerEvent(
       payment_method: payment.payment_method,
       transaction_id: payment.transaction_id,
       payment_date: payment.payment_date || '',
+      payment_screenshot_url: payment.payment_screenshot_url || '',
+      payment_screenshot_file_id: payment.payment_screenshot_file_id || '',
     },
   });
 
@@ -410,6 +419,8 @@ export async function registerEventBundle(
     regular,
     gaming,
     participant_id: user.uid,
+    uid: user.uid,
+    casyum_id: record.casyum_id || '',
     participant_email: record.email,
     user_full_name: record.full_name,
     user_department: record.department,
@@ -424,6 +435,8 @@ export async function registerEventBundle(
       payment_method: payment.payment_method,
       transaction_id: payment.transaction_id,
       payment_date: payment.payment_date || '',
+      payment_screenshot_url: payment.payment_screenshot_url || '',
+      payment_screenshot_file_id: payment.payment_screenshot_file_id || '',
     },
   });
 
@@ -462,6 +475,8 @@ export async function resubmitRegistrationPayment(
     payment_method: payment.payment_method,
     transaction_id: payment.transaction_id,
     payment_date: payment.payment_date || '',
+    payment_screenshot_url: payment.payment_screenshot_url || '',
+    payment_screenshot_file_id: payment.payment_screenshot_file_id || '',
   });
   return res;
 }

@@ -58,6 +58,14 @@ export interface RegistrationRow {
   event_id: string;
   participant_id: string;
   participant_user_id: string;
+  /** The participant's public CASYUM ID (e.g. `CAS01`). */
+  casyum_id?: string;
+  /** The Firebase Auth UID of the participant. */
+  uid?: string;
+  /** Registration lifecycle status (e.g. `registered`). */
+  registrationStatus?: string;
+  /** ISO timestamp of when the registration was submitted. */
+  submittedAt?: string;
   participant_email: string;
   user_full_name: string;
   user_department: string;
@@ -103,6 +111,11 @@ export interface RegistrationRow {
   registration_verified_at?: string;
   attendance_eligibility?: boolean;
   attendance_status?: string;
+  /** Who verified the payment (from the participant-facing view). */
+  verified_by?: string;
+  verified_at?: string;
+  verified_by_name?: string;
+  verification_notes?: string;
 }
 
 export function mapEventDoc(docId: string, data: Record<string, any>): EventRow {
@@ -156,6 +169,10 @@ function mapRegDoc(docId: string, data: Record<string, any>): RegistrationRow {
     gaming_fee: Number(data.gaming_fee ?? data.gamingFee) || 0,
     participant_id: data.participant_id || '',
     participant_user_id: data.participant_user_id || data.participant_id || data.participant_email || docId,
+    casyum_id: data.casyum_id || '',
+    uid: data.uid || data.participant_user_id || data.participant_id || '',
+    registrationStatus: data.registrationStatus || data.registration_status || (data.status === 'Confirmed' ? 'registered' : data.status || 'registered'),
+    submittedAt: data.submittedAt || data.submitted_at || data.registered_at || data.created_at || '',
     participant_email: data.participant_email || '',
     user_full_name: data.user_full_name || data.participant_name || 'Participant',
     user_department: data.user_department || data.department || '',
@@ -194,6 +211,10 @@ function mapRegDoc(docId: string, data: Record<string, any>): RegistrationRow {
     registration_verified_at: data.registration_verified_at || data.registrationVerifiedAt || '',
     attendance_eligibility: data.attendanceEligibility === true || data.attendance_eligibility === true,
     attendance_status: data.attendance_status || data.attendanceStatus || 'not_marked',
+    verified_by: data.verifiedBy || data.paymentVerifiedBy || data.payment_verified_by || '',
+    verified_at: data.verifiedAt || data.paymentVerifiedAt || data.payment_verified_at || '',
+    verified_by_name: data.verifiedByName || data.paymentVerifiedByName || data.payment_verified_by_name || '',
+    verification_notes: data.verificationNotes || data.paymentRejectionReason || data.payment_rejection_reason || '',
   };
 }
 

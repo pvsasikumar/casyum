@@ -5,8 +5,10 @@ import {
   uploadBytesResumable,
   type UploadTask,
 } from 'firebase/storage';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { isFirebaseConfigured, isStorageConfigured } from '../firebase/firebase';
 import { getFirebaseStorage } from '../firebase/storage';
+import { getDb } from '../firebase/firestore';
 
 /**
  * Event-wise Rule Book service.
@@ -202,4 +204,109 @@ export function formatRuleBookDate(iso?: string): string {
     month: 'long',
     year: 'numeric',
   });
+}
+
+// ---------------------------------------------------------------------------
+// Global CASYUM Rule Book (single PDF for the entire event)
+// ---------------------------------------------------------------------------
+
+export interface GlobalRuleBookInfo {
+  url: string;
+  fileName: string;
+  version: string;
+  updatedAt: string;
+  updatedBy: string;
+  visible: boolean;
+}
+
+const GLOBAL_RULE_BOOK_DOC = 'ruleBook';
+
+function globalRuleBookRef() {
+  return doc(getDb(), 'settings', GLOBAL_RULE_BOOK_DOC);
+}
+
+/** Read the global CASYUM Rule Book settings from Firestore. */
+export async function fetchGlobalRuleBook(): Promise<GlobalRuleBookInfo> {
+  const defaults: GlobalRuleBookInfo = {
+    url: '',
+    fileName: '',
+    version: '',
+    updatedAt: '',
+    updatedBy: '',
+    visible: true,
+  };
+  try {
+    const snap = await getDoc(globalRuleBookRef());
+    if (!snap.exists()) return defaults;
+    const d = snap.data();
+    return {
+      url: String(d.url || ''),
+      fileName: String(d.fileName || ''),
+      version: String(d.version || ''),
+      updatedAt: String(d.updatedAt || ''),
+      updatedBy: String(d.updatedBy || ''),
+      visible: d.visible !== false,
+    };
+  } catch {
+    return defaults;
+  }
+}
+
+/** Save the global CASYUM Rule Book settings to Firestore. */
+export async function saveGlobalRuleBook(data: Partial<GlobalRuleBookInfo>): Promise<void> {
+  await setDoc(globalRuleBookRef(), data, { merge: true });
+}
+
+/**
+ * Upload the single CASYUM Rule Book PDF to Firebase Storage under
+ * `settings/ruleBook/`. Requires Firebase Storage to be configured.
+ */
+export async function uploadGlobalRuleBook(
+  file: File,
+  options: UploadRuleBookOptions = {}
+): Promise<UploadRuleBookResult> {
+  if (!isRuleBookConfigured()) {
+    throw new Error(
+      'Firebase Storage is not configured. Paste a Rule Book path from the public/rulebooks folder (e.g. /rulebooks/casyum-rulebook.pdf) instead.'
+    );
+  }
+  const validated = validateRuleBookFile(file);
+  const storage = getFirebaseStorage();
+  const timestamp = Date.now();
+  const safeName = (options.name ? sanitizeRuleBookFileName(options.name) : validated.name).replace(/\.pdf$/i, '');
+  const path = `settings/ruleBook/${safeName}-${timestamp}.pdf`;
+  const fileRef = ref(storage, path);
+
+  const upload = (): Promise<string> =>
+    new Promise<string>((resolve, reject) => {
+      const task: UploadTask = uploadBytesResumable(fileRef, file, {
+        contentType: validated.type,
+      });
+      task.on(
+        'state_changed',
+        (snap) => {
+          const pct = snap.totalBytes > 0 ? Math.round((snap.bytesTransferred / snap.totalBytes) * 100) : 0;
+          options.onProgress?.(Math.min(100, Math.max(0, pct)));
+        },
+        (error) => reject(error),
+        () => {
+          options.onProgress?.(100);
+          getDownloadURL(task.snapshot.ref).then(resolve).catch(reject);
+        }
+      );
+    });
+
+  const url = await upload();
+
+  return {
+    url,
+    path,
+    fileName: validated.name,
+    contentType: validated.type,
+    size: file.size,
+    uploadedAt: new Date(timestamp).toISOString(),
+    version: options.version,
+    updatedAt: new Date(timestamp).toISOString(),
+    updatedBy: options.updatedBy,
+  };
 }

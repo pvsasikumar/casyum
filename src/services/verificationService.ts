@@ -369,6 +369,8 @@ export interface VerificationParticipantRow {
   profilePicture: string;
   payment_status: string;
   payment_verified: boolean;
+  payment_screenshot_url: string;
+  payment_screenshot_file_id: string;
   event_ids: string[];
   registrationId: string;
   eventNames: string[];
@@ -437,6 +439,8 @@ function mapVerificationParticipant(
     profilePicture: data.profile_picture || data.photo || '',
     payment_status: regPaymentStatuses[0] || data.payment_status || 'submitted',
     payment_verified: paymentVerified,
+    payment_screenshot_url: data.payment_screenshot_url || '',
+    payment_screenshot_file_id: data.payment_screenshot_file_id || '',
     event_ids: eventIds,
     registrationId: registration?.registration_id || data.registration_id || '',
     eventNames,

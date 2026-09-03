@@ -8,6 +8,7 @@ import {
   Search,
   AlertCircle,
   History,
+  Image,
 } from 'lucide-react';
 import { verifyPayment, rejectPayment, type PaymentRegistrationRow } from '../../services/registrationService';
 import {
@@ -271,6 +272,20 @@ export const PaymentVerificationPage: React.FC = () => {
                               )}
                             </div>
                           )}
+                          {r.paymentScreenshotUrl && (
+                            <div className="flex items-center justify-between border-t border-white/10 pt-2 mt-1">
+                              <span className="text-white/50">Payment Screenshot</span>
+                              <a
+                                href={r.paymentScreenshotUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center gap-1.5 text-sky-400 hover:text-sky-300 font-bold transition-colors"
+                              >
+                                <Image className="w-3 h-3" />
+                                View Screenshot
+                              </a>
+                            </div>
+                          )}
                         </div>
                       </td>
                       <td className="p-4">
@@ -319,6 +334,17 @@ export const PaymentVerificationPage: React.FC = () => {
                       </td>
                       <td className="p-4 text-right">
                         <div className="flex items-center justify-end gap-1.5">
+                          {r.paymentScreenshotUrl && (
+                            <a
+                              href={r.paymentScreenshotUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              title="View payment screenshot"
+                              className="p-1.5 rounded-lg bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 cursor-pointer"
+                            >
+                              <Image className="w-3.5 h-3.5" />
+                            </a>
+                          )}
                           {r.paymentStatus !== 'verified' && (
                             <button
                               title="Verify payment"

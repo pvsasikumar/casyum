@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { IntroVideo } from './components/IntroVideo';
-import { Navbar } from './components/Navbar';
 import { Hero } from './components/Hero';
 import { About } from './components/About';
 import { Events } from './components/Events';
@@ -112,17 +111,6 @@ function PublicSiteContent() {
 
   return (
     <div className="relative min-h-screen bg-black text-white selection:bg-violet-500/30 selection:text-violet-200">
-      <motion.div
-        initial={{ opacity: 0, y: -20 }}
-        animate={startAnimation ? { opacity: 1, y: 0 } : { opacity: 0, y: -20 }}
-        transition={{ duration: 0.8, ease: 'easeOut' }}
-        className="fixed top-0 left-0 w-full z-40 pointer-events-none overflow-visible"
-      >
-        <div className="pointer-events-auto">
-          <Navbar />
-        </div>
-      </motion.div>
-
       <AnimatePresence mode="wait">
         {showIntro && (
           <motion.div

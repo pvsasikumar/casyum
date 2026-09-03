@@ -22,6 +22,7 @@ import {
   Users,
   ChevronLeft,
   ChevronRight,
+  Image,
 } from 'lucide-react';
 import { useRegistrationTeam } from '../context/RegistrationTeamContext';
 import { QRScanner } from '../../components/scanner/QRScanner';
@@ -140,6 +141,8 @@ function rowFromProfile(profile: ScannedParticipant): VerificationParticipantRow
     profilePicture: profile.profilePicture,
     payment_status: profile.paymentStatus,
     payment_verified: profile.paymentVerified,
+    payment_screenshot_url: profile.payment_screenshot_url || '',
+    payment_screenshot_file_id: profile.payment_screenshot_file_id || '',
     event_ids: profile.eventIds,
     registrationId: profile.registrationId,
     eventNames: profile.eventNames,
@@ -737,6 +740,20 @@ export const VerifyParticipantPage: React.FC = () => {
                   value={selected.payment_status || 'Pending'}
                   valueClass={paymentClass(selected.payment_status)}
                 />
+                {selected.payment_screenshot_url && (
+                  <div className="flex items-center gap-2.5 text-xs mt-1">
+                    <Image className="w-3.5 h-3.5 text-white/40 shrink-0" />
+                    <span className="text-white/40 w-28 shrink-0">Screenshot</span>
+                    <a
+                      href={selected.payment_screenshot_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sky-400 hover:text-sky-300 font-bold transition-colors"
+                    >
+                      View Payment Screenshot
+                    </a>
+                  </div>
+                )}
               </div>
 
               {selected.verificationStatus === 'Verified' && (

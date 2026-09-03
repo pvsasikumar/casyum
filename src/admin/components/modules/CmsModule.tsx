@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   BookOpen,
-  CalendarDays,
   Eye,
   EyeOff,
   FileText,
@@ -10,6 +9,9 @@ import {
   Loader2,
   Pencil,
   RefreshCw,
+  UploadCloud,
+  Trash2,
+  ExternalLink,
 } from 'lucide-react';
 import { useAdmin } from '../../context/AdminContext';
 import { useRBAC } from '../../../rbac/context/RBACContext';
@@ -17,26 +19,34 @@ import {
   CMS_PAGE_IDS,
   CMS_PAGE_LABELS,
   formatCmsTimestamp,
-  fetchRuleBookVisible,
   setCmsNavVisibility,
   setCmsPageVisibility,
-  setRuleBookVisibility,
   subscribeCmsDraftInfo,
   subscribeCmsPages,
   type CmsEditor,
   type CmsSitePageId,
   type ResolvedCmsPage,
 } from '../../../services/cmsService';
-import type { EventItem } from '../../types';
+import {
+  fetchGlobalRuleBook,
+  saveGlobalRuleBook,
+  uploadGlobalRuleBook,
+  deleteRuleBookFile,
+  isRuleBookConfigured,
+  validateRuleBookFile,
+  formatRuleBookDate,
+  type GlobalRuleBookInfo,
+} from '../../../services/ruleBookService';
+import { isStorageConfigured } from '../../../firebase/firebase';
 import { CmsPageEditor } from './CmsPageEditor';
 import { CmsPreviewPane } from './CmsPreviewPane';
 
-type CmsTab = 'pages' | 'navigation' | 'events';
+type CmsTab = 'pages' | 'navigation' | 'rulebook';
 
 const TABS: Array<{ key: CmsTab; label: string; icon: typeof Globe }> = [
   { key: 'pages', label: 'Pages', icon: LayoutDashboard },
   { key: 'navigation', label: 'Navigation', icon: Globe },
-  { key: 'events', label: 'Events & Rule Books', icon: BookOpen },
+  { key: 'rulebook', label: 'Rule Book', icon: BookOpen },
 ];
 
 interface CmsModuleProps {
@@ -129,7 +139,7 @@ export const CmsModule: React.FC<CmsModuleProps> = ({ canEdit }) => {
           </span>
           <h2 className="text-xl sm:text-2xl font-extrabold font-display text-white mt-0.5">Website CMS</h2>
           <p className="text-[11px] text-white/40 mt-1">
-            Manage the public website's pages, navigation and rule books — no code changes required.
+            Manage the public website's pages, navigation and the global CASYUM Rule Book — no code changes required.
           </p>
         </div>
         {/* Tabs */}
@@ -250,7 +260,7 @@ export const CmsModule: React.FC<CmsModuleProps> = ({ canEdit }) => {
         />
       )}
 
-      {tab === 'events' && <EventsRuleBooksTab canEdit={canModify} editor={editor} />}
+      {tab === 'rulebook' && <GlobalRuleBookTab canEdit={canModify} editor={editor} />}
 
       {previewPageId && pages[previewPageId] && (
         <CmsPreviewPane
@@ -360,163 +370,342 @@ const NavigationTab: React.FC<NavigationTabProps> = ({ pages, loading, canEdit, 
 };
 
 /* ------------------------------------------------------------------ */
-/* Events & Rule Books                                                 */
+/* Global Rule Book Management                                         */
 /* ------------------------------------------------------------------ */
 
-interface EventsRuleBooksTabProps {
+interface GlobalRuleBookTabProps {
   canEdit: boolean;
   editor: CmsEditor;
 }
 
-const EventsRuleBooksTab: React.FC<EventsRuleBooksTabProps> = ({ canEdit, editor }) => {
-  const { events, openEventOverview, addToast, logAction } = useAdmin();
-  const [visibilityMap, setVisibilityMap] = useState<Record<string, boolean>>({});
+const GlobalRuleBookTab: React.FC<GlobalRuleBookTabProps> = ({ canEdit, editor }) => {
+  const { addToast, logAction } = useAdmin();
+  const [ruleBook, setRuleBook] = useState<GlobalRuleBookInfo | null>(null);
   const [loading, setLoading] = useState(true);
-  const [busyId, setBusyId] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [ruleBookFile, setRuleBookFile] = useState<File | null>(null);
+  const [uploadError, setUploadError] = useState('');
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploading, setUploading] = useState(false);
+  const [storageConfigured] = useState<boolean>(() => isStorageConfigured);
 
   useEffect(() => {
     let alive = true;
     void (async () => {
-      const entries = await Promise.all(
-        events.map(async (event: EventItem) => {
-          try {
-            return [String(event.id), await fetchRuleBookVisible(String(event.id))] as const;
-          } catch {
-            return [String(event.id), true] as const;
-          }
-        })
-      );
-      if (!alive) return;
-      setVisibilityMap(Object.fromEntries(entries));
-      setLoading(false);
+      try {
+        const info = await fetchGlobalRuleBook();
+        if (alive) setRuleBook(info);
+      } catch {
+        // keep defaults
+      } finally {
+        if (alive) setLoading(false);
+      }
     })();
-    return () => {
-      alive = false;
-    };
-  }, [events]);
+    return () => { alive = false; };
+  }, []);
 
-  const handleToggle = async (event: EventItem) => {
-    const id = String(event.id);
-    const current = visibilityMap[id] ?? true;
-    setBusyId(id);
+  const handleFileSelect = (file: File | null) => {
+    setUploadError('');
+    if (!file) { setRuleBookFile(null); return; }
     try {
-      await setRuleBookVisibility(id, !current, editor);
-      setVisibilityMap((prev) => ({ ...prev, [id]: !current }));
-      logAction(
-        current ? 'Rule Book Hidden' : 'Rule Book Shown',
-        `The rule book for "${event.name}" is now ${current ? 'hidden from' : 'visible on'} the event details page.`
-      );
-      addToast(
-        current ? 'Rule Book Hidden' : 'Rule Book Visible',
-        `Visitors ${current ? 'can no longer see' : 'can now see'} the "${event.name}" rule book.`,
-        current ? 'warning' : 'success'
-      );
+      validateRuleBookFile(file);
+      setRuleBookFile(file);
     } catch (err) {
-      addToast('Error', err instanceof Error ? err.message : 'Failed to update rule book visibility.', 'error');
-    } finally {
-      setBusyId(null);
+      setUploadError(err instanceof Error ? err.message : 'Invalid file.');
+      setRuleBookFile(null);
     }
   };
 
-  if (!events.length) {
+  const handleUpload = async () => {
+    if (!ruleBookFile || uploading) return;
+    setUploadError('');
+    setUploading(true);
+    setUploadProgress(0);
+    try {
+      if (isRuleBookConfigured() && storageConfigured) {
+        const result = await uploadGlobalRuleBook(ruleBookFile, {
+          name: 'casyum-rulebook',
+          version: ruleBook?.version || 'v1',
+          updatedBy: editor.name || 'Admin',
+          onProgress: setUploadProgress,
+        });
+        const updated: GlobalRuleBookInfo = {
+          url: result.url,
+          fileName: result.fileName,
+          version: result.version || ruleBook?.version || 'v1',
+          updatedAt: result.updatedAt || new Date().toISOString(),
+          updatedBy: editor.name || 'Admin',
+          visible: ruleBook?.visible ?? true,
+        };
+        await saveGlobalRuleBook(updated);
+        setRuleBook(updated);
+        logAction('Rule Book Updated', `CASYUM Rule Book PDF uploaded: ${result.fileName}`);
+        addToast('Rule Book Updated', 'The CASYUM Rule Book PDF has been uploaded successfully.', 'success');
+      } else {
+        const safeName = `casyum-rulebook.pdf`;
+        setUploadError(
+          `Firebase Storage is not configured. Copy "${ruleBookFile.name}" into public/rulebooks/ as "${safeName}", then save manually.`
+        );
+      }
+      setRuleBookFile(null);
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : 'Upload failed.');
+    } finally {
+      setUploading(false);
+      setUploadProgress(0);
+    }
+  };
+
+  const handleRemove = async () => {
+    if (!ruleBook?.url) return;
+    setSaving(true);
+    try {
+      await deleteRuleBookFile(ruleBook.url);
+      const updated: GlobalRuleBookInfo = {
+        url: '',
+        fileName: '',
+        version: '',
+        updatedAt: new Date().toISOString(),
+        updatedBy: editor.name || 'Admin',
+        visible: ruleBook.visible,
+      };
+      await saveGlobalRuleBook(updated);
+      setRuleBook(updated);
+      logAction('Rule Book Removed', 'The CASYUM Rule Book PDF has been removed.');
+      addToast('Rule Book Removed', 'The Rule Book PDF has been removed.', 'warning');
+    } catch (err) {
+      addToast('Error', err instanceof Error ? err.message : 'Failed to remove Rule Book.', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleVisibilityToggle = async () => {
+    if (!ruleBook) return;
+    setSaving(true);
+    try {
+      const newVisible = !ruleBook.visible;
+      await saveGlobalRuleBook({ visible: newVisible });
+      setRuleBook({ ...ruleBook, visible: newVisible });
+      logAction(
+        newVisible ? 'Rule Book Visible' : 'Rule Book Hidden',
+        `The CASYUM Rule Book is now ${newVisible ? 'visible on' : 'hidden from'} all event details pages.`
+      );
+      addToast(
+        newVisible ? 'Rule Book Visible' : 'Rule Book Hidden',
+        `The Rule Book button is now ${newVisible ? 'visible on' : 'hidden from'} all event details pages.`,
+        newVisible ? 'success' : 'warning'
+      );
+    } catch (err) {
+      addToast('Error', err instanceof Error ? err.message : 'Failed to update visibility.', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleManualUrlSave = async () => {
+    if (!ruleBook) return;
+    setSaving(true);
+    try {
+      await saveGlobalRuleBook({
+        url: ruleBook.url,
+        updatedAt: new Date().toISOString(),
+        updatedBy: editor.name || 'Admin',
+      });
+      logAction('Rule Book URL Updated', 'The CASYUM Rule Book URL has been updated.');
+      addToast('Rule Book Updated', 'The Rule Book URL has been saved.', 'success');
+    } catch (err) {
+      addToast('Error', err instanceof Error ? err.message : 'Failed to save.', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
     return (
-      <div className="p-8 rounded-3xl bg-zinc-950/60 border border-white/10 text-center text-white/40 text-sm">
-        No events yet. Create events in Event Management first.
+      <div className="flex items-center gap-2 text-white/50 text-sm py-10">
+        <Loader2 className="w-4 h-4 animate-spin text-violet-400" />
+        <span>Loading Rule Book settings...</span>
       </div>
     );
   }
 
+  const hasRuleBook = !!ruleBook?.url;
+
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-4 max-w-2xl">
       <p className="text-[11px] text-white/40">
-        Control whether each event's rule book download appears on its public details page, and jump into the
-        existing Event Description CMS for full content editing.
+        Manage the single CASYUM Rule Book PDF. This same PDF will be opened from every event's "Rule Book" button.
       </p>
-      {loading && (
-        <div className="flex items-center gap-2 text-white/50 text-sm py-4">
-          <Loader2 className="w-4 h-4 animate-spin text-violet-400" />
-          <span>Checking rule book visibility...</span>
+
+      {/* Main Card */}
+      <div className="p-5 sm:p-6 rounded-3xl bg-zinc-950/60 border border-white/10 backdrop-blur-md flex flex-col gap-4">
+        {/* Status Header */}
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <span className="w-10 h-10 rounded-xl bg-cyan-500/15 border border-cyan-500/25 flex items-center justify-center flex-shrink-0">
+              <FileText className="w-5 h-5 text-cyan-300" />
+            </span>
+            <div className="flex flex-col">
+              <span className="text-sm font-bold text-white">CASYUM Rule Book</span>
+              <span className="text-[10px] text-white/40 uppercase tracking-wider">
+                {hasRuleBook ? 'PDF uploaded' : 'No PDF uploaded yet'}
+              </span>
+            </div>
+          </div>
+          <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest flex-shrink-0">
+            {ruleBook?.visible ? (
+              <span className="text-emerald-300">🟢 Visible</span>
+            ) : (
+              <span className="text-rose-300">🔴 Hidden</span>
+            )}
+          </span>
         </div>
-      )}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-        {events.map((event) => {
-          const id = String(event.id);
-          const visible = visibilityMap[id] ?? true;
-          const hasRuleBook = !!event.ruleBookUrl;
-          return (
-            <div
-              key={id}
-              className="p-4 sm:p-5 rounded-3xl bg-zinc-950/60 hover:bg-zinc-900/60 border border-white/10 hover:border-white/20 transition-all duration-300 backdrop-blur-md flex flex-col gap-3"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex items-start gap-3 min-w-0">
-                  <span className="mt-0.5 w-9 h-9 rounded-xl bg-violet-500/15 border border-violet-500/25 flex items-center justify-center flex-shrink-0">
-                    <FileText className="w-4 h-4 text-violet-300" />
-                  </span>
-                  <div className="min-w-0">
-                    <h4 className="font-bold text-white text-sm truncate">{event.name}</h4>
-                    <span className="text-[10px] text-white/40 uppercase tracking-wider">
-                      {event.category} · {event.date || 'No date'} · Status: {event.status}
-                    </span>
-                  </div>
-                </div>
-                {!hasRuleBook && (
-                  <span className="px-2 py-0.5 rounded-full bg-white/5 border border-white/10 text-white/40 text-[9px] font-extrabold uppercase tracking-wider flex-shrink-0">
-                    No Rule Book
-                  </span>
+
+        {/* Current File Info */}
+        {hasRuleBook && (
+          <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/10 flex flex-col gap-2">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-xs text-white/85 break-all font-medium">{ruleBook?.fileName}</span>
+              <div className="flex items-center gap-1.5 flex-shrink-0">
+                <a
+                  href={ruleBook?.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-2.5 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-white/70 hover:text-white text-[10px] font-bold border border-white/10 flex items-center gap-1.5"
+                >
+                  <ExternalLink className="w-3 h-3" /> View
+                </a>
+                {canEdit && (
+                  <button
+                    onClick={() => void handleRemove()}
+                    disabled={saving}
+                    className="px-2.5 py-1.5 rounded-lg bg-white/5 hover:bg-rose-500/20 text-white/60 hover:text-rose-400 text-[10px] font-bold border border-white/10 flex items-center gap-1.5 disabled:opacity-50"
+                  >
+                    <Trash2 className="w-3 h-3" /> Remove
+                  </button>
                 )}
               </div>
-
-              <div className="flex flex-wrap items-center gap-2 mt-auto pt-1">
-                <button
-                  onClick={() => void handleToggle(event)}
-                  disabled={!canEdit || busyId === id || !hasRuleBook}
-                  title={hasRuleBook ? undefined : 'Upload a rule book first (Event Management)'}
-                  className={`px-4 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest border transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed ${
-                    !hasRuleBook
-                      ? 'bg-white/5 text-white/30 border-white/10'
-                      : visible
-                        ? 'bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border-rose-500/25'
-                        : 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border-emerald-500/25'
-                  }`}
-                >
-                  {busyId === id ? (
-                    <Loader2 className="w-3 h-3 animate-spin" />
-                  ) : visible ? (
-                    <EyeOff className="w-3 h-3" />
-                  ) : (
-                    <Eye className="w-3 h-3" />
-                  )}
-                  {hasRuleBook ? (visible ? 'Hide Rule Book' : 'Show Rule Book') : '—'}
-                </button>
-                <button
-                  onClick={() => openEventOverview(id)}
-                  className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 border border-white/10 text-[10px] font-bold uppercase tracking-widest transition-colors cursor-pointer flex items-center gap-1.5"
-                >
-                  <CalendarDays className="w-3 h-3" />
-                  Edit Details
-                </button>
-                <span className="ml-auto text-[10px] font-bold uppercase tracking-widest flex-shrink-0">
-                  {hasRuleBook ? (
-                    visible ? (
-                      <span className="text-emerald-300">🟢 Visible</span>
-                    ) : (
-                      <span className="text-rose-300">🔴 Hidden</span>
-                    )
-                  ) : (
-                    ''
-                  )}
-                </span>
-              </div>
             </div>
-          );
-        })}
+            <span className="text-[10px] text-white/40">
+              {[ruleBook?.version && `v${ruleBook.version}`, ruleBook?.updatedAt && `updated ${formatRuleBookDate(ruleBook.updatedAt)}`, ruleBook?.updatedBy && `by ${ruleBook.updatedBy}`].filter(Boolean).join(' · ')}
+            </span>
+          </div>
+        )}
+
+        {/* Upload Section */}
+        {canEdit && (
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-wrap items-center gap-2.5">
+              <label className="relative cursor-pointer">
+                <input
+                  type="file"
+                  accept=".pdf,application/pdf"
+                  className="sr-only"
+                  onChange={(e) => {
+                    handleFileSelect(e.target.files?.[0] ?? null);
+                    e.target.value = '';
+                  }}
+                />
+                <span className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white/70 hover:text-white text-[10px] font-bold">
+                  <UploadCloud className="w-3.5 h-3.5" />
+                  {uploading ? 'Uploading...' : ruleBookFile ? ruleBookFile.name : 'Choose PDF'}
+                </span>
+              </label>
+              {ruleBookFile && !uploading && (
+                <button
+                  type="button"
+                  onClick={() => void handleUpload()}
+                  className="px-3 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-700 text-white text-[10px] font-bold cursor-pointer"
+                >
+                  {isRuleBookConfigured() && storageConfigured ? 'Upload to Firebase' : 'Use Public Path'}
+                </button>
+              )}
+            </div>
+
+            {uploading && uploadProgress > 0 && (
+              <div className="flex items-center gap-2">
+                <div className="flex-1 h-2 rounded-full bg-white/10 overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-violet-500 transition-all"
+                    style={{ width: `${uploadProgress}%` }}
+                  />
+                </div>
+                <span className="text-[10px] text-white/50">{uploadProgress}%</span>
+              </div>
+            )}
+
+            {!storageConfigured && (
+              <span className="text-[10px] text-white/40">
+                Firebase Storage is off — PDFs go in public/rulebooks/ (requires rebuild/redeploy).
+              </span>
+            )}
+
+            {uploadError && (
+              <p className="text-[10px] text-amber-300 leading-relaxed">{uploadError}</p>
+            )}
+          </div>
+        )}
+
+        {/* Manual URL Input */}
+        {canEdit && (
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[10px] font-bold text-white/50 uppercase">Rule Book URL / Path</label>
+            <div className="flex items-center gap-2">
+              <input
+                value={ruleBook?.url || ''}
+                onChange={(e) => setRuleBook((prev) => prev ? { ...prev, url: e.target.value } : prev)}
+                className="flex-1 p-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder-white/30 focus:outline-none focus:border-cyan-500/50 text-xs"
+                placeholder={storageConfigured ? 'https://... or /rulebooks/casyum-rulebook.pdf' : '/rulebooks/casyum-rulebook.pdf'}
+              />
+              <button
+                onClick={() => void handleManualUrlSave()}
+                disabled={saving || !ruleBook?.url}
+                className="px-3 py-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white/70 hover:text-white text-[10px] font-bold cursor-pointer disabled:opacity-50"
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Visibility Toggle */}
+        <div className="flex items-center justify-between gap-3 p-4 rounded-2xl bg-white/[0.03] border border-white/10">
+          <div className="flex flex-col gap-0.5">
+            <span className="text-[11px] font-bold text-white">Rule Book Visibility</span>
+            <span className="text-[10px] text-white/40">
+              {ruleBook?.visible
+                ? 'The Rule Book button is visible on all event details pages.'
+                : 'The Rule Book button is hidden from all event details pages.'}
+            </span>
+          </div>
+          <button
+            onClick={() => void handleVisibilityToggle()}
+            disabled={!canEdit || saving}
+            className={`px-4 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest border transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-50 ${
+              ruleBook?.visible
+                ? 'bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border-rose-500/25'
+                : 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border-emerald-500/25'
+            }`}
+          >
+            {saving ? (
+              <Loader2 className="w-3 h-3 animate-spin" />
+            ) : ruleBook?.visible ? (
+              <EyeOff className="w-3 h-3" />
+            ) : (
+              <Eye className="w-3 h-3" />
+            )}
+            {ruleBook?.visible ? 'Hide' : 'Show'}
+          </button>
+        </div>
       </div>
+
+      {/* Info Box */}
       <div className="flex items-start gap-2 px-4 py-3 rounded-xl bg-violet-500/10 border border-violet-500/20 text-violet-300 text-[11px] max-w-2xl">
         <RefreshCw className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
         <span>
-          Rule book files are uploaded and versioned from Admin → Event Management; this tab only controls their
-          public visibility.
+          Only ONE Rule Book PDF is used for the entire CASYUM event. Every event's "Rule Book" button
+          opens this same PDF in a new browser tab.
         </span>
       </div>
     </div>

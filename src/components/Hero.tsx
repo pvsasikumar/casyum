@@ -66,17 +66,24 @@ export const Hero: React.FC<HeroProps> = ({
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_30%,rgba(0,0,0,0.85)_80%)]" />
       </div>
 
+      {/* SRM College Logo - Top Left */}
+      <img
+        src="/images/events/srm-logo.png"
+        alt="SRM Institute of Science and Technology"
+        className="absolute top-5 left-5 sm:top-6 sm:left-6 md:top-8 md:left-8 z-20 w-[100px] sm:w-[130px] md:w-[160px] h-auto object-contain drop-shadow-lg pointer-events-none"
+      />
+
       {/* Content Container (elevated above logo at z-10) */}
       <motion.div
         variants={containerVariants}
         initial="hidden"
         animate={startAnimation ? 'visible' : 'hidden'}
-        className="relative z-10 max-w-4xl w-full flex flex-col items-center justify-center gap-1.5 sm:gap-2.5 mt-30"
+        className="relative z-10 max-w-4xl w-full flex flex-col items-center justify-center gap-1.5 sm:gap-2.5 mt-15"
       >
         {/* Institution Info */}
         <motion.div
           variants={itemVariants}
-          className="text-[9px] sm:text-xs font-bold tracking-[0.35em] text-violet-400 uppercase font-display"
+          className="text-base sm:text-base md:text-lg font-bold tracking-[0.35em] text-violet-400 uppercase font-display"
         >
           SRM Institute of Science and Technology
         </motion.div>
@@ -84,7 +91,7 @@ export const Hero: React.FC<HeroProps> = ({
         {/* Faculty Info */}
         <motion.div
           variants={itemVariants}
-          className="text-[8px] sm:text-[11px] font-semibold tracking-[0.25em] text-white/60 uppercase"
+          className="text-[20px] sm:text-[15px] md:text-sm font-semibold tracking-[0.25em] text-white/60 uppercase"
         >
           Faculty of Liberal Arts and Business Studies
         </motion.div>
@@ -92,15 +99,15 @@ export const Hero: React.FC<HeroProps> = ({
         {/* School Info */}
         <motion.div
           variants={itemVariants}
-          className="text-[8px] sm:text-[11px] font-semibold tracking-[0.25em] text-white/60 uppercase"
+          className="text-[20px] sm:text-[15px] md:text-sm font-semibold tracking-[0.25em] text-white/60 uppercase"
         >
-          School of Applied Science
+          School of Applied Sciences
         </motion.div>
 
         {/* Department Info */}
         <motion.div
           variants={itemVariants}
-          className="text-[8px] sm:text-[11px] font-semibold tracking-[0.25em] text-white/70 uppercase"
+          className="text-[20px] sm:text-[15px] md:text-sm font-semibold tracking-[0.25em] text-white/70 uppercase"
         >
           Department of Computer Applications
         </motion.div>
@@ -108,7 +115,7 @@ export const Hero: React.FC<HeroProps> = ({
         {/* Courses */}
         <motion.div
           variants={itemVariants}
-          className="text-[8px] sm:text-[11px] font-semibold tracking-[0.25em] text-violet-300/80 uppercase"
+          className="text-[10px] sm:text-[13px] md:text-sm font-semibold tracking-[0.25em] text-violet-300/80 uppercase"
         >
           (BCA &amp; BCA Gen AI)
         </motion.div>
@@ -116,7 +123,7 @@ export const Hero: React.FC<HeroProps> = ({
         {/* Presenting Subtitle */}
         <motion.div
           variants={itemVariants}
-          className="text-[9px] sm:text-xs font-semibold tracking-[0.4em] text-white/70 uppercase mt-1.5 sm:mt-3"
+          className="text-[11px] sm:text-sm md:text-base font-semibold tracking-[0.4em] text-white/70 uppercase mt-1.5 sm:mt-3"
         >
           Presents
         </motion.div>
@@ -183,6 +190,7 @@ export const Hero: React.FC<HeroProps> = ({
           </motion.div>
         )}
       </motion.div>
+      
 
       {/* Futuristic Corner Tech Accents */}
       <div className="absolute top-24 left-8 w-4 h-4 border-t border-l border-white/10 hidden sm:block" />

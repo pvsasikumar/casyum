@@ -32,6 +32,7 @@ import { EventOverviewCms } from '../components/cms/EventOverviewCms';
 import { ParticipantQRCard } from './ParticipantQRCard';
 import { PaymentDetailsSection } from '../components/events/PaymentDetailsSection';
 import { RuleBookButton } from '../components/events/RuleBookButton';
+import { fetchGlobalRuleBook, type GlobalRuleBookInfo } from '../services/ruleBookService';
 import { TeamFormationSection } from './TeamFormationSection';
 import {
   registerEvent,
@@ -51,6 +52,7 @@ import {
   GAMING_EVENT_FEE,
   findEventTimeClashes,
   eventTimeClashMessage,
+  parseEventTimeRange,
   type EventSelectionLike,
 } from '../services/eventSelection';
 
@@ -124,6 +126,7 @@ export const ParticipantDashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [globalRuleBook, setGlobalRuleBook] = useState<GlobalRuleBookInfo | null>(null);
 
   const [profile, setProfile] = useState({ phone: '', college: '', city: '', department: '', year_of_study: '' });
   const [profileErrors, setProfileErrors] = useState<Record<string, string>>({});
@@ -138,6 +141,8 @@ export const ParticipantDashboard: React.FC = () => {
   const [selectedRegularIds, setSelectedRegularIds] = useState<string[]>([]);
   const [selectedGamingId, setSelectedGamingId] = useState<string | null>(null);
   const [selectionNotice, setSelectionNotice] = useState('');
+  const [confirmingEvent, setConfirmingEvent] = useState<{ type: 'regular' | 'gaming'; id: string } | null>(null);
+  const [timingConflictNotice, setTimingConflictNotice] = useState(false);
   const [whatsAppInvite, setWhatsAppInvite] = useState<{
     settings: { groupName: string; description: string; inviteLink: string };
     registration: RegistrationSuccessInfo;
@@ -280,21 +285,18 @@ export const ParticipantDashboard: React.FC = () => {
   const timeClashes = useMemo(() => findEventTimeClashes(selectedEvents), [selectedEvents]);
 
   /**
-   * Rule Book lookup for every event (open or closed) so "My Registrations"
-   * can open the correct event's Rule Book without extra requests.
+   * Global CASYUM Rule Book — the SAME PDF is shown for every event.
    */
-  const ruleBookById = useMemo(() => {
-    const map = new Map<string, { url: string; fileName: string; version: string }>();
-    allEvents.forEach((e) => {
-      if (!e || e.id == null) return;
-      map.set(String(e.id), {
-        url: e.ruleBookUrl || '',
-        fileName: e.ruleBookFileName || '',
-        version: e.ruleBookVersion || '',
-      });
-    });
-    return map;
-  }, [allEvents]);
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      try {
+        const g = await fetchGlobalRuleBook();
+        if (alive) setGlobalRuleBook(g);
+      } catch { /* ignore */ }
+    })();
+    return () => { alive = false; };
+  }, []);
 
   const handleLogout = () => {
     logout();
@@ -345,6 +347,30 @@ export const ParticipantDashboard: React.FC = () => {
 
   const regularLimit = selectedGamingId ? 1 : MAX_REGULAR_EVENTS;
   const gamingBlocked = selectedRegularIds.length >= MAX_REGULAR_EVENTS;
+
+  const doesEventOverlap = (candidate: any, existing: any): boolean => {
+    const dateA = String(candidate.event_date || candidate.date || '').trim();
+    const dateB = String(existing.event_date || existing.date || '').trim();
+    if (dateA && dateB && dateA !== dateB) return false;
+    if (dateA && !dateB) return false;
+    if (!dateA && dateB) return false;
+    const rangeA = parseEventTimeRange(String(candidate.time || ''));
+    const rangeB = parseEventTimeRange(String(existing.time || ''));
+    if (!rangeA || !rangeB) return false;
+    return rangeA.start < rangeB.end && rangeB.start < rangeA.end;
+  };
+
+  const hasTimingConflict = (eventId: string | number): boolean => {
+    const id = String(eventId);
+    const candidate = openEvents.find((e) => String(e.id) === id);
+    if (!candidate) return false;
+    const existingIds = [...selectedRegularIds, ...(selectedGamingId ? [selectedGamingId] : [])];
+    for (const existingId of existingIds) {
+      const existing = openEvents.find((e) => String(e.id) === String(existingId));
+      if (existing && doesEventOverlap(candidate, existing)) return true;
+    }
+    return false;
+  };
 
   const toggleRegularEvent = (eventId: string | number) => {
     setError('');
@@ -430,7 +456,7 @@ export const ParticipantDashboard: React.FC = () => {
     }
   };
 
-  const handleBundleSubmit = async (payment: { payment_method: string; transaction_id: string; payment_date: string }) => {
+  const handleBundleSubmit = async (payment: { payment_method: string; transaction_id: string; payment_date: string; payment_screenshot_url?: string; payment_screenshot_file_id?: string }) => {
     if (!registerTarget?.bundle) return;
     setError('');
     setNotice('');
@@ -446,6 +472,8 @@ export const ParticipantDashboard: React.FC = () => {
           payment_method: payment.payment_method,
           transaction_id: payment.transaction_id,
           payment_date: payment.payment_date,
+          payment_screenshot_url: payment.payment_screenshot_url,
+          payment_screenshot_file_id: payment.payment_screenshot_file_id,
         }
       );
       setNotice(res.message);
@@ -469,7 +497,7 @@ export const ParticipantDashboard: React.FC = () => {
     }
   };
 
-  const handleRegisterSubmit = async (payment: { payment_method: string; transaction_id: string; payment_date: string }) => {
+  const handleRegisterSubmit = async (payment: { payment_method: string; transaction_id: string; payment_date: string; payment_screenshot_url?: string; payment_screenshot_file_id?: string }) => {
     if (!registerTarget || registerTarget.bundle) return;
     setError('');
     setNotice('');
@@ -480,6 +508,8 @@ export const ParticipantDashboard: React.FC = () => {
         payment_method: payment.payment_method,
         transaction_id: payment.transaction_id,
         payment_date: payment.payment_date,
+        payment_screenshot_url: payment.payment_screenshot_url,
+        payment_screenshot_file_id: payment.payment_screenshot_file_id,
       });
       setNotice(res.message);
       setRegisterTarget(null);
@@ -497,7 +527,7 @@ export const ParticipantDashboard: React.FC = () => {
     }
   };
 
-  const handleResubmit = async (payment: { payment_method: string; transaction_id: string; payment_date: string }) => {
+  const handleResubmit = async (payment: { payment_method: string; transaction_id: string; payment_date: string; payment_screenshot_url?: string; payment_screenshot_file_id?: string }) => {
     if (!resubmitTarget) return;
     setError('');
     setNotice('');
@@ -508,6 +538,8 @@ export const ParticipantDashboard: React.FC = () => {
         payment_method: payment.payment_method,
         transaction_id: payment.transaction_id,
         payment_date: payment.payment_date,
+        payment_screenshot_url: payment.payment_screenshot_url,
+        payment_screenshot_file_id: payment.payment_screenshot_file_id,
       });
       setNotice(res.message);
       setResubmitTarget(null);
@@ -773,7 +805,14 @@ export const ParticipantDashboard: React.FC = () => {
                               </button>
 
                               <button
-                                onClick={() => toggleRegularEvent(id)}
+                                onClick={() => {
+                                  if (isRegistered || isFull) return;
+                                  if (isSelected) {
+                                    toggleRegularEvent(id);
+                                    return;
+                                  }
+                                  setConfirmingEvent({ type: 'regular', id });
+                                }}
                                 disabled={!selectable}
                                 className={`w-full py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all cursor-pointer flex items-center justify-center gap-2 disabled:cursor-not-allowed ${
                                   isRegistered
@@ -857,7 +896,11 @@ export const ParticipantDashboard: React.FC = () => {
                               key={ev.id}
                               onClick={() => {
                                 if (!selectable) return;
-                                toggleGamingEvent(id);
+                                if (isSelected) {
+                                  toggleGamingEvent(id);
+                                  return;
+                                }
+                                setConfirmingEvent({ type: 'gaming', id });
                               }}
                               className={`flex items-center gap-4 rounded-2xl border p-5 transition-all cursor-pointer ${
                                 isSelected
@@ -1025,7 +1068,9 @@ export const ParticipantDashboard: React.FC = () => {
                       const evDetail = ev.eventId
                         ? openEvents.find((e) => String(e.id) === ev.eventId)
                         : undefined;
-                      const ruleBook = ev.eventId ? ruleBookById.get(ev.eventId) : undefined;
+                      const ruleBook = globalRuleBook?.url
+                        ? { url: globalRuleBook.url, fileName: globalRuleBook.fileName || '', version: globalRuleBook.version || '' }
+                        : undefined;
                       return (
                         <MyRegistrationEventCard
                           key={`${reg.registration_id || 'registration'}::${ev.eventId || ev.eventName}`}
@@ -1150,6 +1195,76 @@ export const ParticipantDashboard: React.FC = () => {
           registration={whatsAppInvite.registration}
           onContinue={() => setWhatsAppInvite(null)}
         />
+      )}
+
+      {confirmingEvent && (
+        <div className="fixed inset-0 z-[10000] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-[min(92vw,420px)] max-w-full rounded-2xl border border-white/10 bg-[#0b0b14] shadow-2xl shadow-violet-500/10 my-auto flex flex-col gap-5">
+            <div className="flex flex-col items-center gap-3 px-6 pt-6 text-center">
+              <div className="p-3 rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-300">
+                <AlertCircle className="w-6 h-6" />
+              </div>
+              <h3 className="text-base font-extrabold tracking-tight font-display text-white">
+                ⚠️ Important Notice
+              </h3>
+              <p className="text-sm text-white/70 leading-relaxed">
+                Please check the event timings carefully and ensure that they do not clash with any other events you have registered for.
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-3 px-6 pb-6">
+              <button
+                onClick={() => setConfirmingEvent(null)}
+                className="py-3 rounded-xl border border-white/10 bg-white/5 text-[10px] font-bold uppercase tracking-widest text-white/60 hover:text-white hover:border-white/25 transition-all cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  const target = confirmingEvent;
+                  setConfirmingEvent(null);
+                  if (target && hasTimingConflict(target.id)) {
+                    setTimingConflictNotice(true);
+                    return;
+                  }
+                  if (target.type === 'regular') {
+                    toggleRegularEvent(target.id);
+                  } else {
+                    toggleGamingEvent(target.id);
+                  }
+                }}
+                className="py-3 rounded-xl bg-gradient-to-r from-violet-500 to-indigo-600 hover:from-violet-600 hover:to-indigo-700 text-white text-[10px] font-bold uppercase tracking-widest transition-all cursor-pointer shadow-lg shadow-violet-500/20"
+              >
+                Continue
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {timingConflictNotice && (
+        <div className="fixed inset-0 z-[10000] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-[min(92vw,420px)] max-w-full rounded-2xl border border-white/10 bg-[#0b0b14] shadow-2xl shadow-rose-500/10 my-auto flex flex-col gap-5">
+            <div className="flex flex-col items-center gap-3 px-6 pt-6 text-center">
+              <div className="p-3 rounded-2xl bg-rose-500/15 border border-rose-500/30 text-rose-300">
+                <AlertCircle className="w-6 h-6" />
+              </div>
+              <h3 className="text-base font-extrabold tracking-tight font-display text-white">
+                Timing Conflict
+              </h3>
+              <p className="text-sm text-white/70 leading-relaxed">
+                This event overlaps with another event you have already selected. Please choose an event with a different timing.
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-3 px-6 pb-6">
+              <button
+                onClick={() => setTimingConflictNotice(false)}
+                className="py-3 rounded-xl border border-white/10 bg-white/5 text-[10px] font-bold uppercase tracking-widest text-white/60 hover:text-white hover:border-white/25 transition-all cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

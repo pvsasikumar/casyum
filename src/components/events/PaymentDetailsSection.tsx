@@ -7,6 +7,8 @@ import {
   Wallet,
   Landmark,
   CalendarDays,
+  Link2,
+  Loader2,
 } from 'lucide-react';
 import {
   validateTransactionId,
@@ -22,11 +24,39 @@ import {
   MAX_REGULAR_EVENTS,
   type EventSelectionLike,
 } from '../../services/eventSelection';
-
 export interface PaymentFormData {
   payment_method: string;
   transaction_id: string;
   payment_date: string;
+  payment_screenshot_url?: string;
+  payment_screenshot_file_id?: string;
+}
+
+/**
+ * Validate a payment screenshot URL before submission. We accept any well
+ * formed `https://` URL (e.g. a Google Drive share link) and reject obviously
+ * malformed or unsafe values. Returns null when valid, otherwise an error
+ * message.
+ */
+function validateScreenshotUrl(value: string): string | null {
+  const raw = String(value || '').trim();
+  if (!raw) return null; // optional — an empty value is allowed
+  let parsed: URL;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    return 'Please enter a valid URL (e.g. https://drive.google.com/...).';
+  }
+  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+    return 'Please enter a valid URL starting with https://';
+  }
+  if (!parsed.hostname || !parsed.hostname.includes('.')) {
+    return 'Please enter a valid URL with a domain.';
+  }
+  if (raw.length > 2048) {
+    return 'The URL is too long. Please try a shorter link.';
+  }
+  return null;
 }
 
 interface PaymentDetailsSectionProps {
@@ -76,10 +106,11 @@ export const PaymentDetailsSection: React.FC<PaymentDetailsSectionProps> = ({
   const [paymentMethod, setPaymentMethod] = useState<string>('upi');
   const [transactionId, setTransactionId] = useState('');
   const [paymentDate, setPaymentDate] = useState('');
-  const [fieldErrors, setFieldErrors] = useState<{ method?: string; transactionId?: string }>({});
+  const [fieldErrors, setFieldErrors] = useState<{ method?: string; transactionId?: string; screenshot?: string }>({});
   const [paymentSettings, setPaymentSettings] = useState<PaymentSettings | null>(null);
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [qrImageFailed, setQrImageFailed] = useState(false);
+  const [screenshotUrl, setScreenshotUrl] = useState('');
 
   const breakdown = useMemo(() => {
     if (!selectedEvents || selectedEvents.length === 0) return null;
@@ -153,18 +184,27 @@ export const PaymentDetailsSection: React.FC<PaymentDetailsSectionProps> = ({
     console.error('Failed to load payment QR image:', PAYMENT_CONFIG.qrCodeImage);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleFileRemove = useCallback(() => {
+    setScreenshotUrl('');
+    setFieldErrors((f) => ({ ...f, screenshot: undefined }));
+  }, []);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const errors: { method?: string; transactionId?: string } = {};
+    const errors: { method?: string; transactionId?: string; screenshot?: string } = {};
     if (!paymentMethod) errors.method = 'Please select a payment method.';
     const txnError = validateTransactionId(transactionId);
     if (txnError) errors.transactionId = txnError;
+    const screenshotError = validateScreenshotUrl(screenshotUrl);
+    if (screenshotError) errors.screenshot = screenshotError;
     setFieldErrors(errors);
     if (Object.keys(errors).length > 0) return;
+
     onSubmit({
       payment_method: paymentMethod,
-      transaction_id: transactionId.trim(),
-      payment_date: paymentDate.trim(),
+      transaction_id: transactionId.trim() || '',
+      payment_date: paymentDate.trim() || '',
+      payment_screenshot_url: screenshotUrl.trim() || undefined,
     });
   };
 
@@ -393,6 +433,46 @@ export const PaymentDetailsSection: React.FC<PaymentDetailsSectionProps> = ({
             <span className="text-[10px] text-white/40 px-1">When did you make the payment? (if known)</span>
           </div>
 
+          {/* Payment Screenshot URL */}
+          <div className="flex flex-col gap-1.5">
+            <label className={labelClass}>
+              Payment Screenshot URL <span className="text-white/30 normal-case font-normal">(optional)</span>
+            </label>
+            <div className="relative">
+              <Link2 className="w-4 h-4 text-white/30 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                type="url"
+                value={screenshotUrl}
+                onChange={(e) => {
+                  setScreenshotUrl(e.target.value);
+                  if (fieldErrors.screenshot) setFieldErrors((f) => ({ ...f, screenshot: undefined }));
+                }}
+                placeholder="e.g. https://drive.google.com/file/d/.../view"
+                maxLength={2048}
+                className={`${inputClass} pl-10 ${fieldErrors.screenshot ? 'border-rose-500/60' : ''}`}
+              />
+            </div>
+            <span className="text-[10px] text-white/40 px-1">
+              Paste the shareable link to your payment screenshot (Google Drive, etc.)
+            </span>
+            {screenshotUrl && (
+              <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-sky-500/10 border border-sky-500/25 text-sky-300 text-xs">
+                <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" />
+                <span className="min-w-0 flex-1 truncate">{screenshotUrl}</span>
+                <button
+                  type="button"
+                  onClick={handleFileRemove}
+                  className="flex-shrink-0 text-[10px] font-bold text-sky-400 hover:text-sky-300 uppercase tracking-widest cursor-pointer"
+                >
+                  Clear
+                </button>
+              </div>
+            )}
+            {fieldErrors.screenshot && (
+              <span className="text-[10px] text-rose-400 px-1">{fieldErrors.screenshot}</span>
+            )}
+          </div>
+
           {error && (
             <div className="flex items-start gap-2 px-3 py-2.5 rounded-xl bg-rose-500/10 border border-rose-500/25 text-rose-300 text-xs">
               <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
@@ -415,11 +495,17 @@ export const PaymentDetailsSection: React.FC<PaymentDetailsSectionProps> = ({
               disabled={isSubmitting}
               className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-xs font-bold shadow-lg shadow-violet-500/25 transition-colors cursor-pointer disabled:cursor-not-allowed"
             >
-              <CheckCircle2 className="w-4 h-4" />
-              Submit Payment & Register
-              <span className="px-1.5 py-0.5 rounded-md bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 font-extrabold">
-                ₹{totalAmount}
-              </span>
+              {isSubmitting ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <CheckCircle2 className="w-4 h-4" />
+              )}
+              {isSubmitting ? 'Submitting...' : 'Submit Payment & Register'}
+              {!isSubmitting && (
+                <span className="px-1.5 py-0.5 rounded-md bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 font-extrabold">
+                  ₹{totalAmount}
+                </span>
+              )}
             </button>
           </div>
         </div>

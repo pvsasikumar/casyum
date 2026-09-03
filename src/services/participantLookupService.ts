@@ -33,6 +33,8 @@ export interface ScannedParticipant {
   registrationId: string;
   paymentStatus: string;
   paymentVerified: boolean;
+  payment_screenshot_url: string;
+  payment_screenshot_file_id: string;
   verificationStatus: VerificationStatus;
   verifiedBy: string;
   verifiedAt: string;
@@ -135,6 +137,8 @@ function buildProfile(
     registrationId: regs[0]?.registration_id || data.registration_id || '',
     paymentStatus: regPaymentStatuses[0] || data.payment_status || 'submitted',
     paymentVerified,
+    payment_screenshot_url: data.payment_screenshot_url || '',
+    payment_screenshot_file_id: data.payment_screenshot_file_id || '',
     verificationStatus: (data.verificationStatus || 'Pending') as VerificationStatus,
     verifiedBy: data.verifiedBy || '',
     verifiedAt: data.verifiedAt || '',

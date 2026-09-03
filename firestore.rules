@@ -6,12 +6,17 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function hasUserData() {
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
     function getUserData() {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
 
     function getUserRole() {
-      return isSignedIn() ? getUserData().role : null;
+      let ref = /databases/$(database)/documents/users/$(request.auth.uid);
+      return isSignedIn() && exists(ref) ? get(ref).role : null;
     }
 
     function isAdmin() {
@@ -47,7 +52,9 @@ service cloud.firestore {
     }
 
     function isAssignedEvent(eventId) {
-      return isSignedIn() && eventId in getUserData().assigned_event_ids;
+      let ref = /databases/$(database)/documents/users/$(request.auth.uid);
+      let data = isSignedIn() && exists(ref) ? get(ref).data : null;
+      return data != null && 'assigned_event_ids' in data && eventId in data.assigned_event_ids;
     }
 
     // Registration Desk verification must be complete before attendance can be
@@ -239,6 +246,12 @@ service cloud.firestore {
     }
 
     // Fields a participant may update when resubmitting a rejected payment.
+    // This is strictly limited to the participant's own payment SUBMISSION
+    // fields. Participants may never touch payment verification or rejection
+    // audit fields (paymentStatus, paymentVerifiedBy, paymentRejectedBy, etc.)
+    // and so can never mark their own payment verified. The only status change
+    // a participant may ever make is resetting an already-rejected payment back
+    // to `submitted` when they resubmit it.
     function isParticipantPaymentUpdate() {
       return onlyChanges([
         'paymentMethod',
@@ -248,29 +261,19 @@ service cloud.firestore {
         'transactionIdNormalized',
         'paymentDate',
         'payment_date',
-        'paymentStatus',
-        'payment_status',
+        'paymentScreenshotUrl',
+        'paymentScreenshotFileId',
         'paymentResubmittedAt',
         'payment_resubmitted_at',
         'paymentResubmissionCount',
         'payment_resubmission_count',
-        'paymentRejectedBy',
-        'payment_rejected_by',
-        'paymentRejectedByName',
-        'payment_rejected_by_name',
-        'paymentRejectedAt',
-        'payment_rejected_at',
-        'paymentRejectionReason',
-        'payment_rejection_reason',
-        'paymentVerifiedBy',
-        'payment_verified_by',
-        'paymentVerifiedByName',
-        'payment_verified_by_name',
-        'paymentVerifiedAt',
-        'payment_verified_at',
+        'paymentStatus',
+        'payment_status',
         'updatedAt',
         'updated_at'
-      ]);
+      ])
+        && (!('paymentStatus' in request.resource.data) || request.resource.data.paymentStatus == 'submitted')
+        && (!('payment_status' in request.resource.data) || request.resource.data.payment_status == 'submitted');
     }
 
     match /users/{userId} {
@@ -535,6 +538,12 @@ service cloud.firestore {
       allow write: if isSignedIn() && (isAdmin() || isPaymentReviewer());
     }
 
+    // Payment records managed by the admin participant update flow.
+    match /payments/{paymentId} {
+      allow read: if isSignedIn() && (isAdmin() || isPaymentReviewer() || isRegistrationTeam());
+      allow write: if isSignedIn() && isAdmin();
+    }
+
     // App-wide configuration (settings/app) is admin-only. Payment collection
     // settings (settings/payment) hold the QR/UPI/bank instructions shown on
     // the participant payment form, so they must be publicly readable; only
@@ -543,7 +552,7 @@ service cloud.firestore {
     // excluded here to avoid granting broader write access via overlapping
     // match statements.
     match /settings/{docId} {
-      allow read: if docId == 'payment'
+      allow read: if docId == 'payment' || docId == 'ruleBook'
         || (docId != 'communication' && docId != 'sponsorship' && isAdmin());
       allow write: if docId != 'communication' && docId != 'sponsorship' && isAdmin();
     }

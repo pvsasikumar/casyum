@@ -17,7 +17,7 @@ import {
 import type { CmsEventDetails, EventCmsData } from '../cms/types';
 import { emptyCmsData, hasContent, sortSections } from '../cms/types';
 import { loadEventCms } from '../cms/eventCmsService';
-import { fetchRuleBookVisible } from '../../services/cmsService';
+import { fetchGlobalRuleBook, type GlobalRuleBookInfo } from '../../services/ruleBookService';
 import { fetchEventBySlug, type PublicEvent } from '../../services/publicEventService';
 import { useEventRegistration } from '../../hooks/useEventRegistration';
 import { PublicEventRenderer } from './PublicEventRenderer';
@@ -42,10 +42,10 @@ interface EventInformationSectionProps {
   details?: CmsEventDetails;
   event: PublicEvent;
   defaultFee: number;
-  ruleBookVisible: boolean;
+  ruleBook: GlobalRuleBookInfo | null;
 }
 
-const EventInformationSection: React.FC<EventInformationSectionProps> = ({ details, event, defaultFee, ruleBookVisible }) => {
+const EventInformationSection: React.FC<EventInformationSectionProps> = ({ details, event, defaultFee, ruleBook }) => {
   const rows = [
     { key: 'date', label: 'Date', icon: CalendarDays, value: details?.date || event.date },
     { key: 'time', label: 'Time', icon: Clock, value: details?.time || '' },
@@ -76,8 +76,8 @@ const EventInformationSection: React.FC<EventInformationSectionProps> = ({ detai
     return (
       <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-6">
         <h2 className="text-xl sm:text-2xl font-extrabold font-display text-white mb-5">Event Information</h2>
-        {ruleBookVisible && (
-          <RuleBookRow url={event.ruleBookUrl} fileName={event.ruleBookFileName} version={event.ruleBookVersion} />
+        {ruleBook?.visible && (
+          <RuleBookRow url={ruleBook.url} fileName={ruleBook.fileName} version={ruleBook.version} comingSoon={!ruleBook.url} />
         )}
       </div>
     );
@@ -107,8 +107,8 @@ const EventInformationSection: React.FC<EventInformationSectionProps> = ({ detai
           );
         })}
       </div>
-      {ruleBookVisible && (
-        <RuleBookRow url={event.ruleBookUrl} fileName={event.ruleBookFileName} version={event.ruleBookVersion} />
+      {ruleBook?.visible && (
+        <RuleBookRow url={ruleBook.url} fileName={ruleBook.fileName} version={ruleBook.version} comingSoon={!ruleBook.url} />
       )}
     </div>
   );
@@ -118,9 +118,10 @@ interface RuleBookRowProps {
   url?: string;
   fileName?: string;
   version?: string;
+  comingSoon?: boolean;
 }
 
-const RuleBookRow: React.FC<RuleBookRowProps> = ({ url, fileName, version }) => (
+const RuleBookRow: React.FC<RuleBookRowProps> = ({ url, fileName, version, comingSoon }) => (
   <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
     <div className="flex flex-col gap-0.5 min-w-0">
       <span className="text-[10px] font-bold uppercase tracking-widest text-white/50">
@@ -136,6 +137,7 @@ const RuleBookRow: React.FC<RuleBookRowProps> = ({ url, fileName, version }) => 
       version={version}
       variant="primary"
       label="Rule Book"
+      comingSoon={comingSoon}
     />
   </div>
 );
@@ -144,7 +146,7 @@ export const EventDetailsPage: React.FC = () => {
   const { eventSlug } = useParams<{ eventSlug: string }>();
   const [event, setEvent] = useState<PublicEvent | null>(null);
   const [cms, setCms] = useState<EventCmsData>(() => emptyCmsData(''));
-  const [ruleBookVisible, setRuleBookVisible] = useState(true);
+  const [ruleBook, setRuleBook] = useState<GlobalRuleBookInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const startedRef = useRef(false);
@@ -164,8 +166,9 @@ export const EventDetailsPage: React.FC = () => {
         return;
       }
       setEvent(resolved);
-      // Rule Book PDF is never deleted — this only controls the public button.
-      fetchRuleBookVisible(resolved.eventId).then(setRuleBookVisible).catch(() => {});
+      // The global CASYUM Rule Book is shared by every event. It controls
+      // both the PDF reference and visibility.
+      fetchGlobalRuleBook().then(setRuleBook).catch(() => {});
       const cmsData = await loadEventCms(resolved.eventId);
       setCms(cmsData);
     } catch {
@@ -335,18 +338,19 @@ export const EventDetailsPage: React.FC = () => {
 
       <div className="h-px bg-white/10" />
 
-      {ruleBookVisible && (
+      {ruleBook?.visible && (
         <div className="flex flex-col gap-1.5">
           <span className="text-[9px] font-bold uppercase tracking-widest text-white/40">
-            Before you register, read the official event rules
+            Before you register, read the official rules
           </span>
           <RuleBookButton
-            url={event.ruleBookUrl}
-            fileName={event.ruleBookFileName}
-            version={event.ruleBookVersion}
+            url={ruleBook.url}
+            fileName={ruleBook.fileName}
+            version={ruleBook.version}
             variant="primary"
             fullWidth
             showFileName
+            comingSoon={!ruleBook.url}
           />
         </div>
       )}
@@ -383,7 +387,7 @@ export const EventDetailsPage: React.FC = () => {
                 details={details}
                 event={event}
                 defaultFee={registrationFee}
-                ruleBookVisible={ruleBookVisible}
+                ruleBook={ruleBook}
               />
             </div>
             <div className="w-full lg:w-[320px]">{registerPanel}</div>

@@ -19,6 +19,7 @@ import { useCoordinator } from '../context/CoordinatorContext';
 import { AttendanceService } from '../services/AttendanceService';
 import type { EventAttendanceStats } from '../types';
 import { RuleBookButton } from '../../components/events/RuleBookButton';
+import { fetchGlobalRuleBook, type GlobalRuleBookInfo } from '../../services/ruleBookService';
 
 interface StatTileProps {
   label: string;
@@ -46,6 +47,18 @@ export const DashboardPage: React.FC = () => {
   const { user, assignedEvents } = useCoordinator();
   const [eventStats, setEventStats] = useState<Record<string, EventAttendanceStats>>({});
   const [isLoadingStats, setIsLoadingStats] = useState(false);
+  const [globalRuleBook, setGlobalRuleBook] = useState<GlobalRuleBookInfo | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      try {
+        const g = await fetchGlobalRuleBook();
+        if (alive) setGlobalRuleBook(g);
+      } catch { /* ignore */ }
+    })();
+    return () => { alive = false; };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -226,14 +239,16 @@ export const DashboardPage: React.FC = () => {
 
                     {/* Action Button */}
                     <div className="flex flex-col gap-2">
-                      <RuleBookButton
-                        url={event.ruleBookUrl}
-                        fileName={event.ruleBookFileName}
-                        version={event.ruleBookVersion}
-                        variant="secondary"
-                        label="View Rule Book"
-                        fullWidth
-                      />
+                      {globalRuleBook?.visible && globalRuleBook.url && (
+                        <RuleBookButton
+                          url={globalRuleBook.url}
+                          fileName={globalRuleBook.fileName}
+                          version={globalRuleBook.version}
+                          variant="secondary"
+                          label="View Rule Book"
+                          fullWidth
+                        />
+                      )}
                       <button
                         onClick={() => navigate('/coordinator/attendance')}
                         className="w-full py-3 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white text-xs font-bold uppercase tracking-wider transition-all shadow-lg shadow-violet-500/20 cursor-pointer flex items-center justify-center gap-2 group/btn"

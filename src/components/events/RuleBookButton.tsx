@@ -11,6 +11,8 @@ interface RuleBookButtonProps {
   className?: string;
   fullWidth?: boolean;
   showFileName?: boolean;
+  /** When true and no URL exists, shows a disabled "Rule Book Coming Soon" button. */
+  comingSoon?: boolean;
 }
 
 const variantClass: Record<NonNullable<RuleBookButtonProps['variant']>, string> = {
@@ -23,10 +25,11 @@ const variantClass: Record<NonNullable<RuleBookButtonProps['variant']>, string> 
 };
 
 /**
- * Reusable "[ 📄 Rule Book ]" button that opens the event's own Rule Book PDF
- * in a new browser tab. It renders nothing when no valid Rule Book reference
- * exists, so participants are never shown a broken link. Always reads the URL
- * from the event document, which guarantees the correct event's PDF opens.
+ * Reusable "[ 📄 Rule Book ]" button that opens the single global CASYUM Rule
+ * Book PDF in a new browser tab. It renders nothing when no valid PDF reference
+ * exists and `comingSoon` is not set, so participants are never shown a broken
+ * link. When no URL exists but `comingSoon` is true, a disabled
+ * "Rule Book Coming Soon" button is shown instead.
  */
 export const RuleBookButton: React.FC<RuleBookButtonProps> = ({
   url,
@@ -37,23 +40,36 @@ export const RuleBookButton: React.FC<RuleBookButtonProps> = ({
   className = '',
   fullWidth = false,
   showFileName = false,
+  comingSoon = false,
 }) => {
   const href = String(url || '').trim();
-  if (!href) return null;
+
+  if (!href && !comingSoon) return null;
 
   return (
     <div className={`flex flex-col gap-1 ${fullWidth ? 'w-full' : 'w-fit'} ${className}`}>
-      <a
-        href={href}
-        target="_blank"
-        rel="noopener noreferrer"
-        title={`Open ${fileName || 'the Rule Book PDF'} in a new tab`}
-        className={`inline-flex items-center justify-center gap-2 px-4 sm:px-5 py-2.5 rounded-xl border text-xs font-bold transition-all cursor-pointer select-none min-h-[42px] ${variantClass[variant]} ${fullWidth ? 'w-full' : ''}`}
-      >
-        <FileText className="w-4 h-4 flex-shrink-0" />
-        <span>{label}</span>
-      </a>
-      {showFileName && fileName && (
+      {href ? (
+        <a
+          href={href}
+          target="_blank"
+          rel="noopener noreferrer"
+          title={`Open ${fileName || 'the Rule Book PDF'} in a new tab`}
+          className={`inline-flex items-center justify-center gap-2 px-4 sm:px-5 py-2.5 rounded-xl border text-xs font-bold transition-all cursor-pointer select-none min-h-[42px] ${variantClass[variant]} ${fullWidth ? 'w-full' : ''}`}
+        >
+          <FileText className="w-4 h-4 flex-shrink-0" />
+          <span>{label}</span>
+        </a>
+      ) : (
+        <div
+          aria-disabled="true"
+          title="Rule book is not available yet"
+          className={`inline-flex items-center justify-center gap-2 px-4 sm:px-5 py-2.5 rounded-xl border text-xs font-bold select-none min-h-[42px] bg-white/[0.03] text-white/40 border-white/10 cursor-not-allowed ${fullWidth ? 'w-full' : ''}`}
+        >
+          <FileText className="w-4 h-4 flex-shrink-0" />
+          <span>{label} Coming Soon</span>
+        </div>
+      )}
+      {showFileName && fileName && href && (
         <span className="px-1 text-[10px] text-white/40 truncate max-w-full" title={fileName}>
           {fileName}
           {version ? ` · ${version}` : ''}
