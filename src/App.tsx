@@ -18,6 +18,7 @@ import { CasyumFacultyApp } from './casyum-faculty/CasyumFacultyApp';
 import { ObserverApp } from './observer/ObserverApp';
 import { SponsorshipHeadApp } from './sponsorship-head/SponsorshipHeadApp';
 import { AdminLogin } from './pages/admin/AdminLogin';
+import { FirestoreServerDiagnostics } from './pages/FirestoreServerDiagnostics';
 import { AdminRoute } from './rbac/components/AdminRoute';
 import { CreatePassword } from './pages/auth/CreatePassword';
 import { ForgotPassword } from './pages/auth/ForgotPassword';
@@ -253,6 +254,9 @@ export default function App() {
       <Route path="/create-password" element={<CreatePassword />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
+
+      {/* TEMP DIAGNOSTIC — remove before merge */}
+      <Route path="/server-diagnostics" element={<FirestoreServerDiagnostics />} />
 
       <Route path="/" element={<PublicSite />} />
       <Route path="/home" element={<PublicSite />} />

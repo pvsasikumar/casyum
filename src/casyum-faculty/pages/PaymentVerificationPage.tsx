@@ -9,7 +9,13 @@ import {
   AlertCircle,
   History,
   Image,
+  FileSpreadsheet,
+  FileText,
 } from 'lucide-react';
+import {
+  exportPaymentVerificationExcel,
+  exportPaymentVerificationPdf,
+} from '../../services/paymentVerificationExportService';
 import { verifyPayment, rejectPayment, type PaymentRegistrationRow } from '../../services/registrationService';
 import {
   subscribePaymentReviewLogs,
@@ -46,6 +52,7 @@ export const PaymentVerificationPage: React.FC = () => {
   const [logs, setLogs] = useState<PaymentReviewLogEntry[]>([]);
   const [logsLoading, setLogsLoading] = useState(true);
   const [showLogs, setShowLogs] = useState(false);
+  const [exporting, setExporting] = useState<'excel' | 'pdf' | null>(null);
 
   const verifier = useMemo(
     () => ({ userId: rbac.user?.id || '', name: rbac.user?.name || 'CASYUM Faculty Coordinator' }),
@@ -151,6 +158,32 @@ export const PaymentVerificationPage: React.FC = () => {
     }
   };
 
+  const handleExportExcel = async () => {
+    if (filtered.length === 0) return;
+    setExporting('excel');
+    try {
+      exportPaymentVerificationExcel(filtered, filter);
+      addToast('Export Complete', `Excel file exported with ${filtered.length} records.`, 'success');
+    } catch (err: any) {
+      addToast('Export Failed', err?.message || 'Failed to export Excel file.', 'error');
+    } finally {
+      setExporting(null);
+    }
+  };
+
+  const handleExportPdf = async () => {
+    if (filtered.length === 0) return;
+    setExporting('pdf');
+    try {
+      await exportPaymentVerificationPdf(filtered, filter);
+      addToast('Export Complete', `PDF file exported with ${filtered.length} records.`, 'success');
+    } catch (err: any) {
+      addToast('Export Failed', err?.message || 'Failed to export PDF file.', 'error');
+    } finally {
+      setExporting(null);
+    }
+  };
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex flex-col gap-6 select-none pb-16">
       {/* Header */}
@@ -174,6 +207,32 @@ export const PaymentVerificationPage: React.FC = () => {
           >
             <History className="w-3.5 h-3.5" />
             Review Activity
+          </button>
+          <button
+            onClick={() => void handleExportExcel()}
+            disabled={filtered.length === 0 || exporting !== null}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white/70 hover:text-white text-xs font-bold transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+            title="Export the currently filtered records to Excel"
+          >
+            {exporting === 'excel' ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
+            )}
+            Export Excel
+          </button>
+          <button
+            onClick={() => void handleExportPdf()}
+            disabled={filtered.length === 0 || exporting !== null}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white/70 hover:text-white text-xs font-bold transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+            title="Export the currently filtered records to PDF"
+          >
+            {exporting === 'pdf' ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <FileText className="w-3.5 h-3.5 text-rose-400" />
+            )}
+            Export PDF
           </button>
           <div className="flex items-center gap-2 bg-white/5 p-1 rounded-2xl border border-white/10 text-xs">
             {(['submitted', 'verified', 'rejected', 'All'] as const).map((status) => (

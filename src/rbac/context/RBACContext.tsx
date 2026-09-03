@@ -3,6 +3,8 @@ import { onAuthStateChanged } from 'firebase/auth';
 import type { UserRole, Permission, AuthUser, UserActivity } from '../types';
 import { getPermissionsForRole, hasPermission as checkPermission } from '../constants';
 import { getFirebaseAuth } from '../../firebase/auth';
+import { getDb } from '../../firebase/firestore';
+import { getDoc, doc } from 'firebase/firestore';
 import { readUserRecord, readParticipantRecord, signOut } from '../../services/authService';
 
 interface RBACContextType {
@@ -73,6 +75,43 @@ export const RBACProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       const uid = firebaseUser.uid;
       try {
+        // ===== TEMP DIAGNOSTIC: RBAC TRACE A-K =====
+        console.log('[RBAC TRACE A] entered identity diagnostic block');
+        if (firebaseUser) {
+          console.log('[RBAC TRACE B] currentUser exists');
+          console.log('[RBAC TRACE C] UID read successfully:', uid);
+          console.log('[RBAC TRACE D] about to read email');
+          const diagEmail = firebaseUser.email;
+          console.log('[RBAC TRACE E] email read successfully:', diagEmail);
+          console.log('[RBAC TRACE F] about to create users document reference');
+          const userDocRef = doc(getDb(), 'users', uid);
+          console.log('[RBAC TRACE G] users document reference created');
+          console.log('[RBAC TRACE H] about to call getDoc');
+          let selfSnap: any = null;
+          const timeoutMs = 15000;
+          const getDocPromise = getDoc(userDocRef);
+          const timeoutPromise = new Promise<never>((_resolve, reject) => {
+            setTimeout(() => {
+              console.error('[RBAC TRACE K] timeout fired');
+              reject(new Error('getDoc diagnostic timeout'));
+            }, timeoutMs);
+          });
+          try {
+            selfSnap = await Promise.race([getDocPromise, timeoutPromise]);
+            console.log('[RBAC TRACE I] getDoc resolved, exists()=' + selfSnap.exists());
+          } catch (traceErr: any) {
+            if (traceErr?.message === 'getDoc diagnostic timeout') {
+              // TRACE K already logged by timer
+            } else {
+              console.error('[RBAC TRACE J] getDoc rejected:', {
+                code: traceErr?.code || traceErr?.name || 'unknown',
+                message: traceErr?.message || String(traceErr),
+              });
+            }
+          }
+        }
+        // ===== END TEMP DIAGNOSTIC =====
+
         const staff = await readUserRecord(uid);
         if (staff) {
           setUser({
@@ -103,8 +142,12 @@ export const RBACProvider: React.FC<{ children: React.ReactNode }> = ({ children
             setUser(null);
           }
         }
-      } catch {
+      } catch (err: any) {
         // Keep the cached user if a transient network error occurs.
+        console.error('[CASYUM DEBUG] readUserRecord threw:', {
+          code: err?.code || err?.name || 'unknown',
+          message: err?.message || String(err),
+        });
       } finally {
         setIsLoading(false);
       }
@@ -114,6 +157,14 @@ export const RBACProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const role = user?.role ?? null;
   const permissions = useMemo(() => (role ? getPermissionsForRole(role) : []), [role]);
+
+  // ===== TEMP DIAGNOSTIC (E-F): RBACContext resolved role + admin result =====
+  useEffect(() => {
+    const isAdminOrSuper = role === 'Super Admin' || role === 'Admin';
+    console.log('[CASYUM DEBUG] RBACContext user:', user ? { id: user.id, email: user.email, role: user.role } : null);
+    console.log('[CASYUM DEBUG] RBACContext role =', JSON.stringify(role));
+    console.log('[CASYUM DEBUG] RBACContext is Admin/Super Admin:', isAdminOrSuper);
+  }, [role, user]);
 
   const login = useCallback((authUser: AuthUser) => {
     setUser(authUser);

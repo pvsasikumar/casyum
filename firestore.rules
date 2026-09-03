@@ -16,7 +16,7 @@ service cloud.firestore {
 
     function getUserRole() {
       let ref = /databases/$(database)/documents/users/$(request.auth.uid);
-      return isSignedIn() && exists(ref) ? get(ref).role : null;
+      return isSignedIn() && exists(ref) ? get(ref).data.role : null;
     }
 
     function isAdmin() {
