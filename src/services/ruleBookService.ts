@@ -210,6 +210,13 @@ export function formatRuleBookDate(iso?: string): string {
 // Global CASYUM Rule Book (single PDF for the entire event)
 // ---------------------------------------------------------------------------
 
+/**
+ * Fallback Rule Book URL for CASYUM 2026.
+ * Used when the Firestore `settings/ruleBook` document does not yet carry a URL.
+ */
+export const CASYUM_2026_RULE_BOOK_URL =
+  'https://drive.google.com/file/d/1Gxf-SmDjmwTyLCv0AphnoNHZKvBERZ8-/view?usp=drive_link';
+
 export interface GlobalRuleBookInfo {
   url: string;
   fileName: string;
@@ -228,7 +235,7 @@ function globalRuleBookRef() {
 /** Read the global CASYUM Rule Book settings from Firestore. */
 export async function fetchGlobalRuleBook(): Promise<GlobalRuleBookInfo> {
   const defaults: GlobalRuleBookInfo = {
-    url: '',
+    url: CASYUM_2026_RULE_BOOK_URL,
     fileName: '',
     version: '',
     updatedAt: '',
@@ -240,7 +247,7 @@ export async function fetchGlobalRuleBook(): Promise<GlobalRuleBookInfo> {
     if (!snap.exists()) return defaults;
     const d = snap.data();
     return {
-      url: String(d.url || ''),
+      url: String(d.url || CASYUM_2026_RULE_BOOK_URL),
       fileName: String(d.fileName || ''),
       version: String(d.version || ''),
       updatedAt: String(d.updatedAt || ''),
