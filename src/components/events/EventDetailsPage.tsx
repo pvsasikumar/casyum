@@ -138,12 +138,7 @@ const RuleBookRow: React.FC<RuleBookRowProps> = ({ url, fileName, version, comin
       fileName={fileName}
       version={version}
       variant="primary"
-<<<<<<< HEAD
-      label="View Rule Book"
-=======
       label={comingSoon ? 'Rule Book' : 'View Rule Book'}
->>>>>>> origin/main
-      comingSoon={comingSoon}
     />
   </div>
 );
@@ -368,12 +363,7 @@ export const EventDetailsPage: React.FC = () => {
             variant="primary"
             fullWidth
             showFileName
-<<<<<<< HEAD
-            label="View Rule Book"
-=======
             label={!ruleBook.url ? 'Rule Book' : 'View Rule Book'}
->>>>>>> origin/main
-            comingSoon={!ruleBook.url}
           />
         </div>
       )}
