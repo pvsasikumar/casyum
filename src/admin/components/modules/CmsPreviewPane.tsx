@@ -39,7 +39,6 @@ export const CmsPreviewPane: React.FC<CmsPreviewPaneProps> = ({ pageId, content,
               startAnimation
               content={content}
               showRegisterButton={sections.ctaButtons !== false}
-              showLoginButton={sections.ctaButtons !== false}
             />
             {sections.footer !== false && (
               <footer className="border-t border-white/5 bg-black/50 py-12 px-6 text-center text-[10px] tracking-[0.25em] text-white/30 uppercase font-semibold font-display">

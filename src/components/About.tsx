@@ -16,8 +16,8 @@ interface AboutProps {
 }
 
 export const About: React.FC<AboutProps> = ({ content, sections }) => {
-  const showIntro = sections?.intro !== false;
-  const showStats = sections?.stats !== false;
+  const showIntro = sections?.intro === true;
+  const showStats = sections?.stats === true;
   const showLocationMap = sections?.locationMap !== false;
 
   const kicker = content?.kicker || 'The Legacy';

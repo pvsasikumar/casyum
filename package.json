@@ -7,8 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "preview": "vite preview",
-    "reset:participants": "node scripts/reset-participants.mjs"
+    "preview": "vite preview"
   },
   "dependencies": {
     "@splinetool/react-spline": "^4.1.0",
@@ -39,7 +38,6 @@
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.3",
-    "firebase-admin": "^14.2.0",
     "oxlint": "^1.71.0",
     "typescript": "~6.0.2",
     "vite": "^8.1.1",

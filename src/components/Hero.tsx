@@ -1,7 +1,7 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Loader2 } from 'lucide-react';
 import { Countdown } from './Countdown';
+import { REGISTRATION_FORM_URL } from '../config/registrationConfig';
 import type { CmsHomeContent } from '../services/cmsService';
 
 const containerVariants = {
@@ -29,21 +29,15 @@ const itemVariants = {
 
 interface HeroProps {
   startAnimation: boolean;
-  onOpenLogin?: () => void;
-  isSigningIn?: boolean;
   /** CMS overrides for the hero text/background (defaults keep the original look). */
   content?: Partial<CmsHomeContent>;
   showRegisterButton?: boolean;
-  showLoginButton?: boolean;
 }
 
 export const Hero: React.FC<HeroProps> = ({
   startAnimation,
-  onOpenLogin,
-  isSigningIn,
   content,
   showRegisterButton = true,
-  showLoginButton = true,
 }) => {
   const heroTitle = content?.heroTitle || 'CASYUM 2K26';
   const heroSubtitle = content?.heroSubtitle || 'National Level Symposium';
@@ -160,33 +154,29 @@ export const Hero: React.FC<HeroProps> = ({
         </motion.div>
 
         {/* Calls-To-Action */}
-        {(showRegisterButton || showLoginButton) && (
+        {showRegisterButton && (
           <motion.div
             variants={itemVariants}
             className="flex flex-wrap items-center justify-center gap-4 mt-8"
           >
-            {showRegisterButton && (
-              <a
-                href="#register"
-                className="group relative inline-flex items-center justify-center px-8 py-3.5 text-[10px] sm:text-xs font-bold uppercase tracking-[0.2em] text-black bg-white rounded-full overflow-hidden hover:bg-neutral-200 transition-all duration-300 shadow-[0_0_30px_rgba(255,255,255,0.2)] hover:scale-105"
-              >
-                {/* Gloss Shimmer */}
-                <span className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-white/40 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-out" />
-                Register Now
-              </a>
-            )}
-
-            {showLoginButton && (
-              <button
-                type="button"
-                onClick={() => onOpenLogin?.()}
-                disabled={isSigningIn}
-                className="glass-panel px-8 py-3.5 text-[10px] sm:text-xs font-bold uppercase tracking-[0.2em] text-white rounded-full hover:bg-white/10 transition-all duration-300 border border-white/10 hover:border-white/20 hover:scale-105 active:scale-98 cursor-pointer disabled:opacity-50 disabled:cursor-wait inline-flex items-center gap-2"
-              >
-                {isSigningIn && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                {isSigningIn ? 'Signing in...' : 'Login'}
-              </button>
-            )}
+            <a
+              href={REGISTRATION_FORM_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="group relative inline-flex items-center justify-center px-8 py-3.5 text-[10px] sm:text-xs font-bold uppercase tracking-[0.2em] text-black bg-white rounded-full overflow-hidden hover:bg-neutral-200 transition-all duration-300 shadow-[0_0_30px_rgba(255,255,255,0.2)] hover:scale-105"
+            >
+              {/* Gloss Shimmer */}
+              <span className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-white/40 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-out" />
+              Register Now
+            </a>
+            <a
+              href="https://drive.google.com/file/d/1Gxf-SmDjmwTyLCv0AphnoNHZKvBERZ8-/view?usp=drivesdk"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center justify-center px-7 py-3.5 text-[10px] sm:text-xs font-bold uppercase tracking-[0.2em] text-white/90 border border-white/25 rounded-full hover:bg-white/10 hover:border-white/40 transition-all duration-300 hover:scale-105"
+            >
+              Rule Book
+            </a>
           </motion.div>
         )}
       </motion.div>

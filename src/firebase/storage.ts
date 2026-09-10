@@ -44,19 +44,11 @@ export function fileExtension(fileName: string): string {
   return match ? match[1].toLowerCase() : '';
 }
 
-function throwConfigError(): never {
-  if (!isFirebaseConfigured) {
-    throw new Error(
-      'Firebase is not configured. Add your VITE_FIREBASE_* keys to the .env file (or Vercel environment variables) and restart.'
-    );
-  }
-  throw new Error('Firebase Storage is not configured. Set VITE_FIREBASE_STORAGE_BUCKET in your environment.');
-}
-
 export function getFirebaseStorage(): FirebaseStorage {
+  if (!isFirebaseConfigured || !isStorageConfigured) return null as unknown as FirebaseStorage;
   if (!storageInstance) {
-    if (!isFirebaseConfigured || !isStorageConfigured) throwConfigError();
     const app = getFirebaseApp();
+    if (!app) return null as unknown as FirebaseStorage;
     storageInstance = getStorage(app, app.options.storageBucket || '');
   }
   return storageInstance;

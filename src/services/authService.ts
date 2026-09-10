@@ -25,7 +25,7 @@ import {
 } from 'firebase/auth';
 import { getFirebaseAuth } from '../firebase/auth';
 import { getDb } from '../firebase/firestore';
-import { firebaseConfig, googleClientId } from '../firebase/firebase';
+import { firebaseConfig, googleClientId, isFirebaseConfigured } from '../firebase/firebase';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { now } from './helpers';
 import { createParticipantWithCasyumId } from './casyumIdService';
@@ -153,12 +153,14 @@ export function mapFirebaseAuthError(err: unknown): string {
 
 export async function readUserRecord(uid: string): Promise<UserRecord | null> {
   const db = getDb();
+  if (!db) return null;
   const snap = await getDoc(doc(db, 'users', uid));
   return snap.exists() ? ({ id: snap.id, ...snap.data() } as UserRecord) : null;
 }
 
 export async function readParticipantRecord(uid: string): Promise<ParticipantRecord | null> {
   const db = getDb();
+  if (!db) return null;
   const snap = await getDoc(doc(db, 'participants', uid));
   return snap.exists() ? ({ id: snap.id, ...snap.data() } as ParticipantRecord) : null;
 }
@@ -168,6 +170,7 @@ export async function readParticipantRecord(uid: string): Promise<ParticipantRec
  * Uses a throwaway app instance with in-memory persistence.
  */
 export async function createUserInProject(email: string, password: string): Promise<string> {
+  if (!isFirebaseConfigured) throw new Error('Firebase is not configured. User creation is unavailable.');
   const tmpApp: FirebaseApp = initializeApp(firebaseConfig, `casyum-tmp-${Date.now()}`);
   const tmpAuth: Auth = initializeAuth(tmpApp, { persistence: inMemoryPersistence });
   try {
@@ -180,6 +183,7 @@ export async function createUserInProject(email: string, password: string): Prom
 
 export async function ensureSignedIn(): Promise<User | null> {
   const auth = getFirebaseAuth();
+  if (!auth) return null;
   if (auth.currentUser) return auth.currentUser;
   return new Promise((resolve) => {
     const unsub = onAuthStateChanged(auth, (u) => {
@@ -190,19 +194,26 @@ export async function ensureSignedIn(): Promise<User | null> {
 }
 
 export function getCurrentUser(): User | null {
-  return getFirebaseAuth().currentUser;
+  const auth = getFirebaseAuth();
+  if (!auth) return null;
+  return auth.currentUser;
 }
 
 export function isAuthenticated(): boolean {
-  return getFirebaseAuth().currentUser !== null;
+  const auth = getFirebaseAuth();
+  if (!auth) return false;
+  return auth.currentUser !== null;
 }
 
 export async function signOut(): Promise<void> {
-  await firebaseSignOut(getFirebaseAuth());
+  const auth = getFirebaseAuth();
+  if (!auth) return;
+  await firebaseSignOut(auth);
 }
 
 export async function employeeLogin(email: string, password: string): Promise<LoginResult> {
   const auth = getFirebaseAuth();
+  if (!auth) throw new Error('Firebase is not configured. Staff login is unavailable.');
   const credential = await signInWithEmailAndPassword(auth, email, password).catch((err) => {
     throw new Error(mapFirebaseAuthError(err));
   });
@@ -241,6 +252,7 @@ export function googleConfig(): { clientId: string } {
 
 export async function googleLoginPopup(): Promise<LoginResult> {
   const auth = getFirebaseAuth();
+  if (!auth) throw new Error('Firebase is not configured. Google sign-in is unavailable.');
   const result = await signInWithPopup(auth, new GoogleAuthProvider()).catch((err) => {
     const code = (err as { code?: string })?.code || '';
     if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
@@ -288,6 +300,7 @@ export async function googleLoginPopup(): Promise<LoginResult> {
 
 export async function googleLogin(credential: string): Promise<LoginResult> {
   const auth = getFirebaseAuth();
+  if (!auth) throw new Error('Firebase is not configured. Google sign-in is unavailable.');
   const result = await signInWithCredential(auth, GoogleAuthProvider.credential(credential)).catch(
     (err) => {
       throw new Error(mapFirebaseAuthError(err));
@@ -352,6 +365,7 @@ export async function changePassword(
   confirmPassword: string
 ): Promise<{ message: string }> {
   const auth = getFirebaseAuth();
+  if (!auth) throw new Error('Firebase is not configured. Password change is unavailable.');
   const user = auth.currentUser;
   if (!user) {
     throw new Error('You must be signed in to change your password.');
@@ -384,7 +398,9 @@ export async function changePassword(
 }
 
 export async function forgotPassword(email: string): Promise<{ message: string }> {
-  await sendPasswordResetEmail(getFirebaseAuth(), email).catch((err) => {
+  const auth = getFirebaseAuth();
+  if (!auth) throw new Error('Firebase is not configured. Password reset is unavailable.');
+  await sendPasswordResetEmail(auth, email).catch((err) => {
     throw new Error(mapFirebaseAuthError(err));
   });
   return { message: 'Password reset email sent.' };
@@ -402,7 +418,9 @@ export async function resetPassword(
   if (newPassword !== confirmPassword) {
     throw new Error('Passwords do not match.');
   }
-  await confirmPasswordReset(getFirebaseAuth(), oobCode, newPassword).catch((err) => {
+  const auth = getFirebaseAuth();
+  if (!auth) throw new Error('Firebase is not configured. Password reset is unavailable.');
+  await confirmPasswordReset(auth, oobCode, newPassword).catch((err) => {
     throw new Error(mapFirebaseAuthError(err));
   });
   return { message: 'Password reset successfully' };

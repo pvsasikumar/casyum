@@ -1,165 +1,21 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import { AlertCircle, Loader2, LayoutDashboard } from 'lucide-react';
+import React from 'react';
+import { AlertCircle, ExternalLink } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Spotlight } from '@/components/ui/spotlight';
 import { SplineScene } from '@/components/ui/splite';
-import { api } from '../services/api';
-import { useRBAC } from '../rbac/context/RBACContext';
+import { REGISTRATION_FORM_URL } from '../config/registrationConfig';
 import type { CmsRegisterContent } from '../services/cmsService';
-
-declare global {
-  interface Window {
-    google?: {
-      accounts: {
-        id: {
-          initialize: (config: {
-            client_id: string;
-            callback: (response: { credential?: string }) => void;
-            auto_select?: boolean;
-          }) => void;
-          renderButton: (parent: HTMLElement, options: {
-            type?: string;
-            theme?: string;
-            size?: string;
-            text?: string;
-            shape?: string;
-            logo_alignment?: string;
-            width?: number;
-          }) => void;
-          prompt: () => void;
-          disableAutoSelect: () => void;
-        };
-      };
-    };
-  }
-}
-
-function loadGoogleScript(): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (window.google?.accounts?.id) {
-      resolve();
-      return;
-    }
-    const existing = document.getElementById('gsi-client') as HTMLScriptElement | null;
-    if (existing) {
-      existing.addEventListener('load', () => resolve());
-      existing.addEventListener('error', () => reject(new Error('Failed to load Google Sign-In.')));
-      return;
-    }
-    const script = document.createElement('script');
-    script.id = 'gsi-client';
-    script.src = 'https://accounts.google.com/gsi/client';
-    script.async = true;
-    script.defer = true;
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error('Failed to load Google Sign-In.'));
-    document.head.appendChild(script);
-  });
-}
 
 export const ParticipantRegistration: React.FC<{
   content?: Partial<CmsRegisterContent>;
-  /** CMS control for the Google Sign-In panel (heading text stays editable). */
+  /** CMS control for the registration panel (heading text stays editable). */
   showSignInPanel?: boolean;
 }> = ({ content, showSignInPanel = true }) => {
-  const navigate = useNavigate();
-  const { login, role } = useRBAC();
-
   const kicker = content?.kicker || 'Secure Your Spot';
   const heading = content?.heading || 'Join the Symposium';
   const description =
     content?.description ||
-    'Sign in with your Google account to register for CASYUM 2K26. Your account is created automatically on your first sign-in.';
-
-  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
-  const [authenticating, setAuthenticating] = useState(false);
-  const [errorMsg, setErrorMsg] = useState('');
-  const [successMsg, setSuccessMsg] = useState('');
-  const buttonRef = useRef<HTMLDivElement>(null);
-  const renderedRef = useRef(false);
-  const callbackRef = useRef<((response: { credential?: string }) => void) | null>(null);
-
-  const isParticipant = role === 'Participant';
-
-  callbackRef.current = async (response: { credential?: string }) => {
-    const credential = response?.credential;
-    if (!credential) {
-      setErrorMsg('Google Sign-In was cancelled. Please try again.');
-      return;
-    }
-    setAuthenticating(true);
-    setErrorMsg('');
-    setSuccessMsg('');
-    try {
-      const result = await api.googleLogin(credential);
-      login({
-        id: result.user.id,
-        name: result.user.name,
-        email: result.user.email,
-        role: 'Participant',
-        token: result.token,
-        department: result.user.department,
-        phone: result.user.phone,
-        is_first_login: result.is_first_login,
-      });
-      setSuccessMsg(`Welcome, ${result.user.name}! Redirecting to your dashboard...`);
-      setAuthenticating(false);
-      navigate('/participant/dashboard', { replace: true });
-    } catch (err) {
-      setAuthenticating(false);
-      setErrorMsg(err instanceof Error ? err.message : 'Google Sign-In failed. Please try again.');
-    }
-  };
-
-  useEffect(() => {
-    let mounted = true;
-
-    api
-      .googleConfig()
-      .then(async (config) => {
-        if (!mounted) return;
-        if (!config.clientId) {
-          setStatus('error');
-          setErrorMsg('Google Sign-In is not configured yet. Please try again later.');
-          return;
-        }
-        await loadGoogleScript();
-        if (!mounted || !window.google?.accounts?.id) return;
-        window.google.accounts.id.initialize({
-          client_id: config.clientId,
-          callback: (response) => callbackRef.current?.(response),
-          auto_select: false,
-        });
-        window.google.accounts.id.disableAutoSelect();
-        setStatus('ready');
-      })
-      .catch(() => {
-        if (!mounted) return;
-        setStatus('error');
-        setErrorMsg('Could not load Google Sign-In. Check your connection and try again.');
-      });
-
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (status !== 'ready' || renderedRef.current || !buttonRef.current || !window.google?.accounts?.id) return;
-    renderedRef.current = true;
-    const width = Math.max(buttonRef.current.clientWidth || 320, 240);
-    window.google.accounts.id.renderButton(buttonRef.current, {
-      type: 'standard',
-      theme: 'filled_black',
-      size: 'large',
-      text: 'continue_with',
-      shape: 'pill',
-      logo_alignment: 'left',
-      width,
-    });
-  }, [status]);
+    'Register for CASYUM 2K26 through the official Google Form. It opens in a new tab — no account needed.';
 
   return (
     <section id="register" className="relative py-24 px-6 select-none bg-black overflow-hidden flex items-center justify-center">
@@ -176,73 +32,34 @@ export const ParticipantRegistration: React.FC<{
               {description}
             </p>
 
-            {isParticipant ? (
-              <div className="flex flex-col gap-3 mt-4">
-                <button
-                  onClick={() => navigate('/participant/dashboard', { replace: true })}
-                  className="w-full py-4 flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-violet-500 to-indigo-600 hover:from-violet-600 hover:to-indigo-700 text-white font-bold text-sm uppercase tracking-widest transition-all duration-300 shadow-lg shadow-violet-500/25 cursor-pointer active:scale-98"
-                >
-                  <LayoutDashboard className="w-4 h-4" />
-                  Go to your Dashboard
-                </button>
-              </div>
-            ) : !showSignInPanel ? (
+            {!showSignInPanel ? (
               <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white/60 text-xs font-bold mt-4 w-fit">
-                Registrations are currently closed. Please check back later.
-              </div>
-            ) : status === 'loading' ? (
-              <div className="flex items-center gap-2 text-sm text-white/40 mt-4">
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span>Preparing Google Sign-In...</span>
-              </div>
-            ) : status === 'error' ? (
-              <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs mt-4">
                 <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                <span>{errorMsg}</span>
+                Registrations are currently closed. Please check back later.
               </div>
             ) : (
               <div className="flex flex-col gap-3 mt-4">
-                <div ref={buttonRef} className="w-full max-w-[360px] [&>div]:w-full [&>div]:max-w-none" />
-                {authenticating && (
-                  <motion.div
-                    initial={{ opacity: 0, y: -6 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="flex items-center gap-2 text-xs text-violet-300"
-                  >
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    <span>Authenticating with Google...</span>
-                  </motion.div>
-                )}
-                {successMsg && (
-                  <motion.div
-                    initial={{ opacity: 0, y: -6 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="flex items-center gap-2 px-4 py-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-xs"
-                  >
-                    <span>{successMsg}</span>
-                  </motion.div>
-                )}
-                {errorMsg && status === 'ready' && (
-                  <motion.div
-                    initial={{ opacity: 0, y: -6 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="flex items-center gap-2 px-4 py-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs"
-                  >
-                    <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
-                    <span>{errorMsg}</span>
-                  </motion.div>
-                )}
+                <a
+                  href={REGISTRATION_FORM_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center justify-center gap-2 w-full max-w-[360px] py-4 rounded-2xl bg-gradient-to-r from-violet-500 to-indigo-600 hover:from-violet-600 hover:to-indigo-700 text-white font-bold text-sm uppercase tracking-widest transition-all duration-300 shadow-lg shadow-violet-500/25 cursor-pointer active:scale-98"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  Register Now
+                </a>
+                <span className="text-[10px] text-white/40">Opens the official Google Form in a new tab</span>
               </div>
             )}
 
             <div className="flex items-center gap-3 mt-2">
               <div className="h-px flex-1 bg-white/10" />
-              <span className="text-[9px] text-white/30 uppercase tracking-widest">Participants only</span>
+              <span className="text-[9px] text-white/30 uppercase tracking-widest">Official Registration Form</span>
               <div className="h-px flex-1 bg-white/10" />
             </div>
 
             <div className="flex flex-wrap gap-2">
-              {['Sign in once with Google', 'Complete your profile', 'Register for events'].map((step) => (
+              {['Open the Google Form', 'Fill in your details', 'Submit your registration'].map((step) => (
                 <span key={step} className="px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-[10px] text-white/50 font-medium">
                   {step}
                 </span>

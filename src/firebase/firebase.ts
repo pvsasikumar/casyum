@@ -21,19 +21,13 @@ export const isStorageConfigured = Boolean(firebaseConfig.storageBucket);
 export const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
 
 let app: FirebaseApp | undefined;
-let configError: Error | null = null;
 
 export function getFirebaseApp(): FirebaseApp {
-  if (configError) throw configError;
   if (!app) {
     if (!isFirebaseConfigured) {
-      configError = new Error(
-        'Firebase is not configured yet. Add your VITE_FIREBASE_* keys to the .env file and restart the dev server.'
-      );
-      throw configError;
+      return undefined as unknown as FirebaseApp;
     }
     app = initializeApp(firebaseConfig);
-    console.log('[CASYUM DEBUG] Firebase initialized — projectId:', firebaseConfig.projectId);
   }
   return app;
 }

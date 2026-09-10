@@ -19,10 +19,12 @@ import { emptyCmsData, hasContent, sortSections } from '../cms/types';
 import { loadEventCms } from '../cms/eventCmsService';
 import { fetchGlobalRuleBook, type GlobalRuleBookInfo } from '../../services/ruleBookService';
 import { fetchEventBySlug, type PublicEvent } from '../../services/publicEventService';
+import { EVENT_RULE_BOOK_OVERRIDES } from '../../config/ruleBookOverrides';
 import { useEventRegistration } from '../../hooks/useEventRegistration';
 import { PublicEventRenderer } from './PublicEventRenderer';
 import { ProfileCompletionModal } from './ProfileCompletionModal';
 import { RuleBookButton } from './RuleBookButton';
+import { REGISTRATION_FORM_URL } from '../../config/registrationConfig';
 import {
   MAX_REGULAR_EVENTS,
   isGamingEvent,
@@ -136,7 +138,7 @@ const RuleBookRow: React.FC<RuleBookRowProps> = ({ url, fileName, version, comin
       fileName={fileName}
       version={version}
       variant="primary"
-      label="Rule Book"
+      label="View Rule Book"
       comingSoon={comingSoon}
     />
   </div>
@@ -168,7 +170,20 @@ export const EventDetailsPage: React.FC = () => {
       setEvent(resolved);
       // The global CASYUM Rule Book is shared by every event. It controls
       // both the PDF reference and visibility.
-      fetchGlobalRuleBook().then(setRuleBook).catch(() => {});
+      fetchGlobalRuleBook()
+        .then((global) => {
+          const eventUrl = EVENT_RULE_BOOK_OVERRIDES[resolved.slug];
+          if (eventUrl) {
+            setRuleBook({
+              ...global,
+              url: eventUrl,
+              visible: true,
+            });
+          } else {
+            setRuleBook(global);
+          }
+        })
+        .catch(() => {});
       const cmsData = await loadEventCms(resolved.eventId);
       setCms(cmsData);
     } catch {
@@ -194,7 +209,6 @@ export const EventDetailsPage: React.FC = () => {
     profileSaving,
     profileError,
     registerError,
-    handleRegister,
     handleProfileComplete,
   } = useEventRegistration(event?.eventId || '');
 
@@ -323,7 +337,7 @@ export const EventDetailsPage: React.FC = () => {
         </div>
       ) : (
         <button
-          onClick={() => void handleRegister()}
+          onClick={() => window.open(REGISTRATION_FORM_URL, '_blank', 'noopener,noreferrer')}
           disabled={isSigningIn || isChecking}
           className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-xs font-bold shadow-lg shadow-violet-500/25 transition-colors cursor-pointer disabled:cursor-not-allowed"
         >
@@ -350,6 +364,7 @@ export const EventDetailsPage: React.FC = () => {
             variant="primary"
             fullWidth
             showFileName
+            label="View Rule Book"
             comingSoon={!ruleBook.url}
           />
         </div>
@@ -373,11 +388,46 @@ export const EventDetailsPage: React.FC = () => {
         </Link>
 
         {isComingSoon ? (
-          <div className="flex flex-col items-center gap-3 py-24 text-center rounded-3xl border border-white/10 bg-white/[0.02]">
-            <Clock className="w-8 h-8 text-white/30" />
-            <p className="text-white/60 text-sm">Event details are coming soon.</p>
-            <p className="text-white/30 text-xs">Check back later for the full schedule, rules, and prizes.</p>
-            {!isClosed && !isFull && registerPanel}
+          <div className="flex flex-col gap-6">
+            <div className="relative overflow-hidden rounded-3xl border border-white/10">
+              <div
+                className="absolute inset-0 bg-cover bg-center"
+                style={{
+                  backgroundImage: `linear-gradient(to bottom, rgba(14, 11, 22, 0.35), rgba(14, 11, 22, 0.92)), url(${event.heroImage || event.cardImage})`,
+                }}
+              />
+              <div className="relative p-6 sm:p-10 flex flex-col gap-3 max-w-3xl">
+                {event.category && (
+                  <span className="w-fit text-[10px] font-bold uppercase tracking-[0.25em] text-violet-400">
+                    {event.category}
+                  </span>
+                )}
+                <h1 className="text-3xl sm:text-5xl font-extrabold tracking-tight font-display text-white">
+                  {event.name}
+                </h1>
+                {(event.tagline || event.shortDescription) && (
+                  <p className="text-sm sm:text-base text-white/60 leading-relaxed">
+                    {event.tagline || event.shortDescription}
+                  </p>
+                )}
+                <span
+                  className={`w-fit mt-1 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border ${statusStyles[event.registrationStatus] || statusStyles['Registration Open']}`}
+                >
+                  {event.registrationStatus || 'Registration Open'}
+                </span>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6 items-start">
+              <div className="flex flex-col gap-6">
+                <EventInformationSection
+                  details={details}
+                  event={event}
+                  defaultFee={registrationFee}
+                  ruleBook={ruleBook}
+                />
+              </div>
+              <div className="w-full lg:w-[320px]">{registerPanel}</div>
+            </div>
           </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6 items-start">

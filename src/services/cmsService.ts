@@ -44,7 +44,7 @@ export type CmsRegisterSectionKey = 'signInPanel';
 
 export const CMS_PAGE_SECTION_KEYS: Record<CmsSitePageId, string[]> = {
   home: ['hero', 'ctaButtons', 'footer'],
-  about: ['intro', 'stats', 'locationMap'],
+  about: ['locationMap'],
   events: ['header', 'pricing', 'listing'],
   sponsors: ['header', 'titleSponsor', 'sponsorGrid', 'sponsorCta'],
   register: ['signInPanel'],
@@ -63,7 +63,7 @@ export const CMS_PAGE_SECTION_LABELS: Record<string, string> = {
   titleSponsor: 'Title Sponsor Highlight',
   sponsorGrid: 'Sponsor Categories Grid',
   sponsorCta: 'Become a Sponsor CTA',
-  signInPanel: 'Google Sign-In Panel',
+  signInPanel: 'Registration Form Panel',
 };
 
 export interface CmsStatItem {
@@ -185,7 +185,7 @@ const DEFAULT_CONTENT: Record<CmsSitePageId, Record<string, any>> = {
     kicker: 'Secure Your Spot',
     heading: 'Join the Symposium',
     description:
-      'Sign in with your Google account to register for CASYUM 2K26. Your account is created automatically on your first sign-in.',
+      'Register for CASYUM 2K26 through the official Google Form. It opens in a new tab — no account needed.',
   },
 };
 
@@ -219,11 +219,19 @@ function normalizePageDoc(pageId: CmsSitePageId, data: PageAuditDoc | undefined)
   const base = defaultResolvedPage(pageId);
   if (!data) return base;
 
-  const storedSections = (data.sections && typeof data.sections === 'object' ? data.sections : {}) as Record<string, unknown>;
-  const sections: Record<string, boolean> = { ...base.sections };
-  Object.keys(sections).forEach((key) => {
-    if (typeof storedSections[key] === 'boolean') sections[key] = storedSections[key] as boolean;
-  });
+    const storedSections = (data.sections && typeof data.sections === 'object' ? data.sections : {}) as Record<string, unknown>;
+    const sections: Record<string, boolean> = { ...base.sections };
+    // Merge stored sections — including keys not in base.defaults (so admin
+    // can re-enable previously-hidden sections).
+    Object.keys(storedSections).forEach((key) => {
+      if (typeof storedSections[key] === 'boolean') sections[key] = storedSections[key] as boolean;
+    });
+    // The About page's intro and stats are permanently disabled. Strip any
+    // stale Firestore values so they never re-appear.
+    if (pageId === 'about') {
+      delete sections.intro;
+      delete sections.stats;
+    }
 
   const storedStats = Array.isArray(data.stats)
     ? (data.stats as any[]).filter((s) => s && typeof s === 'object')
@@ -333,8 +341,10 @@ export function subscribeCmsPages(
     latest = map;
     emit();
   }
+  const db = getDb();
+  if (!db) return () => {};
   return onSnapshot(
-    collection(getDb(), PAGES_COLLECTION),
+    collection(db, PAGES_COLLECTION),
     (snap) => {
       const map = {} as Record<CmsSitePageId, ResolvedCmsPage>;
       CMS_PAGE_IDS.forEach((id) => {

@@ -116,8 +116,8 @@ const COLUMNS: Array<{
   { header: 'Transaction ID', width: 28, get: (r) => r.transactionId || '—' },
   { header: 'Payment Date', width: 18, get: (r) => formatExportDateShort(r.paymentDate) },
   { header: 'Payment Status', width: 16, get: (r) => r.paymentStatus.charAt(0).toUpperCase() + r.paymentStatus.slice(1) },
+  { header: 'Payment Screenshot URL', width: 38, get: (r) => r.paymentScreenshotUrl || '—' },
   { header: 'Submitted Date', width: 20, get: (r) => formatExportDate(r.registered_at) },
-  { header: 'Payment Screenshot URL', width: 36, get: (r) => r.paymentScreenshotUrl || '—' },
   { header: 'Verified By', width: 20, get: (r) => r.paymentVerifiedByName || '—' },
   { header: 'Verified At', width: 20, get: (r) => formatExportDate(r.paymentVerifiedAt) },
   { header: 'Rejection Reason', width: 30, get: (r) => r.paymentRejectionReason || '—' },
@@ -515,6 +515,31 @@ function drawLabelValueBlock(
   return yStart + blockHeightMm + 3;
 }
 
+/** Break a URL at safe delimiter characters for table cell wrapping. */
+function wrapUrlForCell(url: string, maxCharWidth: number): string {
+  if (!url || url === '—') return url;
+  const delimiters = new Set(['/', '?', '&', '=', '_', '-', '.']);
+  let result = '';
+  let segment = '';
+  for (const ch of url) {
+    if (delimiters.has(ch)) {
+      segment += ch;
+      if (segment.length >= maxCharWidth * 0.6) {
+        result += segment;
+        segment = '';
+      }
+    } else {
+      segment += ch;
+      if (segment.length >= maxCharWidth * 0.6) {
+        result += segment;
+        segment = '';
+      }
+    }
+  }
+  result += segment;
+  return result;
+}
+
 /**
  * Section 1: a readable payment summary table (autotable). Only the most
  * important payment fields, never the whole model.
@@ -536,6 +561,7 @@ function drawSummaryTable(
     { head: 'Transaction ID', width: 34 },
     { head: 'Payment Date', width: 20 },
     { head: 'Payment Status', width: 18 },
+    { head: 'Payment Screenshot URL', width: 48 },
     { head: 'Submitted Date', width: 22 },
     { head: 'Verification Status', width: 22 },
   ];
@@ -554,6 +580,7 @@ function drawSummaryTable(
     r.transactionId || '—',
     formatExportDateShort(r.paymentDate),
     r.paymentStatus.charAt(0).toUpperCase() + r.paymentStatus.slice(1),
+    wrapUrlForCell(r.paymentScreenshotUrl || '—', 48),
     formatExportDate(r.registered_at),
     r.paymentStatus === 'verified'
       ? 'Verified'
@@ -591,11 +618,18 @@ function drawSummaryTable(
     alternateRowStyles: { fillColor: LIGHT_FILL },
     showHead: 'everyPage',
     didDrawPage: () => {
-      // Draw a compact header band on continuation pages so the repeating
-      // table header sits cleanly below it.
       const pageNum = doc.getCurrentPageInfo().pageNumber;
       if (pageNum > 1) {
         drawBandOnly(doc, ctx.pageWidth, ctx.filter, ctx.total);
+      }
+    },
+    didDrawCell: (data: any) => {
+      if (data.section === 'body' && data.column.index === 9) {
+        const raw = String(data.cell.raw || '');
+        const url = raw.replace(/\n/g, '');
+        if (url && url !== '—') {
+          doc.link(data.cell.x, data.cell.y, data.cell.width, data.cell.height, { url });
+        }
       }
     },
   });

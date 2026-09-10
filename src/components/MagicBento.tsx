@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useCallback, useState } from 'react';
 import { gsap } from 'gsap';
+import { Link } from 'react-router-dom';
 import './MagicBento.css';
 import type { PublicEvent } from '../services/publicEventService';
 import { EVENT_NOT_PUBLISHED_MESSAGE } from '../services/publicEventService';
@@ -28,7 +29,8 @@ const cardData: CardDataItem[] = [
     description: 'Find bugs, fix syntax, and resolve logic errors under intense time limits.',
     label: 'Technical',
     prize: 'Registration Open',
-    image: EVENT_IMAGES.debugging
+    image: EVENT_IMAGES.debugging,
+    slug: 'debugging'
   },
   {
     color: '#0e0b16',
@@ -36,7 +38,8 @@ const cardData: CardDataItem[] = [
     description: 'Test your core computer science, algorithms, and general tech trivia knowledge.',
     label: 'Technical',
     prize: 'Registration Open',
-    image: EVENT_IMAGES['tech-quiz']
+    image: EVENT_IMAGES['tech-quiz'],
+    slug: 'tech-quiz'
   },
   {
     color: '#0e0b16',
@@ -44,7 +47,8 @@ const cardData: CardDataItem[] = [
     description: 'Present innovative research on advanced technologies to industry judges.',
     label: 'Technical',
     prize: 'Registration Open',
-    image: EVENT_IMAGES['paper-presentation']
+    image: EVENT_IMAGES['paper-presentation'],
+    slug: 'paper-presentation'
   },
   {
     color: '#0e0b16',
@@ -52,7 +56,8 @@ const cardData: CardDataItem[] = [
     description: 'Prototype solutions for real-world problems in this intense coding sprint.',
     label: 'Technical',
     prize: 'Registration Open',
-    image: EVENT_IMAGES.hackathon
+    image: EVENT_IMAGES.hackathon,
+    slug: 'hackathon'
   },
   {
     color: '#0e0b16',
@@ -60,7 +65,8 @@ const cardData: CardDataItem[] = [
     description: 'Design visually striking cyberpunk/futuristic posters illustrating tech concepts.',
     label: 'Technical',
     prize: 'Registration Open',
-    image: EVENT_IMAGES['poster-designing']
+    image: EVENT_IMAGES['poster-designing'],
+    slug: 'poster-designing'
   },
   {
     color: '#0e0b16',
@@ -68,7 +74,8 @@ const cardData: CardDataItem[] = [
     description: 'Decipher logical associations and technical terms from visual clues.',
     label: 'Technical',
     prize: 'Registration Open',
-    image: EVENT_IMAGES.connexion
+    image: EVENT_IMAGES.connexion,
+    slug: 'connexion'
   },
   {
     color: '#0e0b16',
@@ -76,7 +83,8 @@ const cardData: CardDataItem[] = [
     description: 'Dominate the esports arena in high-octane gaming tournaments.',
     label: 'Non-Technical',
     prize: 'Registration Open',
-    image: EVENT_IMAGES['lan-party']
+    image: EVENT_IMAGES['lan-party'],
+    slug: 'lan-party'
   },
   {
     color: '#0e0b16',
@@ -84,7 +92,8 @@ const cardData: CardDataItem[] = [
     description: 'Pitch futuristic products with high creativity, humor, and marketing flair.',
     label: 'Non-Technical',
     prize: 'Registration Open',
-    image: EVENT_IMAGES.adzap
+    image: EVENT_IMAGES.adzap,
+    slug: 'adzap'
   },
   {
     color: '#0e0b16',
@@ -92,7 +101,8 @@ const cardData: CardDataItem[] = [
     description: 'Showcase your cinematic vision, storytelling, and editing skills.',
     label: 'Non-Technical',
     prize: 'Registration Open',
-    image: EVENT_IMAGES['short-film']
+    image: EVENT_IMAGES['short-film'],
+    slug: 'short-film'
   },
   {
     color: '#0e0b16',
@@ -100,7 +110,8 @@ const cardData: CardDataItem[] = [
     description: 'Strategize, bid, and assemble the ultimate cricket squad under budget caps.',
     label: 'Non-Technical',
     prize: 'Registration Open',
-    image: EVENT_IMAGES['ipl-auction']
+    image: EVENT_IMAGES['ipl-auction'],
+    slug: 'ipl-auction'
   }
 ];
 
@@ -404,14 +415,19 @@ const ParticleCard: React.FC<ParticleCardProps> = ({
   }, [animateParticles, clearAllParticles, disableAnimations, enableTilt, enableMagnetism, clickEffect, glowColor]);
 
   if (href) {
-    return (
-      <a
-        ref={cardRef as React.Ref<HTMLAnchorElement>}
-        href={href}
-        aria-label={ariaLabel}
-        className={`${className} particle-container`}
-        style={{ ...style, position: 'relative', overflow: 'hidden', textDecoration: 'none' }}
-      >
+    const sharedProps = {
+      ref: cardRef as React.Ref<HTMLAnchorElement>,
+      'aria-label': ariaLabel,
+      className: `${className} particle-container`,
+      style: { ...style, position: 'relative', overflow: 'hidden', textDecoration: 'none' } as React.CSSProperties,
+    };
+    const isInternal = href.startsWith('/');
+    return isInternal ? (
+      <Link {...sharedProps} to={href}>
+        {children}
+      </Link>
+    ) : (
+      <a {...sharedProps} href={href}>
         {children}
       </a>
     );
@@ -688,6 +704,20 @@ const MagicBento: React.FC<MagicBentoProps> = ({
         >
           {cardContent}
         </ParticleCard>
+      );
+    }
+
+    if (cardLink) {
+      return (
+        <Link
+          key={index}
+          to={cardLink}
+          aria-label={card.title}
+          className={`${baseClassName} particle-container`}
+          style={cardStyle}
+        >
+          {cardContent}
+        </Link>
       );
     }
 

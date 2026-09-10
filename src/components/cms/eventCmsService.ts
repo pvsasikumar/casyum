@@ -238,6 +238,7 @@ interface LoadOptions {
 export async function loadEventCms(eventId: string, options?: LoadOptions): Promise<EventCmsData> {
   const db = getDb();
   const data = emptyCmsData(eventId);
+  if (!db) return data;
   const eventDoc = await readEventDoc(eventId);
   const hero = eventDocToHero(eventDoc);
   const details = eventDocToDetails(eventDoc);

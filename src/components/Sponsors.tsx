@@ -1,8 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
-import { ExternalLink, Handshake, Loader2, AlertCircle, Sparkles } from 'lucide-react';
-import { listActiveSponsors, listSponsorCategories } from '../services/sponsorshipService';
-import type { Sponsor, SponsorCategory } from '../types/sponsorship';
+import { ExternalLink, Handshake, Sparkles } from 'lucide-react';
+import { STATIC_SPONSORS, STATIC_SPONSOR_CATEGORIES } from '../config/sponsors';
+import type { Sponsor } from '../types/sponsorship';
 import type { CmsSponsorsContent } from '../services/cmsService';
 
 interface SponsorsProps {
@@ -90,32 +90,8 @@ export const Sponsors: React.FC<SponsorsProps> = ({ onOpenEnquiry, content, sect
     content?.subtitle ||
     'The organizations fueling CASYUM 2K26. We are grateful to every partner whose support brings this national symposium to life.';
 
-  const [sponsors, setSponsors] = useState<Sponsor[]>([]);
-  const [categories, setCategories] = useState<SponsorCategory[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState('');
-
-  useEffect(() => {
-    let active = true;
-    setLoading(true);
-    Promise.all([listActiveSponsors(), listSponsorCategories().catch(() => [] as SponsorCategory[])])
-      .then(([sponsorRows, categoryRows]) => {
-        if (!active) return;
-        setSponsors(sponsorRows);
-        setCategories(categoryRows);
-        setLoadError('');
-      })
-      .catch((err) => {
-        if (!active) return;
-        setLoadError(err instanceof Error ? err.message : 'Failed to load sponsors.');
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
+  const sponsors = STATIC_SPONSORS;
+  const categories = STATIC_SPONSOR_CATEGORIES;
 
   const grouped = useMemo(() => {
     const categoryOrder = new Map<string, number>();
@@ -174,30 +150,8 @@ export const Sponsors: React.FC<SponsorsProps> = ({ onOpenEnquiry, content, sect
           </motion.div>
         )}
 
-        {/* Loading */}
-        {loading && (
-          <div className="flex flex-col items-center gap-3 py-16">
-            <Loader2 className="w-8 h-8 animate-spin text-violet-400" />
-            <span className="text-xs text-white/50">Loading sponsors...</span>
-          </div>
-        )}
-
-        {/* Load error — never block the page */}
-        {!loading && loadError && (
-          <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.5 }}
-            className="w-full max-w-md mx-auto rounded-2xl border border-rose-500/25 bg-rose-500/10 px-5 py-4 flex items-start gap-3"
-          >
-            <AlertCircle className="w-4 h-4 text-rose-300 flex-shrink-0 mt-0.5" />
-            <p className="text-xs text-rose-200/90">Sponsors could not be loaded right now. Please try again later.</p>
-          </motion.div>
-        )}
-
         {/* Empty state */}
-        {!loading && !loadError && !hasSponsors && (
+        {!hasSponsors && (
           <motion.div
             initial={{ opacity: 0, y: 12 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -211,7 +165,7 @@ export const Sponsors: React.FC<SponsorsProps> = ({ onOpenEnquiry, content, sect
         )}
 
         {/* Sponsor content */}
-        {!loading && !loadError && hasSponsors && showGrid && (
+        {hasSponsors && showGrid && (
           <div className="w-full flex flex-col gap-14 sm:gap-20">
             {/* TITLE SPONSOR highlight */}
             {titleGroup && (
