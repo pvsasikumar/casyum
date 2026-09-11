@@ -6,8 +6,6 @@ import type { Sponsor } from '../types/sponsorship';
 import type { CmsSponsorsContent } from '../services/cmsService';
 
 interface SponsorsProps {
-  onOpenEnquiry?: () => void;
-  /** CMS overrides for the Sponsors header text (defaults keep the original look). */
   content?: Partial<CmsSponsorsContent>;
   sections?: {
     header?: boolean;
@@ -78,11 +76,10 @@ function SponsorLogo({ src, name, size, title }: { src: string; name: string; si
   );
 }
 
-export const Sponsors: React.FC<SponsorsProps> = ({ onOpenEnquiry, content, sections }) => {
+export const Sponsors: React.FC<SponsorsProps> = ({ content, sections }) => {
   const showHeader = sections?.header !== false;
   const showTitleSponsor = sections?.titleSponsor !== false;
   const showGrid = sections?.sponsorGrid !== false;
-  const showCta = sections?.sponsorCta !== false;
 
   const kicker = content?.kicker || 'Our Sponsors';
   const title = content?.title || 'Powered by Visionaries';
@@ -273,28 +270,6 @@ export const Sponsors: React.FC<SponsorsProps> = ({ onOpenEnquiry, content, sect
               );
             })}
           </div>
-        )}
-
-        {/* Sponsor CTA */}
-        {showCta && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
-            className="flex flex-col items-center gap-5 text-center"
-          >
-            <div className="h-px w-24 bg-gradient-to-r from-transparent via-violet-500/50 to-transparent" />
-            <p className="text-white/50 text-sm sm:text-base">Interested in sponsoring CASYUM 2K26?</p>
-            <button
-              type="button"
-              onClick={onOpenEnquiry}
-              className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-2xl bg-gradient-to-r from-violet-500 to-indigo-600 hover:from-violet-600 hover:to-indigo-700 text-white text-xs font-extrabold uppercase tracking-widest shadow-lg shadow-violet-500/25 transition-all cursor-pointer active:scale-95"
-            >
-              <Handshake className="w-4 h-4" />
-              Become a Sponsor
-            </button>
-          </motion.div>
         )}
       </div>
     </section>

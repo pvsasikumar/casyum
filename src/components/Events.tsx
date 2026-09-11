@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import MagicBento from './MagicBento';
-import { listPublicEvents, type PublicEvent } from '../services/publicEventService';
+import { PUBLIC_EVENTS, type PublicEvent } from '../services/publicEventService';
 import {
   MAX_REGULAR_EVENTS,
   REGULAR_EVENT_FEE,
@@ -28,25 +28,7 @@ export const Events: React.FC<EventsProps> = ({ content, sections }) => {
 
   const kicker = content?.kicker || 'Challenge Yourself';
   const title = content?.title || 'Arena of Battles';
-  const [events, setEvents] = useState<PublicEvent[] | null>(null);
-  const [error, setError] = useState('');
-  const [retryKey, setRetryKey] = useState(0);
-
-  useEffect(() => {
-    let cancelled = false;
-    setError('');
-    setEvents(null);
-    listPublicEvents()
-      .then((list) => {
-        if (!cancelled) setEvents(list);
-      })
-      .catch(() => {
-        if (!cancelled) setError('Unable to load events right now.');
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [retryKey]);
+  const [events] = useState<PublicEvent[]>(() => PUBLIC_EVENTS);
 
   return (
     <section id="events" className="relative min-h-screen bg-black py-24 px-6 select-none overflow-hidden">
@@ -61,18 +43,6 @@ export const Events: React.FC<EventsProps> = ({ content, sections }) => {
             <h2 className="text-3xl sm:text-5xl font-extrabold tracking-tight font-display text-gradient">
               {title}
             </h2>
-          </div>
-        )}
-
-        {showListing && error && (
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 text-center">
-            <span className="text-xs text-white/40">{error}</span>
-            <button
-              onClick={() => setRetryKey((k) => k + 1)}
-              className="px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-[10px] font-bold uppercase tracking-widest text-white/60 hover:text-white hover:border-white/20 transition-colors cursor-pointer"
-            >
-              Retry
-            </button>
           </div>
         )}
 
@@ -101,7 +71,7 @@ export const Events: React.FC<EventsProps> = ({ content, sections }) => {
         {showListing && (
           <div className="w-full flex justify-center">
             <MagicBento
-              events={events || undefined}
+              events={events}
               textAutoHide={true}
               enableStars={true}
               enableSpotlight={true}

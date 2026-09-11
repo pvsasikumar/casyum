@@ -1,28 +1,19 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
   CalendarDays,
-  CheckCircle2,
   Clock,
   IndianRupee,
-  Loader2,
   MapPin,
   RefreshCw,
   Tag,
   Ticket,
-  UserRound,
   Users,
 } from 'lucide-react';
-import type { CmsEventDetails, EventCmsData } from '../cms/types';
-import { emptyCmsData, hasContent, sortSections } from '../cms/types';
-import { loadEventCms } from '../cms/eventCmsService';
 import { fetchGlobalRuleBook, type GlobalRuleBookInfo } from '../../services/ruleBookService';
 import { fetchEventBySlug, type PublicEvent } from '../../services/publicEventService';
 import { EVENT_RULE_BOOK_OVERRIDES } from '../../config/ruleBookOverrides';
-import { useEventRegistration } from '../../hooks/useEventRegistration';
-import { PublicEventRenderer } from './PublicEventRenderer';
-import { ProfileCompletionModal } from './ProfileCompletionModal';
 import { RuleBookButton } from './RuleBookButton';
 import { REGISTRATION_FORM_URL } from '../../config/registrationConfig';
 import {
@@ -41,36 +32,34 @@ const statusStyles: Record<string, string> = {
 };
 
 interface EventInformationSectionProps {
-  details?: CmsEventDetails;
   event: PublicEvent;
   defaultFee: number;
   ruleBook: GlobalRuleBookInfo | null;
 }
 
-const EventInformationSection: React.FC<EventInformationSectionProps> = ({ details, event, defaultFee, ruleBook }) => {
+const EventInformationSection: React.FC<EventInformationSectionProps> = ({ event, defaultFee, ruleBook }) => {
   const rows = [
-    { key: 'date', label: 'Date', icon: CalendarDays, value: details?.date || event.date },
-    { key: 'time', label: 'Time', icon: Clock, value: details?.time || '' },
-    { key: 'venue', label: 'Venue', icon: MapPin, value: details?.venue || event.venue },
-    { key: 'teamSize', label: 'Team Size', icon: UserRound, value: details?.teamSize || '' },
-    { key: 'category', label: 'Category', icon: Tag, value: details?.category || event.category },
+    { key: 'date', label: 'Date', icon: CalendarDays, value: event.date },
+    { key: 'time', label: 'Time', icon: Clock, value: event.time },
+    { key: 'venue', label: 'Venue', icon: MapPin, value: event.venue },
+    { key: 'category', label: 'Category', icon: Tag, value: event.category },
     {
       key: 'registrationFee',
       label: 'Registration Fee',
       icon: IndianRupee,
-      value: details?.registrationFee || (defaultFee > 0 ? `₹${defaultFee}` : ''),
+      value: defaultFee > 0 ? `₹${defaultFee}` : '',
     },
     {
       key: 'maxParticipants',
       label: 'Maximum Participants / Slots',
       icon: Users,
-      value: details?.participantLimit || (event.maxParticipants > 0 ? String(event.maxParticipants) : ''),
+      value: event.maxParticipants > 0 ? String(event.maxParticipants) : '',
     },
     {
       key: 'registrationStatus',
       label: 'Registration Status',
       icon: Ticket,
-      value: details?.registrationStatus || event.registrationStatus,
+      value: event.registrationStatus,
     },
   ].filter((r) => String(r.value || '').trim() !== '');
 
@@ -146,70 +135,49 @@ const RuleBookRow: React.FC<RuleBookRowProps> = ({ url, fileName, version, comin
 export const EventDetailsPage: React.FC = () => {
   const { eventSlug } = useParams<{ eventSlug: string }>();
   const [event, setEvent] = useState<PublicEvent | null>(null);
-  const [cms, setCms] = useState<EventCmsData>(() => emptyCmsData(''));
   const [ruleBook, setRuleBook] = useState<GlobalRuleBookInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
-  const startedRef = useRef(false);
 
-  const load = useCallback(async () => {
-    if (!eventSlug) {
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    setLoadError('');
-    try {
-      const resolved = await fetchEventBySlug(eventSlug);
-      if (!resolved) {
-        setEvent(null);
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      if (!eventSlug) {
         setLoading(false);
         return;
       }
-      setEvent(resolved);
-      // The global CASYUM Rule Book is shared by every event. It controls
-      // both the PDF reference and visibility.
-      fetchGlobalRuleBook()
-        .then((global) => {
-          const eventUrl = EVENT_RULE_BOOK_OVERRIDES[resolved.slug];
-          if (eventUrl) {
-            setRuleBook({
-              ...global,
-              url: eventUrl,
-              visible: true,
-            });
-          } else {
-            setRuleBook(global);
-          }
-        })
-        .catch(() => {});
-      const cmsData = await loadEventCms(resolved.eventId);
-      setCms(cmsData);
-    } catch {
-      setLoadError('Unable to load event details. Please check your connection and try again.');
-    } finally {
-      setLoading(false);
+      setLoading(true);
+      setLoadError('');
+      try {
+        const resolved = await fetchEventBySlug(eventSlug);
+        if (cancelled) return;
+        if (!resolved) {
+          setEvent(null);
+          setLoading(false);
+          return;
+        }
+        setEvent(resolved);
+        // The global CASYUM Rule Book is shared by every event. It controls
+        // both the PDF reference and visibility.
+        const global = await fetchGlobalRuleBook();
+        if (cancelled) return;
+        const eventUrl = EVENT_RULE_BOOK_OVERRIDES[resolved.slug];
+        if (eventUrl) {
+          setRuleBook({ ...global, url: eventUrl, visible: true });
+        } else {
+          setRuleBook(global);
+        }
+      } catch {
+        if (!cancelled) setLoadError('Unable to load event details. Please check your connection and try again.');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
     }
-  }, [eventSlug]);
-
-  useEffect(() => {
-    if (startedRef.current) return;
-    startedRef.current = true;
     void load();
-  }, [load]);
-
-  const {
-    isChecking,
-    isSigningIn,
-    signInError,
-    alreadyRegistered,
-    showProfileModal,
-    setShowProfileModal,
-    profileSaving,
-    profileError,
-    registerError,
-    handleProfileComplete,
-  } = useEventRegistration(event?.eventId || '');
+    return () => {
+      cancelled = true;
+    };
+  }, [eventSlug]);
 
   if (loading) {
     return (
@@ -232,13 +200,13 @@ export const EventDetailsPage: React.FC = () => {
         <div className="max-w-3xl mx-auto text-center flex flex-col items-center gap-5">
           <RefreshCw className="w-10 h-10 text-rose-400" />
           <p className="text-white/60 text-sm">{loadError}</p>
-          <button
-            onClick={() => void load()}
+          <Link
+            to="/#events"
             className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white text-xs font-bold shadow-lg shadow-violet-500/25 transition-colors cursor-pointer"
           >
-            <RefreshCw className="w-4 h-4" />
-            Try Again
-          </button>
+            <ArrowLeft className="w-4 h-4" />
+            Back to Events
+          </Link>
         </div>
       </div>
     );
@@ -263,15 +231,11 @@ export const EventDetailsPage: React.FC = () => {
     );
   }
 
-  const visibleSections = sortSections(cms.sections).filter((s) => s.isVisible && hasContent(s));
-  const isComingSoon = visibleSections.length === 0;
   const isClosed = event.registrationStatus === 'Registration Closed' || event.registrationStatus === 'Completed';
   const isFull = event.registrationStatus === 'Event Full';
 
   const isGaming = isGamingEvent(event);
   const registrationFee = singleEventRegistrationFee(event);
-  const detailsSection = cms.sections.find((s) => s.sectionType === 'details');
-  const details = detailsSection?.content as CmsEventDetails | undefined;
 
   const registerPanel = (
     <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-6 flex flex-col gap-4 sticky top-24">
@@ -287,6 +251,12 @@ export const EventDetailsPage: React.FC = () => {
           <span className="flex items-center gap-2">
             <CalendarDays className="w-4 h-4 text-violet-400" />
             {event.date}
+          </span>
+        )}
+        {event.time && (
+          <span className="flex items-center gap-2">
+            <Clock className="w-4 h-4 text-violet-400" />
+            {event.time}
           </span>
         )}
         {event.venue && (
@@ -329,23 +299,13 @@ export const EventDetailsPage: React.FC = () => {
           <Users className="w-4 h-4" />
           Event Full
         </div>
-      ) : alreadyRegistered ? (
-        <div className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-emerald-500/10 border border-emerald-500/25 text-emerald-300 text-xs font-bold">
-          <CheckCircle2 className="w-4 h-4" />
-          You are already registered for this event.
-        </div>
       ) : (
         <button
           onClick={() => window.open(REGISTRATION_FORM_URL, '_blank', 'noopener,noreferrer')}
-          disabled={isSigningIn || isChecking}
-          className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-xs font-bold shadow-lg shadow-violet-500/25 transition-colors cursor-pointer disabled:cursor-not-allowed"
+          className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-violet-600 hover:bg-violet-700 text-white text-xs font-bold shadow-lg shadow-violet-500/25 transition-colors cursor-pointer"
         >
-          {isSigningIn || isChecking ? (
-            <Loader2 className="w-4 h-4 animate-spin" />
-          ) : (
-            <Ticket className="w-4 h-4" />
-          )}
-          {isSigningIn ? 'Signing in...' : isChecking ? 'Checking...' : 'Register for Event'}
+          <Ticket className="w-4 h-4" />
+          Register for Event
         </button>
       )}
 
@@ -367,10 +327,6 @@ export const EventDetailsPage: React.FC = () => {
           />
         </div>
       )}
-
-      {(registerError || signInError) && (
-        <p className="text-xs text-rose-300">{registerError || signInError}</p>
-      )}
     </div>
   );
 
@@ -385,54 +341,38 @@ export const EventDetailsPage: React.FC = () => {
           All Events
         </Link>
 
-        {isComingSoon ? (
-          <div className="flex flex-col gap-6">
-            <div className="relative overflow-hidden rounded-3xl border border-white/10">
-              <div
-                className="absolute inset-0 bg-cover bg-center"
-                style={{
-                  backgroundImage: `linear-gradient(to bottom, rgba(14, 11, 22, 0.35), rgba(14, 11, 22, 0.92)), url(${event.heroImage || event.cardImage})`,
-                }}
-              />
-              <div className="relative p-6 sm:p-10 flex flex-col gap-3 max-w-3xl">
-                {event.category && (
-                  <span className="w-fit text-[10px] font-bold uppercase tracking-[0.25em] text-violet-400">
-                    {event.category}
-                  </span>
-                )}
-                <h1 className="text-3xl sm:text-5xl font-extrabold tracking-tight font-display text-white">
-                  {event.name}
-                </h1>
-                {(event.tagline || event.shortDescription) && (
-                  <p className="text-sm sm:text-base text-white/60 leading-relaxed">
-                    {event.tagline || event.shortDescription}
-                  </p>
-                )}
-                <span
-                  className={`w-fit mt-1 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border ${statusStyles[event.registrationStatus] || statusStyles['Registration Open']}`}
-                >
-                  {event.registrationStatus || 'Registration Open'}
+        <div className="flex flex-col gap-6">
+          <div className="relative overflow-hidden rounded-3xl border border-white/10">
+            <div
+              className="absolute inset-0 bg-cover bg-center"
+              style={{
+                backgroundImage: `linear-gradient(to bottom, rgba(14, 11, 22, 0.35), rgba(14, 11, 22, 0.92)), url(${event.heroImage || event.cardImage})`,
+              }}
+            />
+            <div className="relative p-6 sm:p-10 flex flex-col gap-3 max-w-3xl">
+              {event.category && (
+                <span className="w-fit text-[10px] font-bold uppercase tracking-[0.25em] text-violet-400">
+                  {event.category}
                 </span>
-              </div>
-            </div>
-            <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6 items-start">
-              <div className="flex flex-col gap-6">
-                <EventInformationSection
-                  details={details}
-                  event={event}
-                  defaultFee={registrationFee}
-                  ruleBook={ruleBook}
-                />
-              </div>
-              <div className="w-full lg:w-[320px]">{registerPanel}</div>
+              )}
+              <h1 className="text-3xl sm:text-5xl font-extrabold tracking-tight font-display text-white">
+                {event.name}
+              </h1>
+              {(event.tagline || event.shortDescription) && (
+                <p className="text-sm sm:text-base text-white/60 leading-relaxed">
+                  {event.tagline || event.shortDescription}
+                </p>
+              )}
+              <span
+                className={`w-fit mt-1 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border ${statusStyles[event.registrationStatus] || statusStyles['Registration Open']}`}
+              >
+                {event.registrationStatus || 'Registration Open'}
+              </span>
             </div>
           </div>
-        ) : (
           <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6 items-start">
             <div className="flex flex-col gap-6">
-              <PublicEventRenderer data={cms} />
               <EventInformationSection
-                details={details}
                 event={event}
                 defaultFee={registrationFee}
                 ruleBook={ruleBook}
@@ -440,17 +380,8 @@ export const EventDetailsPage: React.FC = () => {
             </div>
             <div className="w-full lg:w-[320px]">{registerPanel}</div>
           </div>
-        )}
+        </div>
       </div>
-
-      {showProfileModal && (
-        <ProfileCompletionModal
-          saving={profileSaving}
-          error={profileError}
-          onClose={() => setShowProfileModal(false)}
-          onSubmit={(data) => void handleProfileComplete(data)}
-        />
-      )}
     </div>
   );
 };
