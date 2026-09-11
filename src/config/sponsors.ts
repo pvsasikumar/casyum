@@ -36,6 +36,11 @@ export interface StaticSponsorEntry {
 }
 
 export const SPONSORS: StaticSponsorEntry[] = [
+  {
+    name: 'Inspire',
+    logo: '/images/events/Inspire.jpeg',
+    category: 'Event Sponsor',
+  },
   // Example — uncomment & fill in once you have a real sponsor:
   // {
   //   name: 'Example Sponsor',

@@ -60,7 +60,7 @@ function SponsorLogo({ src, name, size, title }: { src: string; name: string; si
       {!failed && src ? (
         <img
           src={src}
-          alt={`${name} logo`}
+          alt="Event sponsor logo"
           loading="lazy"
           referrerPolicy="no-referrer"
           onError={() => setFailed(true)}
@@ -253,9 +253,6 @@ export const Sponsors: React.FC<SponsorsProps> = ({ content, sections }) => {
                       >
                         <SponsorLogo src={sponsor.logoUrl} name={sponsor.name} size={sponsor.logoSize || size} />
                         <div className="flex flex-col items-center gap-0.5">
-                          <span className="text-xs sm:text-sm font-bold text-white/80 group-hover:text-white text-center">
-                            {sponsor.name}
-                          </span>
                           {sponsor.websiteUrl && (
                             <span className="flex items-center gap-1 text-[9px] uppercase tracking-widest text-violet-400/70 opacity-0 group-hover:opacity-100 transition-opacity">
                               <ExternalLink className="w-2.5 h-2.5" />
